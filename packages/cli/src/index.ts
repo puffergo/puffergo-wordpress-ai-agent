@@ -42,6 +42,7 @@ import {
   cmdPush as cmdProductsPush,
   cmdPull as cmdProductsPull,
   cmdPublish,
+  cmdTemplate,
 } from './lib/productsCmd';
 import { cmdLogin, cmdLoginWait } from './lib/loginCmd';
 
@@ -296,7 +297,7 @@ function emit(result: unknown): void {
 }
 
 const PRODUCTS_USAGE =
-  'puffergo products <schema|list [--search q]|check [--only k1,k2]|push [--only k1,k2]|pull <key|id>|publish <key…> --customer-said "<customer words>"> [--dir <workdir>] [--site <url>]';
+  'puffergo products <schema|list [--search q]|check [--only k1,k2]|push [--only k1,k2]|pull <key|id|link>|publish <key…> --customer-said "<customer words>"|template <list|set <name> <key|id|link>|show <name>|remove <name>>> [--dir <workdir>] [--site <url>]';
 
 async function products(): Promise<void> {
   const ctx = { dir, flags, positional };
@@ -313,6 +314,8 @@ async function products(): Promise<void> {
       return emit(await cmdProductsPull(ctx));
     case 'publish':
       return emit(await cmdPublish(ctx));
+    case 'template':
+      return emit(await cmdTemplate(ctx));
     default:
       return emit({ ok: false, code: 'usage', message: PRODUCTS_USAGE });
   }

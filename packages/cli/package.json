@@ -1,7 +1,6 @@
 {
   "name": "puffergo",
-  "version": "1.7.0",
-  "private": true,
+  "version": "0.1.0",
   "description": "AI agent CLI for WordPress: bulk product upload and SEO silo sync. Credentials stay on your machine.",
   "type": "module",
   "bin": {
@@ -18,10 +17,22 @@
     "yaml": "^2.5.1"
   },
   "devDependencies": {
+    "esbuild": "^0.25.1",
     "tsx": "^4.19.2",
     "typescript": "5.5.4",
-    "vitest": "^2.1.9",
-    "esbuild": "^0.25.1"
+    "vitest": "^2.1.9"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "files": [
+    "bin",
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/puffergo/puffergo-wordpress-ai-agent.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/puffergo/puffergo-wordpress-ai-agent#readme"
 }

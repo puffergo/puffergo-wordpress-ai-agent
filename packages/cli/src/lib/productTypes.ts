@@ -41,12 +41,16 @@ export interface ProductFile {
   id?: number;
   baseModified?: string;
   status?: 'draft' | 'publish';
+  /** Local only (never sent): the template this product follows, by name from `.puffergo/templates.json`. */
+  template?: string;
   title: string;
   excerpt?: string;
   categories?: string[];
   price?: UnitValue;
   moq?: UnitValue;
   leadTime?: UnitValue;
+  /** Custom trade fields of this site (schema `tradeFields` with path `trade.<key>`): key → plain text. */
+  trade?: Record<string, string | null>;
   specs?: Array<{ key: string; value: string }>;
   gallery?: ImageRef[];
   detail?: ProductDetail;

@@ -7,6 +7,15 @@ import { loadProducts, writeProduct, readUploadsCache, writeUploadsCache, type L
 import { localCheckProduct } from './localCheck';
 import { walkImageRefs, identOf } from './imageRefs';
 import { resolveUpload } from './uploadImage';
+import {
+  readTemplates,
+  writeTemplates,
+  resolveProductId,
+  templateReference,
+  TargetError,
+  type TemplateEntry,
+} from './templates';
+import { loadSiteSchema, optionalFactPaths, getPath, isEmptyValue, SchemaVersionError } from './siteSchema';
 import type { ProductFile, ValidationError, DetailSection } from './productTypes';
 
 export interface CmdCtx {
@@ -18,20 +27,36 @@ export interface CmdCtx {
 async function client(ctx: CmdCtx): Promise<AgentClient> {
   const siteFlag = ctx.flags.get('site');
   const cred = await resolveSite(ctx.dir, siteFlag);
-  return new AgentClient(cred.config);
+  const c = new AgentClient(cred.config);
+  await loadSiteSchema(c); // refuses a site whose product-file version is newer than this CLI
+  return c;
 }
 
-function siteErrorOutput(e: unknown): { ok: false; code: string; sites?: string[] } | null {
+function siteErrorOutput(
+  e: unknown,
+): { ok: false; code: string; sites?: string[]; fix?: string; message?: string } | null {
   if (e instanceof NoSiteError) return { ok: false, code: 'no_site', sites: e.sites };
   if (e instanceof NotLoggedInError) return { ok: false, code: 'not_logged_in' };
+  if (e instanceof SchemaVersionError) return { ok: false, code: 'update_skill', fix: 'user', message: e.message };
   return null;
 }
 
 export async function cmdSchema(ctx: CmdCtx): Promise<unknown> {
   try {
     const c = await client(ctx);
-    const schema = await c.schema();
-    return { ok: true, ...(schema as Record<string, unknown>) };
+    const schema = await loadSiteSchema(c);
+    const templates = await readTemplates(ctx.dir, c.siteUrl);
+    return {
+      ok: true,
+      ...(schema as Record<string, unknown>),
+      templates: Object.entries(templates).map(([name, t]) => ({ name, id: t.id, title: t.title })),
+      ...(Object.keys(templates).length
+        ? {
+            templatesNote:
+              'This site has product templates. Pick one per product, read it with `products template show <name>`, and set "template" in the product file ("" if none fits).',
+          }
+        : {}),
+    };
   } catch (e) {
     const siteErr = siteErrorOutput(e);
     if (siteErr) return siteErr;
@@ -74,11 +99,84 @@ export function stripFileRefsForValidate(product: ProductFile): { clone: Product
     }
   }
   if (clone.detail) delete clone.detail.unmanagedHtml;
+  delete clone.template;
   return { clone, strippedPaths };
 }
 
 function filterStrippedErrors(list: ValidationError[], strippedPaths: Set<string>): ValidationError[] {
   return list.filter(e => !strippedPaths.has(e.path));
+}
+
+// ---------------------------------------------------------------------------
+// templates: a product naming a template skips the "missing_source" warnings for the fields that template
+// leaves out on purpose (the site doesn't show a price, say) — otherwise the AI would ask about them again.
+// ---------------------------------------------------------------------------
+
+export class TemplateCtx {
+  private notUsed = new Map<string, Set<string>>();
+  constructor(
+    private c: AgentClient,
+    readonly templates: Record<string, TemplateEntry>,
+    /** The site's optional facts (trade fields from the schema + specs), as product-file paths. */
+    private factPaths: string[],
+  ) {}
+  static async load(c: AgentClient, dir: string): Promise<TemplateCtx> {
+    const schema = await loadSiteSchema(c);
+    return new TemplateCtx(c, await readTemplates(dir, c.siteUrl), optionalFactPaths(schema));
+  }
+  /** Fields the named template doesn't use; null when no such template is saved. */
+  async fieldsNotUsed(name: string): Promise<Set<string> | null> {
+    const entry = this.templates[name];
+    if (!entry) return null;
+    if (!this.notUsed.has(name)) {
+      const remote = await this.c.getProduct<Record<string, unknown>>(entry.id);
+      this.notUsed.set(name, new Set(this.factPaths.filter(path => isEmptyValue(getPath(remote, path)))));
+    }
+    return this.notUsed.get(name)!;
+  }
+}
+
+export async function applyTemplate(
+  product: ProductFile,
+  tpl: TemplateCtx,
+  warnings: ValidationError[],
+): Promise<{ errors: ValidationError[]; warnings: ValidationError[] }> {
+  const names = Object.keys(tpl.templates);
+  if (product.template === undefined && names.length) {
+    return {
+      errors: [
+        {
+          path: `${identOf(product)}.template`,
+          code: 'template_required',
+          message: `This site has product templates: ${names.join(', ')}. Read the one this product belongs to (\`products template show <name>\`), follow its structure, and set "template" to its name — or set "template": "" if none fits.`,
+          fix: 'ai',
+        },
+      ],
+      warnings,
+    };
+  }
+  if (!product.template) return { errors: [], warnings };
+  const notUsed = await tpl.fieldsNotUsed(product.template);
+  if (!notUsed) {
+    return {
+      errors: [
+        {
+          path: `${identOf(product)}.template`,
+          code: 'unknown_template',
+          message: `No template named "${product.template}". Saved templates: ${names.length ? names.join(', ') : 'none'} (see \`products template list\`).`,
+          fix: 'ai',
+        },
+      ],
+      warnings,
+    };
+  }
+  const ident = identOf(product);
+  return {
+    errors: [],
+    warnings: warnings.filter(
+      w => !(w.code === 'missing_source' && [...notUsed].some(f => w.path === `${ident}.${f}`)),
+    ),
+  };
 }
 
 export interface CheckResult {
@@ -88,7 +186,12 @@ export interface CheckResult {
   warnings: ValidationError[];
 }
 
-async function checkOne(c: AgentClient, loaded: LoadedProduct, baseDir: string): Promise<CheckResult> {
+async function checkOne(
+  c: AgentClient,
+  loaded: LoadedProduct,
+  baseDir: string,
+  tpl: TemplateCtx,
+): Promise<CheckResult> {
   const { product } = loaded;
   if (loaded.parseError) {
     return {
@@ -124,11 +227,12 @@ async function checkOne(c: AgentClient, loaded: LoadedProduct, baseDir: string):
       { path: identOf(product), code: 'error', message: e instanceof Error ? e.message : String(e), fix: 'ai' },
     ];
   }
+  const templated = await applyTemplate(product, tpl, [...local.warnings, ...serverWarnings]);
   return {
     key: product.key ?? null,
     id: product.id ?? null,
-    errors: [...local.errors, ...serverErrors],
-    warnings: [...local.warnings, ...serverWarnings],
+    errors: [...local.errors, ...serverErrors, ...templated.errors],
+    warnings: templated.warnings,
   };
 }
 
@@ -138,8 +242,9 @@ export async function cmdCheck(ctx: CmdCtx): Promise<unknown> {
   if (!loaded.length) return { ok: true, results: [] };
   try {
     const c = await client(ctx);
+    const tpl = await TemplateCtx.load(c, ctx.dir);
     const results: CheckResult[] = [];
-    for (const item of loaded) results.push(await checkOne(c, item, ctx.dir));
+    for (const item of loaded) results.push(await checkOne(c, item, ctx.dir, tpl));
     const ok = results.every(r => r.errors.length === 0);
     return { ok, results };
   } catch (e) {
@@ -187,6 +292,15 @@ export function readbackMismatches(local: ProductFile, remote: Record<string, un
   if (local.price !== undefined && !eq(local.price, remote.price)) mismatches.push('price mismatch');
   if (local.moq !== undefined && !eq(local.moq, remote.moq)) mismatches.push('moq mismatch');
   if (local.leadTime !== undefined && !eq(local.leadTime, remote.leadTime)) mismatches.push('leadTime mismatch');
+  if (local.trade !== undefined) {
+    const nonEmpty = (m: unknown) =>
+      Object.fromEntries(
+        Object.entries((m as Record<string, unknown>) ?? {})
+          .filter(([, v]) => !isEmptyValue(v))
+          .sort(),
+      );
+    if (!eq(nonEmpty(local.trade), nonEmpty(remote.trade))) mismatches.push('trade mismatch');
+  }
   const localSpecCount = (local.specs ?? []).length;
   const remoteSpecCount = ((remote.specs as unknown[]) ?? []).length;
   if (local.specs !== undefined && localSpecCount !== remoteSpecCount) {
@@ -215,6 +329,7 @@ export function readbackMismatches(local: ProductFile, remote: Record<string, un
 function toWirePayload(product: ProductFile): Record<string, unknown> {
   const clone: ProductFile = JSON.parse(JSON.stringify(product));
   if (clone.detail) delete clone.detail.unmanagedHtml;
+  delete clone.template;
   for (const { ref } of walkImageRefs(clone)) {
     delete ref.file;
   }
@@ -227,9 +342,10 @@ async function pushOne(
   ctx: CmdCtx,
   cache: Record<string, { mediaId: number; url: string }>,
   allowPublish: boolean,
+  tpl: TemplateCtx,
 ): Promise<PushOneResult> {
   const { product, path } = loaded;
-  const checkOutcome = await checkOne(c, loaded, ctx.dir);
+  const checkOutcome = await checkOne(c, loaded, ctx.dir, tpl);
   if (checkOutcome.errors.length) {
     return {
       key: product.key ?? null,
@@ -385,9 +501,10 @@ export async function cmdPush(ctx: CmdCtx, allowPublish = false): Promise<unknow
   try {
     const c = await client(ctx);
     const cache = await readUploadsCache(ctx.dir, c.siteUrl);
+    const tpl = await TemplateCtx.load(c, ctx.dir);
     const results: PushOneResult[] = [];
     for (const item of loaded) {
-      results.push(await pushOne(c, item, ctx, cache, allowPublish));
+      results.push(await pushOne(c, item, ctx, cache, allowPublish, tpl));
       await writeUploadsCache(ctx.dir, c.siteUrl, cache); // persist as we go — an early failure shouldn't lose earlier uploads' cache entries
     }
     const ok = results.every(r => r.ok);
@@ -421,35 +538,34 @@ function deriveKeyFromTitle(title: string, existingKeys: Set<string>): string {
 
 export async function cmdPull(ctx: CmdCtx): Promise<unknown> {
   const target = ctx.positional[0];
-  if (!target) return { ok: false, code: 'error', message: 'usage: puffergo products pull <key|id>' };
+  if (!target) return { ok: false, code: 'error', message: 'usage: puffergo products pull <key|id|link>' };
   try {
     const c = await client(ctx);
-    let id: number;
-    if (/^\d+$/.test(target)) {
-      id = Number(target);
-    } else {
-      const list = await c.listProducts<{ items: Array<{ id: number; key: string | null }> }>({ key: target });
-      const item = list.items[0];
-      if (!item) return { ok: false, code: 'not_found', message: `No product with key "${target}"` };
-      id = item.id;
-    }
+    const id = await resolveProductId(c, target);
     const remote = await c.getProduct<ProductFile & { key: string | null; unmanagedHtml?: string }>(id);
+    const existing = await loadProducts(ctx.dir);
     let key = remote.key;
-    if (!key) {
-      const existing = await loadProducts(ctx.dir);
-      key = deriveKeyFromTitle(remote.title, new Set(existing.map(p => p.fileKey)));
-    }
-    const product: ProductFile = { ...remote, key };
+    if (!key) key = deriveKeyFromTitle(remote.title, new Set(existing.map(p => p.fileKey)));
+    // `template` lives only in the local file — keep it across a pull.
+    const template = existing.find(p => p.fileKey === key)?.product.template;
+    const product: ProductFile = { ...remote, key, ...(template ? { template } : {}) };
     await writeProduct(ctx.dir, key, product);
     if (product.detail?.unmanagedHtml) {
       process.stderr.write(
         `注意：该产品正文里有非 content-alternating 的内容（detail.unmanagedHtml），只读，推送时会原样保留、不会被这份文件覆盖。\n`,
       );
     }
-    return { ok: true, key, id, path: `products/${key}.json` };
+    return {
+      ok: true,
+      key,
+      id,
+      path: `products/${key}.json`,
+      hint: 'pull is for editing THIS product. If the customer wants new products to look like it, run `products template set <type name> <this link or id>` instead.',
+    };
   } catch (e) {
     const siteErr = siteErrorOutput(e);
     if (siteErr) return siteErr;
+    if (e instanceof TargetError) return { ok: false, code: e.code, message: e.message };
     if (e instanceof AgentHttpError) return { ok: false, code: 'error', status: e.status, body: e.body };
     return { ok: false, code: 'error', message: e instanceof Error ? e.message : String(e) };
   }
@@ -496,4 +612,69 @@ export async function cmdPublish(ctx: CmdCtx): Promise<unknown> {
     await writeProduct(ctx.dir, item.fileKey, item.product);
   }
   return cmdPush({ ...ctx, flags: new Map([...ctx.flags, ['only', keys.join(',')]]) }, true);
+}
+
+// ---------------------------------------------------------------------------
+// template list | set <name> <key|id|link> | show <name> | remove <name>
+// ---------------------------------------------------------------------------
+
+export async function cmdTemplate(ctx: CmdCtx): Promise<unknown> {
+  const [sub, name, target] = ctx.positional;
+  const usage = 'usage: puffergo products template <list | set <name> <key|id|link> | show <name> | remove <name>>';
+  try {
+    const c = await client(ctx);
+    const templates = await readTemplates(ctx.dir, c.siteUrl);
+    const missing = () => ({
+      ok: false,
+      code: 'unknown_template',
+      message: `No template named "${name}". Saved: ${Object.keys(templates).join(', ') || 'none'}.`,
+    });
+    switch (sub) {
+      case 'list':
+        return {
+          ok: true,
+          templates: Object.entries(templates).map(([n, t]) => ({ name: n, id: t.id, title: t.title })),
+        };
+      case 'set': {
+        if (!name || !target) return { ok: false, code: 'usage', message: usage };
+        const id = await resolveProductId(c, target);
+        const remote = await c.getProduct<{ title: string }>(id);
+        templates[name] = { id, title: remote.title };
+        await writeTemplates(ctx.dir, c.siteUrl, templates);
+        return { ok: true, name, id, title: remote.title };
+      }
+      case 'show': {
+        if (!name) return { ok: false, code: 'usage', message: usage };
+        const entry = templates[name];
+        if (!entry) return missing();
+        const remote = await c.getProduct<ProductFile>(entry.id);
+        return {
+          ok: true,
+          name,
+          id: entry.id,
+          note:
+            'Structure reference only. Follow which fields it uses (notUsed = the site does not show these: do not write them and do not ask), its units, spec names and order, section layouts, image placement and text lengths. Write every text from the customer\'s facts; drop a section the customer gave nothing for. Set "template": "' +
+            name +
+            '" in each product file that follows it.',
+          reference: templateReference(remote, await loadSiteSchema(c)),
+        };
+      }
+      case 'remove': {
+        if (!name) return { ok: false, code: 'usage', message: usage };
+        if (!templates[name]) return missing();
+        delete templates[name];
+        await writeTemplates(ctx.dir, c.siteUrl, templates);
+        return { ok: true, removed: name };
+      }
+      default:
+        return { ok: false, code: 'usage', message: usage };
+    }
+  } catch (e) {
+    const siteErr = siteErrorOutput(e);
+    if (siteErr) return siteErr;
+    if (e instanceof TargetError) return { ok: false, code: e.code, message: e.message };
+    if (e instanceof AgentHttpError && e.status === 404)
+      return { ok: false, code: 'not_found', message: 'That product no longer exists on the site.' };
+    return { ok: false, code: 'error', message: e instanceof Error ? e.message : String(e) };
+  }
 }

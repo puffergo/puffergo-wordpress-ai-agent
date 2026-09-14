@@ -257,3 +257,163 @@ describe('publish needs the customer asking for it', () => {
     expect(r.code).toBe('needs_publish_request');
   });
 });
+
+// ---- templates -------------------------------------------------------------------------------------
+import { templateReference, resolveProductId, TargetError } from '../lib/templates';
+import { optionalFactPaths, loadSiteSchema, SchemaVersionError, type TradeField } from '../lib/siteSchema';
+
+const SCHEMA3: { tradeFields: TradeField[] } = {
+  tradeFields: [
+    { path: 'price', kind: 'unitValue', unitType: 'currency', label: 'Price' },
+    { path: 'moq', kind: 'unitValue', unitType: 'quantity', label: 'Min. Order' },
+    { path: 'leadTime', kind: 'unitValue', unitType: 'time', label: 'Lead Time' },
+  ],
+};
+import { TemplateCtx, applyTemplate } from '../lib/productsCmd';
+import type { AgentClient } from '../lib/agentClient';
+
+describe('templateReference', () => {
+  const remote: ProductFile = {
+    id: 9,
+    key: 'pg-500',
+    status: 'publish',
+    title: 'PG-500 Air Compressor',
+    moq: { value: 5, unit: 'sets' },
+    leadTime: { min: 10, max: 15, unit: 'days' },
+    specs: [{ key: 'Power', value: '5.5 kW' }],
+    gallery: [{ mediaId: 3, alt: 'front' }],
+    detail: { sections: [{ layout: 'split', heading: 'Quiet', body: 'Runs at 60 dB.', image: { mediaId: 4 } }] },
+  };
+  const ref = templateReference(remote, SCHEMA3) as Record<string, any>;
+
+  it('hides every number and spec value, keeps units and spec names', () => {
+    expect(ref.moq).toEqual({ value: '<from customer>', unit: 'sets' });
+    expect(ref.leadTime).toEqual({ min: '<from customer>', max: '<from customer>', unit: 'days' });
+    expect(ref.specs).toEqual([{ key: 'Power', value: '<from customer>' }]);
+    expect(JSON.stringify(ref)).not.toContain('5.5');
+    expect(ref.detail.sections[0].body).toBe('<text from customer facts>');
+    expect(ref.title).toBe('<text from customer facts>');
+    expect(ref.detail.sections[0].layout).toBe('split');
+  });
+  it('lists the trade fields the site does not use, and drops identity/images', () => {
+    expect(ref.notUsed).toEqual(['price']);
+    expect(ref.id ?? ref.key ?? ref.status).toBeUndefined();
+    expect(ref.gallery).toEqual([{ file: '<customer photo>' }]);
+    expect(ref.detail.sections[0].image).toEqual({ file: '<customer photo>' });
+  });
+  it('keeps "price on request" as is', () => {
+    expect((templateReference({ title: 't', price: { type: 'contact' } }, SCHEMA3) as any).price).toEqual({
+      type: 'contact',
+    });
+  });
+});
+
+describe('templates in check', () => {
+  const fake = (remote: Record<string, unknown>) =>
+    ({ siteUrl: 'http://shop.test', getProduct: vi.fn(async () => remote) }) as unknown as AgentClient;
+
+  it('knows which optional facts a template leaves out (fetched once)', async () => {
+    const c = fake({ title: 'T', moq: { value: 1, unit: 'sets' }, specs: [] });
+    const tpl = new TemplateCtx(c, { pumps: { id: 9, title: 'T' } }, optionalFactPaths(SCHEMA3));
+    expect([...(await tpl.fieldsNotUsed('pumps'))!].sort()).toEqual(['leadTime', 'price', 'specs']);
+    await tpl.fieldsNotUsed('pumps');
+    expect(c.getProduct).toHaveBeenCalledTimes(1);
+    expect(await tpl.fieldsNotUsed('nope')).toBeNull();
+  });
+
+  it('requires a template choice when the site has templates, and drops warnings for unused fields', async () => {
+    const tpl = new TemplateCtx(
+      fake({ title: 'T', moq: { value: 1, unit: 'sets' } }),
+      {
+        pumps: { id: 9, title: 'T' },
+      },
+      optionalFactPaths(SCHEMA3),
+    );
+    const w = (f: string) => ({ path: `p-1.${f}`, code: 'missing_source', message: '', fix: 'user' as const });
+    const warnings = [w('price'), w('moq'), w('leadTime')];
+    expect((await applyTemplate({ key: 'p-1', title: 'x' }, tpl, warnings)).errors[0].code).toBe('template_required');
+    expect((await applyTemplate({ key: 'p-1', title: 'x', template: '' }, tpl, warnings)).warnings).toHaveLength(3);
+    const used = await applyTemplate({ key: 'p-1', title: 'x', template: 'pumps' }, tpl, warnings);
+    expect(used.errors).toEqual([]);
+    expect(used.warnings.map(x => x.path)).toEqual(['p-1.moq']);
+    expect((await applyTemplate({ key: 'p-1', title: 'x', template: 'nope' }, tpl, [])).errors[0].code).toBe(
+      'unknown_template',
+    );
+  });
+});
+
+describe('resolveProductId', () => {
+  const c = {
+    siteUrl: 'https://www.shop.test',
+    listProducts: vi.fn(async (p: { url?: string; key?: string }) => ({
+      items: p.url || p.key === 'k-1' ? [{ id: 42 }] : [],
+    })),
+  } as unknown as AgentClient;
+
+  it('takes ids, keys and links on the connected site', async () => {
+    expect(await resolveProductId(c, '17')).toBe(17);
+    expect(await resolveProductId(c, 'k-1')).toBe(42);
+    expect(await resolveProductId(c, 'https://shop.test/wp-admin/post.php?post=42&action=edit')).toBe(42);
+  });
+  it('refuses a link to another site and reports unknown keys', async () => {
+    await expect(resolveProductId(c, 'https://other.test/p/x/')).rejects.toMatchObject({ code: 'other_site' });
+    await expect(resolveProductId(c, 'nope')).rejects.toBeInstanceOf(TargetError);
+  });
+});
+
+import { claimWarnings } from '../lib/claims';
+describe('claimWarnings', () => {
+  it('flags marketing words per field, once each, and leaves plain facts alone', () => {
+    const w = claimWarnings({
+      key: 'v-1',
+      title: 'GV-50 Gate Valve',
+      excerpt: 'Durable, robust valve. Durable again.',
+      detail: {
+        sections: [{ layout: 'text', heading: 'Body', body: 'WCB cast steel body rated PN16; ensures reliability.' }],
+      },
+    });
+    expect(w.map(x => x.path)).toEqual(['v-1.excerpt', 'v-1.detail.sections[0].body']);
+    expect(w[0].message).toContain('"durable", "robust"');
+    expect(w[1].message).toContain('"ensures", "reliability"');
+    expect(claimWarnings({ title: 'Flanged ends bolt onto DN50 pipelines' })).toEqual([]);
+    expect(claimWarnings({ title: 't', excerpt: 'Factory tested before shipping.' })[0].message).toContain('"tested"');
+  });
+});
+
+describe('site schema drives trade fields', () => {
+  const CUSTOM: { tradeFields: TradeField[] } = {
+    tradeFields: [
+      { path: 'trade.payment_terms', kind: 'text', label: 'Payment Terms' },
+      { path: 'moq', kind: 'unitValue', unitType: 'quantity', label: 'Min. Order' },
+    ],
+  };
+  it('masks custom trade values and lists unused ones from the schema, not a hard-coded list', () => {
+    const ref = templateReference(
+      {
+        title: 't',
+        trade: { payment_terms: 'T/T 30%' },
+        price: { value: 9, unit: 'USD' },
+        specs: [{ key: 'a', value: 'b' }],
+      },
+      CUSTOM,
+    ) as any;
+    expect(ref.trade).toEqual({ payment_terms: '<from customer>' });
+    expect(ref.notUsed).toEqual(['moq']);
+    expect(optionalFactPaths(CUSTOM)).toEqual(['trade.payment_terms', 'moq', 'specs']);
+  });
+  it('refuses a site newer than this CLI and falls back to the three built-ins on old plugins', async () => {
+    const newer = { schema: async () => ({ schemaVersion: 99 }) } as unknown as AgentClient;
+    await expect(loadSiteSchema(newer)).rejects.toBeInstanceOf(SchemaVersionError);
+    const old = { schema: async () => ({ layouts: [] }) } as unknown as AgentClient;
+    expect((await loadSiteSchema(old)).tradeFields.map(f => f.path)).toEqual(['price', 'moq', 'leadTime']);
+  });
+  it('read-back compares custom trade values', () => {
+    expect(
+      readbackMismatches({ title: 't', trade: { payment_terms: 'A' } }, { title: 't', trade: { payment_terms: 'A' } }),
+    ).toEqual([]);
+    expect(readbackMismatches({ title: 't', trade: { payment_terms: 'A' } }, { title: 't', trade: {} })).toEqual([
+      'trade mismatch',
+    ]);
+    expect(readbackMismatches({ title: 't', trade: { port: '' } }, { title: 't', trade: {} })).toEqual([]);
+  });
+});

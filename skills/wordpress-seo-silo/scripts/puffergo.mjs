@@ -8212,7 +8212,7 @@ var require_HTMLParser = __commonJS({
     var impl = html2.elements;
     var pushAll = Function.prototype.apply.bind(Array.prototype.push);
     var EOF = -1;
-    var TEXT = 1;
+    var TEXT2 = 1;
     var TAG = 2;
     var ENDTAG = 3;
     var COMMENT = 4;
@@ -11481,7 +11481,7 @@ var require_HTMLParser = __commonJS({
             if (s[0] === "\n") s = s.substring(1);
             if (s.length === 0) return;
           }
-          insertToken(TEXT, s);
+          insertToken(TEXT2, s);
           textIncludesNUL = false;
         }
         ignore_linefeed = false;
@@ -11516,7 +11516,7 @@ var require_HTMLParser = __commonJS({
           if (s[0] === "\n") s = s.substring(1);
           if (s.length === 0) return;
         }
-        insertToken(TEXT, s);
+        insertToken(TEXT2, s);
       }
       function emitTag() {
         if (is_end_tag) insertToken(ENDTAG, tagnamebuf);
@@ -11572,10 +11572,10 @@ var require_HTMLParser = __commonJS({
         if (!current || current.namespaceURI === NAMESPACE.HTML) {
           parser2(t, value, arg3, arg4);
         } else {
-          if (t !== TAG && t !== TEXT) {
+          if (t !== TAG && t !== TEXT2) {
             insertForeignToken(t, value, arg3, arg4);
           } else {
-            if (isMathmlTextIntegrationPoint(current) && (t === TEXT || t === TAG && value !== "mglyph" && value !== "malignmark") || t === TAG && value === "svg" && current.namespaceURI === NAMESPACE.MATHML && current.localName === "annotation-xml" || isHTMLIntegrationPoint(current)) {
+            if (isMathmlTextIntegrationPoint(current) && (t === TEXT2 || t === TAG && value !== "mglyph" && value !== "malignmark") || t === TAG && value === "svg" && current.namespaceURI === NAMESPACE.MATHML && current.localName === "annotation-xml" || isHTMLIntegrationPoint(current)) {
               text_integration_mode = true;
               parser2(t, value, arg3, arg4);
               text_integration_mode = false;
@@ -15540,7 +15540,7 @@ var require_HTMLParser = __commonJS({
         foster_parent_mode = false;
       }
       function in_table_text_mode(t, value, arg3, arg4) {
-        if (t === TEXT) {
+        if (t === TEXT2) {
           if (textIncludesNUL) {
             value = value.replace(NULCHARS, "");
             if (value.length === 0) return;
@@ -15551,7 +15551,7 @@ var require_HTMLParser = __commonJS({
           pending_table_text.length = 0;
           if (NONWS.test(s)) {
             foster_parent_mode = true;
-            in_body_mode(TEXT, s);
+            in_body_mode(TEXT2, s);
             foster_parent_mode = false;
           } else {
             insertText(s);
@@ -17310,14 +17310,14 @@ var require_turndown_cjs = __commonJS({
         } else if (node.nodeType === 1) {
           replacement = replacementForNode.call(self, node);
         }
-        return join7(output, replacement);
+        return join8(output, replacement);
       }, "");
     }
     function postProcess(output) {
       var self = this;
       this.rules.forEach(function(rule) {
         if (typeof rule.append === "function") {
-          output = join7(output, rule.append(self.options));
+          output = join8(output, rule.append(self.options));
         }
       });
       return output.replace(/^[\t\r\n]+/, "").replace(/[\t\r\n\s]+$/, "");
@@ -17329,7 +17329,7 @@ var require_turndown_cjs = __commonJS({
       if (whitespace.leading || whitespace.trailing) content = content.trim();
       return whitespace.leading + rule.replacement(content, node, this.options) + whitespace.trailing;
     }
-    function join7(output, replacement) {
+    function join8(output, replacement) {
       var s1 = trimTrailingNewlines(output);
       var s2 = trimLeadingNewlines(replacement);
       var nls = Math.max(output.length - s1.length, replacement.length - s2.length);
@@ -24749,7 +24749,7 @@ div{text-align:center}</style></head><body><div>${ok ? "\u2705 \u5DF2\u6388\u674
 });
 
 // src/index.ts
-import { readFile as readFile10 } from "node:fs/promises";
+import { readFile as readFile11 } from "node:fs/promises";
 
 // ../silo-core/lib/model/types.ts
 var SILO_WORKSPACE_VERSION = 3;
@@ -28644,10 +28644,10 @@ var MIME_BY_EXT = {
 };
 var mimeOf = (filename) => MIME_BY_EXT[extname(filename).toLowerCase()];
 function wpAssetUploader(client2, baseDirs) {
-  const cache = /* @__PURE__ */ new Map();
+  const cache2 = /* @__PURE__ */ new Map();
   return {
     async upload(ref) {
-      if (cache.has(ref)) return cache.get(ref) ?? null;
+      if (cache2.has(ref)) return cache2.get(ref) ?? null;
       let url = null;
       try {
         const rel = decodeURIComponent(ref);
@@ -28661,7 +28661,7 @@ function wpAssetUploader(client2, baseDirs) {
       } catch {
         url = null;
       }
-      cache.set(ref, url);
+      cache2.set(ref, url);
       return url;
     }
   };
@@ -28924,6 +28924,7 @@ var AgentClient = class {
     const q = new URLSearchParams();
     if (params.search) q.set("search", params.search);
     if (params.key) q.set("key", params.key);
+    if (params.url) q.set("url", params.url);
     if (params.page) q.set("page", String(params.page));
     const qs = q.toString();
     return this.call("GET", `/agent/products${qs ? `?${qs}` : ""}`);
@@ -29069,9 +29070,9 @@ async function readCacheFile(dir2) {
 async function readUploadsCache(dir2, siteUrl) {
   return (await readCacheFile(dir2))[siteUrl] ?? {};
 }
-async function writeUploadsCache(dir2, siteUrl, cache) {
+async function writeUploadsCache(dir2, siteUrl, cache2) {
   const all = await readCacheFile(dir2);
-  all[siteUrl] = cache;
+  all[siteUrl] = cache2;
   await mkdir5(join5(dir2, ".puffergo"), { recursive: true });
   await writeFile5(uploadsCachePath(dir2), JSON.stringify(all, null, 2), "utf8");
 }
@@ -29208,6 +29209,110 @@ function walkImageRefs(product) {
   return out;
 }
 
+// src/lib/claims.ts
+var CLAIMS = [
+  "durable",
+  "durability",
+  "robust",
+  "reliable",
+  "reliability",
+  "rugged",
+  "heavy-duty",
+  "sturdy",
+  "high-precision",
+  "precise",
+  "precision",
+  "high-quality",
+  "top-quality",
+  "premium",
+  "industrial-grade",
+  "excellent",
+  "exceptional",
+  "superior",
+  "outstanding",
+  "unmatched",
+  "unrivaled",
+  "world-class",
+  "leading",
+  "state-of-the-art",
+  "cutting-edge",
+  "advanced",
+  "innovative",
+  "high-performance",
+  "high-resolution",
+  "efficient",
+  "efficiency",
+  "versatile",
+  "seamless",
+  "ensures?",
+  "guaranteed?",
+  "long service life",
+  "extended service life",
+  "long-lasting",
+  "corrosion resistance",
+  "corrosion-resistant",
+  "demanding",
+  "ideal for",
+  "perfect for",
+  "engineered for",
+  "engineered to",
+  "trusted",
+  "proven",
+  "spacious",
+  "ample",
+  "consistent",
+  "production-ready",
+  "production ready",
+  // Factory, service and commercial promises (the Skill's banned categories).
+  "tested",
+  "testing",
+  "factory-tested",
+  "quality control",
+  "quality-controlled",
+  "inspected",
+  "inspection",
+  "certified",
+  "certification",
+  "warranty",
+  "after-sales",
+  "technical support",
+  "discount",
+  "discounts"
+];
+var CLAIM_RE = new RegExp(`\\b(${CLAIMS.join("|")})\\b`, "gi");
+function texts(p) {
+  const id = identOf(p);
+  const out = [
+    [`${id}.title`, p.title],
+    [`${id}.excerpt`, p.excerpt],
+    [`${id}.detail.title`, p.detail?.title],
+    [`${id}.detail.subtitle`, p.detail?.subtitle],
+    [`${id}.detail.intro`, p.detail?.intro]
+  ];
+  (p.detail?.sections ?? []).forEach((s, i) => {
+    out.push([`${id}.detail.sections[${i}].heading`, s.heading], [`${id}.detail.sections[${i}].body`, s.body]);
+    (s.images ?? []).forEach((img, j) => {
+      out.push([`${id}.detail.sections[${i}].images[${j}].title`, img.title]);
+      out.push([`${id}.detail.sections[${i}].images[${j}].text`, img.text]);
+    });
+  });
+  return out;
+}
+function claimWarnings(p) {
+  const out = [];
+  for (const [path, text] of texts(p)) {
+    const found = [...new Set((text ?? "").match(CLAIM_RE)?.map((w) => w.toLowerCase()) ?? [])];
+    if (!found.length) continue;
+    out.push({
+      path,
+      code: "unsupported_claim",
+      message: `Uses ${found.map((w) => `"${w}"`).join(", ")}. Delete the claim unless the customer said it in their own words; keep only the facts they gave.`,
+      fix: "ai"
+    });
+  }
+  return out;
+}
+
 // src/lib/localCheck.ts
 async function localCheckProduct(product, baseDir) {
   const errors = [];
@@ -29252,6 +29357,7 @@ async function localCheckProduct(product, baseDir) {
       }
     }
   }
+  warnings.push(...claimWarnings(product));
   return { errors, warnings };
 }
 
@@ -29262,40 +29368,194 @@ import { basename as basename3 } from "node:path";
 function sha256Hex(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
-async function resolveUpload(client2, cache, absPath) {
+async function resolveUpload(client2, cache2, absPath) {
   const bytes = await readFile8(absPath);
   const sha256 = sha256Hex(bytes);
-  const cached = cache[sha256];
+  const cached = cache2[sha256];
   if (cached) return { mediaId: cached.mediaId, sha256, reused: true };
   const lookup = await client2.mediaLookup(sha256);
   if (lookup.found && lookup.mediaId) {
-    cache[sha256] = { mediaId: lookup.mediaId, url: lookup.url ?? "" };
+    cache2[sha256] = { mediaId: lookup.mediaId, url: lookup.url ?? "" };
     return { mediaId: lookup.mediaId, sha256, reused: true };
   }
   const filename = basename3(absPath);
   const format = sniffImage(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)).format ?? "jpeg";
   const mime = `image/${format}`;
   const { id, url } = await client2.uploadMedia(new Uint8Array(bytes), filename, mime);
-  cache[sha256] = { mediaId: id, url };
+  cache2[sha256] = { mediaId: id, url };
   return { mediaId: id, sha256, reused: false };
+}
+
+// src/lib/templates.ts
+import { readFile as readFile9, writeFile as writeFile6, mkdir as mkdir6 } from "node:fs/promises";
+import { existsSync as existsSync8 } from "node:fs";
+import { join as join6 } from "node:path";
+
+// src/lib/siteSchema.ts
+var SUPPORTED_SCHEMA_VERSION = 2;
+var LEGACY_TRADE_FIELDS = [
+  { path: "price", kind: "unitValue", unitType: "currency", label: "Price" },
+  { path: "moq", kind: "unitValue", unitType: "quantity", label: "Min. Order" },
+  { path: "leadTime", kind: "unitValue", unitType: "time", label: "Lead Time" }
+];
+var SchemaVersionError = class extends Error {
+  constructor(siteVersion) {
+    super(
+      `The site's PufferGo plugin uses product-file version ${siteVersion}; this Skill understands up to ${SUPPORTED_SCHEMA_VERSION}. Update the Skill (download the latest wordpress-bulk-product-upload) and try again.`
+    );
+    this.siteVersion = siteVersion;
+  }
+};
+var cache = /* @__PURE__ */ new WeakMap();
+function loadSiteSchema(c) {
+  if (!cache.has(c)) {
+    cache.set(
+      c,
+      c.schema().then((raw) => {
+        const schemaVersion = typeof raw.schemaVersion === "number" ? raw.schemaVersion : 1;
+        if (schemaVersion > SUPPORTED_SCHEMA_VERSION) throw new SchemaVersionError(schemaVersion);
+        const tradeFields = Array.isArray(raw.tradeFields) ? raw.tradeFields : LEGACY_TRADE_FIELDS;
+        return { ...raw, schemaVersion, tradeFields };
+      })
+    );
+  }
+  return cache.get(c);
+}
+function optionalFactPaths(schema) {
+  return [...schema.tradeFields.map((f) => f.path), "specs"];
+}
+function getPath(obj, path) {
+  return path.split(".").reduce((o, k) => o && typeof o === "object" ? o[k] : void 0, obj);
+}
+function setPath(obj, path, value) {
+  const keys = path.split(".");
+  let o = obj;
+  for (const k of keys.slice(0, -1)) {
+    if (!o[k] || typeof o[k] !== "object") o[k] = {};
+    o = o[k];
+  }
+  o[keys[keys.length - 1]] = value;
+}
+function isEmptyValue(v) {
+  if (v == null) return true;
+  if (typeof v === "string") return v.trim() === "";
+  if (Array.isArray(v)) return v.length === 0;
+  if (typeof v === "object") return Object.keys(v).length === 0;
+  return false;
+}
+
+// src/lib/templates.ts
+var templatesPath = (dir2) => join6(dir2, ".puffergo", "templates.json");
+async function readAll(dir2) {
+  if (!existsSync8(templatesPath(dir2))) return {};
+  try {
+    return JSON.parse(await readFile9(templatesPath(dir2), "utf8"));
+  } catch {
+    return {};
+  }
+}
+async function readTemplates(dir2, siteUrl) {
+  return (await readAll(dir2))[siteUrl] ?? {};
+}
+async function writeTemplates(dir2, siteUrl, templates) {
+  const all = await readAll(dir2);
+  all[siteUrl] = templates;
+  await mkdir6(join6(dir2, ".puffergo"), { recursive: true });
+  await writeFile6(templatesPath(dir2), JSON.stringify(all, null, 2) + "\n", "utf8");
+}
+var TargetError = class extends Error {
+  constructor(code, message) {
+    super(message);
+    this.code = code;
+  }
+};
+async function resolveProductId(c, target) {
+  if (/^\d+$/.test(target)) return Number(target);
+  if (/^https?:\/\//i.test(target)) {
+    const host = (u) => new URL(u).host.replace(/^www\./, "").toLowerCase();
+    if (host(target) !== host(c.siteUrl)) {
+      throw new TargetError(
+        "other_site",
+        `This link is on ${new URL(target).host}, not the connected site ${c.siteUrl}.`
+      );
+    }
+    const list3 = await c.listProducts({ url: target });
+    if (!list3.items[0]) throw new TargetError("not_found", `No product found at ${target}`);
+    return list3.items[0].id;
+  }
+  const list2 = await c.listProducts({ key: target });
+  if (!list2.items[0]) throw new TargetError("not_found", `No product with key "${target}"`);
+  return list2.items[0].id;
+}
+var FROM_CUSTOMER = "<from customer>";
+var TEXT = "<text from customer facts>";
+function maskUnitValue(v) {
+  if (!v || v.type === "contact") return v;
+  const out = {};
+  for (const k of ["value", "min", "max"]) if (v[k] !== void 0) out[k] = FROM_CUSTOMER;
+  if (v.unit) out.unit = v.unit;
+  return out;
+}
+function templateReference(remote, schema) {
+  const p = JSON.parse(JSON.stringify(remote));
+  for (const k of ["id", "key", "baseModified", "status"]) delete p[k];
+  if (p.detail) delete p.detail.unmanagedHtml;
+  for (const { ref } of walkImageRefs(p)) {
+    for (const k of Object.keys(ref)) delete ref[k];
+    ref.file = "<customer photo>";
+  }
+  const out = p;
+  for (const f of schema.tradeFields) {
+    const v = getPath(out, f.path);
+    if (isEmptyValue(v)) continue;
+    setPath(out, f.path, f.kind === "unitValue" ? maskUnitValue(v) : FROM_CUSTOMER);
+  }
+  if (p.specs) out.specs = p.specs.map((s) => ({ key: s.key, value: FROM_CUSTOMER }));
+  const shape = (t) => t?.trim() ? TEXT : t;
+  p.title = shape(p.title);
+  p.excerpt = shape(p.excerpt);
+  if (p.detail) {
+    for (const k of ["title", "subtitle", "intro"]) p.detail[k] = shape(p.detail[k]);
+    for (const s of p.detail.sections ?? []) {
+      s.heading = shape(s.heading);
+      s.body = shape(s.body);
+      for (const img of s.images ?? []) {
+        img.title = shape(img.title);
+        img.text = shape(img.text);
+      }
+    }
+  }
+  out.notUsed = optionalFactPaths(schema).filter((path) => isEmptyValue(getPath(remote, path)));
+  return out;
 }
 
 // src/lib/productsCmd.ts
 async function client(ctx) {
   const siteFlag = ctx.flags.get("site");
   const cred = await resolveSite(ctx.dir, siteFlag);
-  return new AgentClient(cred.config);
+  const c = new AgentClient(cred.config);
+  await loadSiteSchema(c);
+  return c;
 }
 function siteErrorOutput(e) {
   if (e instanceof NoSiteError) return { ok: false, code: "no_site", sites: e.sites };
   if (e instanceof NotLoggedInError) return { ok: false, code: "not_logged_in" };
+  if (e instanceof SchemaVersionError) return { ok: false, code: "update_skill", fix: "user", message: e.message };
   return null;
 }
 async function cmdSchema(ctx) {
   try {
     const c = await client(ctx);
-    const schema = await c.schema();
-    return { ok: true, ...schema };
+    const schema = await loadSiteSchema(c);
+    const templates = await readTemplates(ctx.dir, c.siteUrl);
+    return {
+      ok: true,
+      ...schema,
+      templates: Object.entries(templates).map(([name, t]) => ({ name, id: t.id, title: t.title })),
+      ...Object.keys(templates).length ? {
+        templatesNote: 'This site has product templates. Pick one per product, read it with `products template show <name>`, and set "template" in the product file ("" if none fits).'
+      } : {}
+    };
   } catch (e) {
     const siteErr = siteErrorOutput(e);
     if (siteErr) return siteErr;
@@ -29326,12 +29586,73 @@ function stripFileRefsForValidate(product) {
     }
   }
   if (clone.detail) delete clone.detail.unmanagedHtml;
+  delete clone.template;
   return { clone, strippedPaths };
 }
 function filterStrippedErrors(list2, strippedPaths) {
   return list2.filter((e) => !strippedPaths.has(e.path));
 }
-async function checkOne(c, loaded, baseDir) {
+var TemplateCtx = class _TemplateCtx {
+  constructor(c, templates, factPaths) {
+    this.c = c;
+    this.templates = templates;
+    this.factPaths = factPaths;
+  }
+  notUsed = /* @__PURE__ */ new Map();
+  static async load(c, dir2) {
+    const schema = await loadSiteSchema(c);
+    return new _TemplateCtx(c, await readTemplates(dir2, c.siteUrl), optionalFactPaths(schema));
+  }
+  /** Fields the named template doesn't use; null when no such template is saved. */
+  async fieldsNotUsed(name) {
+    const entry = this.templates[name];
+    if (!entry) return null;
+    if (!this.notUsed.has(name)) {
+      const remote = await this.c.getProduct(entry.id);
+      this.notUsed.set(name, new Set(this.factPaths.filter((path) => isEmptyValue(getPath(remote, path)))));
+    }
+    return this.notUsed.get(name);
+  }
+};
+async function applyTemplate(product, tpl, warnings) {
+  const names = Object.keys(tpl.templates);
+  if (product.template === void 0 && names.length) {
+    return {
+      errors: [
+        {
+          path: `${identOf(product)}.template`,
+          code: "template_required",
+          message: `This site has product templates: ${names.join(", ")}. Read the one this product belongs to (\`products template show <name>\`), follow its structure, and set "template" to its name \u2014 or set "template": "" if none fits.`,
+          fix: "ai"
+        }
+      ],
+      warnings
+    };
+  }
+  if (!product.template) return { errors: [], warnings };
+  const notUsed = await tpl.fieldsNotUsed(product.template);
+  if (!notUsed) {
+    return {
+      errors: [
+        {
+          path: `${identOf(product)}.template`,
+          code: "unknown_template",
+          message: `No template named "${product.template}". Saved templates: ${names.length ? names.join(", ") : "none"} (see \`products template list\`).`,
+          fix: "ai"
+        }
+      ],
+      warnings
+    };
+  }
+  const ident = identOf(product);
+  return {
+    errors: [],
+    warnings: warnings.filter(
+      (w) => !(w.code === "missing_source" && [...notUsed].some((f) => w.path === `${ident}.${f}`))
+    )
+  };
+}
+async function checkOne(c, loaded, baseDir, tpl) {
   const { product } = loaded;
   if (loaded.parseError) {
     return {
@@ -29364,11 +29685,12 @@ async function checkOne(c, loaded, baseDir) {
       { path: identOf(product), code: "error", message: e instanceof Error ? e.message : String(e), fix: "ai" }
     ];
   }
+  const templated = await applyTemplate(product, tpl, [...local.warnings, ...serverWarnings]);
   return {
     key: product.key ?? null,
     id: product.id ?? null,
-    errors: [...local.errors, ...serverErrors],
-    warnings: [...local.warnings, ...serverWarnings]
+    errors: [...local.errors, ...serverErrors, ...templated.errors],
+    warnings: templated.warnings
   };
 }
 async function cmdCheck(ctx) {
@@ -29377,8 +29699,9 @@ async function cmdCheck(ctx) {
   if (!loaded.length) return { ok: true, results: [] };
   try {
     const c = await client(ctx);
+    const tpl = await TemplateCtx.load(c, ctx.dir);
     const results = [];
-    for (const item of loaded) results.push(await checkOne(c, item, ctx.dir));
+    for (const item of loaded) results.push(await checkOne(c, item, ctx.dir, tpl));
     const ok = results.every((r) => r.errors.length === 0);
     return { ok, results };
   } catch (e) {
@@ -29407,6 +29730,12 @@ function readbackMismatches(local, remote) {
   if (local.price !== void 0 && !eq(local.price, remote.price)) mismatches.push("price mismatch");
   if (local.moq !== void 0 && !eq(local.moq, remote.moq)) mismatches.push("moq mismatch");
   if (local.leadTime !== void 0 && !eq(local.leadTime, remote.leadTime)) mismatches.push("leadTime mismatch");
+  if (local.trade !== void 0) {
+    const nonEmpty = (m) => Object.fromEntries(
+      Object.entries(m ?? {}).filter(([, v]) => !isEmptyValue(v)).sort()
+    );
+    if (!eq(nonEmpty(local.trade), nonEmpty(remote.trade))) mismatches.push("trade mismatch");
+  }
   const localSpecCount = (local.specs ?? []).length;
   const remoteSpecCount = (remote.specs ?? []).length;
   if (local.specs !== void 0 && localSpecCount !== remoteSpecCount) {
@@ -29433,14 +29762,15 @@ function readbackMismatches(local, remote) {
 function toWirePayload(product) {
   const clone = JSON.parse(JSON.stringify(product));
   if (clone.detail) delete clone.detail.unmanagedHtml;
+  delete clone.template;
   for (const { ref } of walkImageRefs(clone)) {
     delete ref.file;
   }
   return clone;
 }
-async function pushOne(c, loaded, ctx, cache, allowPublish) {
+async function pushOne(c, loaded, ctx, cache2, allowPublish, tpl) {
   const { product, path } = loaded;
-  const checkOutcome = await checkOne(c, loaded, ctx.dir);
+  const checkOutcome = await checkOne(c, loaded, ctx.dir, tpl);
   if (checkOutcome.errors.length) {
     return {
       key: product.key ?? null,
@@ -29470,7 +29800,7 @@ async function pushOne(c, loaded, ctx, cache, allowPublish) {
     if (!ref.file) continue;
     try {
       const abs = resolve3(ctx.dir, ref.file);
-      const res = await resolveUpload(c, cache, abs);
+      const res = await resolveUpload(c, cache2, abs);
       if (res.reused) reused++;
       else uploaded++;
       ref.mediaId = res.mediaId;
@@ -29571,11 +29901,12 @@ async function cmdPush(ctx, allowPublish = false) {
   if (!loaded.length) return { ok: true, results: [] };
   try {
     const c = await client(ctx);
-    const cache = await readUploadsCache(ctx.dir, c.siteUrl);
+    const cache2 = await readUploadsCache(ctx.dir, c.siteUrl);
+    const tpl = await TemplateCtx.load(c, ctx.dir);
     const results = [];
     for (const item of loaded) {
-      results.push(await pushOne(c, item, ctx, cache, allowPublish));
-      await writeUploadsCache(ctx.dir, c.siteUrl, cache);
+      results.push(await pushOne(c, item, ctx, cache2, allowPublish, tpl));
+      await writeUploadsCache(ctx.dir, c.siteUrl, cache2);
     }
     const ok = results.every((r) => r.ok);
     return { ok, results };
@@ -29597,25 +29928,16 @@ function deriveKeyFromTitle(title, existingKeys) {
 }
 async function cmdPull(ctx) {
   const target = ctx.positional[0];
-  if (!target) return { ok: false, code: "error", message: "usage: puffergo products pull <key|id>" };
+  if (!target) return { ok: false, code: "error", message: "usage: puffergo products pull <key|id|link>" };
   try {
     const c = await client(ctx);
-    let id;
-    if (/^\d+$/.test(target)) {
-      id = Number(target);
-    } else {
-      const list2 = await c.listProducts({ key: target });
-      const item = list2.items[0];
-      if (!item) return { ok: false, code: "not_found", message: `No product with key "${target}"` };
-      id = item.id;
-    }
+    const id = await resolveProductId(c, target);
     const remote = await c.getProduct(id);
+    const existing = await loadProducts(ctx.dir);
     let key = remote.key;
-    if (!key) {
-      const existing = await loadProducts(ctx.dir);
-      key = deriveKeyFromTitle(remote.title, new Set(existing.map((p) => p.fileKey)));
-    }
-    const product = { ...remote, key };
+    if (!key) key = deriveKeyFromTitle(remote.title, new Set(existing.map((p) => p.fileKey)));
+    const template = existing.find((p) => p.fileKey === key)?.product.template;
+    const product = { ...remote, key, ...template ? { template } : {} };
     await writeProduct(ctx.dir, key, product);
     if (product.detail?.unmanagedHtml) {
       process.stderr.write(
@@ -29623,10 +29945,17 @@ async function cmdPull(ctx) {
 `
       );
     }
-    return { ok: true, key, id, path: `products/${key}.json` };
+    return {
+      ok: true,
+      key,
+      id,
+      path: `products/${key}.json`,
+      hint: "pull is for editing THIS product. If the customer wants new products to look like it, run `products template set <type name> <this link or id>` instead."
+    };
   } catch (e) {
     const siteErr = siteErrorOutput(e);
     if (siteErr) return siteErr;
+    if (e instanceof TargetError) return { ok: false, code: e.code, message: e.message };
     if (e instanceof AgentHttpError) return { ok: false, code: "error", status: e.status, body: e.body };
     return { ok: false, code: "error", message: e instanceof Error ? e.message : String(e) };
   }
@@ -29665,13 +29994,70 @@ async function cmdPublish(ctx) {
   }
   return cmdPush({ ...ctx, flags: new Map([...ctx.flags, ["only", keys.join(",")]]) }, true);
 }
+async function cmdTemplate(ctx) {
+  const [sub, name, target] = ctx.positional;
+  const usage = "usage: puffergo products template <list | set <name> <key|id|link> | show <name> | remove <name>>";
+  try {
+    const c = await client(ctx);
+    const templates = await readTemplates(ctx.dir, c.siteUrl);
+    const missing = () => ({
+      ok: false,
+      code: "unknown_template",
+      message: `No template named "${name}". Saved: ${Object.keys(templates).join(", ") || "none"}.`
+    });
+    switch (sub) {
+      case "list":
+        return {
+          ok: true,
+          templates: Object.entries(templates).map(([n, t]) => ({ name: n, id: t.id, title: t.title }))
+        };
+      case "set": {
+        if (!name || !target) return { ok: false, code: "usage", message: usage };
+        const id = await resolveProductId(c, target);
+        const remote = await c.getProduct(id);
+        templates[name] = { id, title: remote.title };
+        await writeTemplates(ctx.dir, c.siteUrl, templates);
+        return { ok: true, name, id, title: remote.title };
+      }
+      case "show": {
+        if (!name) return { ok: false, code: "usage", message: usage };
+        const entry = templates[name];
+        if (!entry) return missing();
+        const remote = await c.getProduct(entry.id);
+        return {
+          ok: true,
+          name,
+          id: entry.id,
+          note: `Structure reference only. Follow which fields it uses (notUsed = the site does not show these: do not write them and do not ask), its units, spec names and order, section layouts, image placement and text lengths. Write every text from the customer's facts; drop a section the customer gave nothing for. Set "template": "` + name + '" in each product file that follows it.',
+          reference: templateReference(remote, await loadSiteSchema(c))
+        };
+      }
+      case "remove": {
+        if (!name) return { ok: false, code: "usage", message: usage };
+        if (!templates[name]) return missing();
+        delete templates[name];
+        await writeTemplates(ctx.dir, c.siteUrl, templates);
+        return { ok: true, removed: name };
+      }
+      default:
+        return { ok: false, code: "usage", message: usage };
+    }
+  } catch (e) {
+    const siteErr = siteErrorOutput(e);
+    if (siteErr) return siteErr;
+    if (e instanceof TargetError) return { ok: false, code: e.code, message: e.message };
+    if (e instanceof AgentHttpError && e.status === 404)
+      return { ok: false, code: "not_found", message: "That product no longer exists on the site." };
+    return { ok: false, code: "error", message: e instanceof Error ? e.message : String(e) };
+  }
+}
 
 // src/lib/loginCmd.ts
 import { spawn } from "node:child_process";
-import { existsSync as existsSync8 } from "node:fs";
-import { readFile as readFile9, rm as rm2, writeFile as writeFile6, mkdtemp } from "node:fs/promises";
+import { existsSync as existsSync9 } from "node:fs";
+import { readFile as readFile10, rm as rm2, writeFile as writeFile7, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join as join6 } from "node:path";
+import { join as join7 } from "node:path";
 var WAIT_MS = 10 * 60 * 1e3;
 var RESULT_PAGE = (ok) => `<!doctype html><html><head><meta charset="utf-8"><title>PufferGo</title>
 <style>html{font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#1f2430;
@@ -29700,8 +30086,8 @@ async function cmdLogin(dir2, siteArg) {
   } catch {
     return { ok: false, code: "error", message: `Not a valid site URL: ${siteArg}` };
   }
-  const handshakeDir = await mkdtemp(join6(tmpdir(), "puffergo-login-"));
-  const handshake = join6(handshakeDir, "authorize-url");
+  const handshakeDir = await mkdtemp(join7(tmpdir(), "puffergo-login-"));
+  const handshake = join7(handshakeDir, "authorize-url");
   const child = spawn(
     process.execPath,
     [...process.execArgv, process.argv[1], "__login-wait", siteUrl, handshake, dir2],
@@ -29711,7 +30097,7 @@ async function cmdLogin(dir2, siteArg) {
   let authorizeUrl = "";
   for (let i = 0; i < 100 && !authorizeUrl; i++) {
     await new Promise((r) => setTimeout(r, 100));
-    if (existsSync8(handshake)) authorizeUrl = (await readFile9(handshake, "utf8")).trim();
+    if (existsSync9(handshake)) authorizeUrl = (await readFile10(handshake, "utf8")).trim();
   }
   await rm2(handshakeDir, { recursive: true, force: true });
   if (!authorizeUrl) return { ok: false, code: "error", message: "Could not start the local authorization listener." };
@@ -29732,7 +30118,7 @@ async function cmdLoginWait(siteUrl, handshake, dir2) {
   const creds = await runAuthorizeServer2(
     siteUrl,
     (authorizeUrl) => {
-      void writeFile6(handshake, authorizeUrl, "utf8");
+      void writeFile7(handshake, authorizeUrl, "utf8");
     },
     { appName: "PufferGo AI", timeoutMs: WAIT_MS, resultPage: RESULT_PAGE }
   );
@@ -29802,7 +30188,7 @@ async function cmdPlan() {
   if (!file) die("\u7528\u6CD5\uFF1Asilo plan <plan.json>");
   let raw;
   try {
-    raw = await readFile10(file, "utf8");
+    raw = await readFile11(file, "utf8");
   } catch {
     die(`\u672A\u627E\u5230 plan \u6587\u4EF6\uFF1A${file}`);
   }
@@ -29953,7 +30339,7 @@ function emit(result) {
   process.stdout.write(JSON.stringify(result, null, 2) + "\n");
   if (!(result && typeof result === "object" && result.ok === true)) process.exitCode = 1;
 }
-var PRODUCTS_USAGE = 'puffergo products <schema|list [--search q]|check [--only k1,k2]|push [--only k1,k2]|pull <key|id>|publish <key\u2026> --customer-said "<customer words>"> [--dir <workdir>] [--site <url>]';
+var PRODUCTS_USAGE = 'puffergo products <schema|list [--search q]|check [--only k1,k2]|push [--only k1,k2]|pull <key|id|link>|publish <key\u2026> --customer-said "<customer words>"|template <list|set <name> <key|id|link>|show <name>|remove <name>>> [--dir <workdir>] [--site <url>]';
 async function products() {
   const ctx = { dir, flags, positional };
   switch (cmd) {
@@ -29969,6 +30355,8 @@ async function products() {
       return emit(await cmdPull(ctx));
     case "publish":
       return emit(await cmdPublish(ctx));
+    case "template":
+      return emit(await cmdTemplate(ctx));
     default:
       return emit({ ok: false, code: "usage", message: PRODUCTS_USAGE });
   }

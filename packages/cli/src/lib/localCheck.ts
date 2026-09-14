@@ -1,5 +1,6 @@
 /** CLI-side checks (spec section 5's last paragraph): file exists, real image format by magic bytes,
- *  ≤10MB, shortest edge <600px is a warning only. Runs against every `file` ref found via walkImageRefs. */
+ *  ≤10MB, shortest edge <600px is a warning only. Runs against every `file` ref found via walkImageRefs.
+ *  Also flags marketing claims in the copy (claims.ts). */
 
 import { stat, readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -8,6 +9,7 @@ import { sniffImage, MAX_BYTES } from './imageSniff';
 import type { ProductFile } from './productTypes';
 import type { ValidationError } from './productTypes';
 import { walkImageRefs } from './imageRefs';
+import { claimWarnings } from './claims';
 
 export interface LocalCheckOutcome {
   errors: ValidationError[];
@@ -60,5 +62,6 @@ export async function localCheckProduct(product: ProductFile, baseDir: string): 
     }
   }
 
+  warnings.push(...claimWarnings(product));
   return { errors, warnings };
 }

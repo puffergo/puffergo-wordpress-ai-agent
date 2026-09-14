@@ -54,10 +54,11 @@ export class AgentClient {
     return this.call('GET', '/agent/products/schema');
   }
 
-  listProducts<T = unknown>(params: { search?: string; key?: string; page?: number } = {}): Promise<T> {
+  listProducts<T = unknown>(params: { search?: string; key?: string; url?: string; page?: number } = {}): Promise<T> {
     const q = new URLSearchParams();
     if (params.search) q.set('search', params.search);
     if (params.key) q.set('key', params.key);
+    if (params.url) q.set('url', params.url);
     if (params.page) q.set('page', String(params.page));
     const qs = q.toString();
     return this.call('GET', `/agent/products${qs ? `?${qs}` : ''}`);
