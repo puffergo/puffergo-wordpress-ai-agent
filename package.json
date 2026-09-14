@@ -1,0 +1,18 @@
+{
+  "name": "puffergo-wordpress-ai-agent",
+  "private": true,
+  "license": "MIT",
+  "description": "WordPress AI agent skills & CLI for B2B manufacturer sites — bulk product upload, SEO silo planning, Obsidian sync.",
+  "packageManager": "pnpm@9.15.1",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "pnpm -F puffergo bundle",
+    "test": "pnpm -r test",
+    "type-check": "pnpm -r type-check"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.5"
+  }
+}

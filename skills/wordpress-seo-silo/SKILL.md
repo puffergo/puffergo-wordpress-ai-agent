@@ -1,0 +1,77 @@
+---
+name: wordpress-seo-silo
+description: >-
+  在一个 vault 文件夹里做 SEO Silo 内容运营：把站点定位展开成关键词与 silo 架构、生成文章、推送到
+  WordPress 草稿、并能从 WP 拉取同步。当用户给出站点定位、要求"规划关键词/搭建 silo/生成内容/发布到
+  WordPress"时使用本技能。所有 WordPress 操作通过本技能自带的 `puffergo` 脚本完成，凭据只在本地、绝不进入对话。
+---
+
+# SEO Silo 内容运营
+
+你是站点的 SEO 内容运营。你负责**生成**(关键词、silo 架构、文章正文),`puffergo silo` 负责**落库/推送/拉取**并持有 WordPress 凭据。你**从不**直接读 `silo.config.json`、从不直接调 WordPress——一律通过 CLI。
+
+脚本在本技能目录下：`node <本技能目录>/scripts/puffergo.mjs <命令>`，下文简写为 `puffergo`。第一次使用前：`node -v` 须 ≥18（没有就帮用户装）；未登录时运行 `puffergo login <网站地址>`（它会打开浏览器后立刻返回），请用户在浏览器里点「批准」，用户说好了再继续。
+
+## 全自动工作流
+
+1. **建工作区**(若 `.silo/workspace.json` 不存在):
+   `puffergo silo init --name "<站点名>" --url "<站点URL>" --tagline "<一句定位>"`
+2. **规划 + 落库 + 生成骨架**:根据站点定位,产出一份 `plan.json`(schema 见下),然后:
+   `puffergo silo plan plan.json`
+   这会创建关键词、pillar/cluster 节点、内容投影,并为每篇内容在对应文件夹写出 `.md`(frontmatter,含 `purpose`)。
+3. **写正文 / 调 SEO**:逐个打开生成的 `.md`,在 frontmatter 下方撰写文章正文(Markdown)。`purpose` 字段说明这篇的目的,照它写。
+   - 正文完全归你;`title/slug/purpose/seoTitle/seoDescription/coreKeywords/longTailKeywords/internalLinks/externalLinks` 这些**扁平**字段可按需调整(push 时会从 frontmatter 读回并推送;`purpose` 只留本地不推 WP)。
+   - `silo:` 和 `wp:` 这两段(嵌套)**绝不修改**——它们是系统 id/永久链接。
+   - 内链用 `[[目标slug]]` 指向兄弟篇(push 时自动解析成真实永久链接)。
+4. **发布**:`puffergo silo push` —— 把正文 + SEO + 分类推成 WordPress 草稿(已存在则只更新,不覆盖你之外的改动)。
+5. **护栏自检**:每步后跑 `puffergo silo health`,读出的问题**自己修**(补内链消除孤岛、补分类归档 SEO、核心词进标题等),修完再 `puffergo silo push`。目标:critical 归零。
+6. **同步**:需要时 `puffergo silo pull` 从 WordPress 拉回最新状态。
+
+## plan.json schema
+
+```json
+{
+  "profile": { "name": "站点名", "url": "http://site", "tagline": "定位" },
+  "keywords": [ { "term": "solar street light", "intent": "commercial", "plannedTier": "head" } ],
+  "nodes": [
+    { "key": "p1", "term": "solar street light", "kind": "pillar", "parent": null, "intent": "commercial", "isCategory": true },
+    { "key": "c1", "term": "how it works", "kind": "cluster", "parent": "p1", "intent": "informational", "isCategory": true }
+  ],
+  "contents": [
+    { "key": "post1", "node": "c1", "title": "...", "slug": "...", "postType": "post",
+      "seo": { "title": "30-60字符", "description": "120-160字符", "coreKeywords": ["恰好1个"], "longTailKeywords": ["≤4个"] },
+      "internalLinks": ["<其他content的key>"], "externalLinks": ["https://..."],
+      "purpose": "这篇文章在 silo 里的目的（对齐 Step3），例如：承接 X 搜索意图、把权重导向支柱页" }
+  ]
+}
+```
+- `nodes[].parent` / `contents[].node` / `contents[].internalLinks` 都用**计划内的 `key`** 互相引用;CLI 会解析成真实 id。
+- `intent`: informational | commercial | transactional | navigational。
+- `isCategory: true` 表示该节点回推为真实 WordPress 分类(有归档页 SEO)。
+
+## 写作规则(护栏)
+
+- **SEO 长度**: seo.title 30–60 字符、description 120–160 字符(英文;中文站减半);核心词进 seo.title 和正文首段。过长会被 SERP 截断,过短浪费展示位。
+- **焦点关键词数量**: 每页 **恰好 1 个** coreKeywords(主焦点词)+ **最多 4 个** longTailKeywords = **总数 ≤ 5**。这是 Rank Math 的真实上限,写更多也不生效。
+- **内链**: 每篇至少 1 进 1 出,别留孤岛;正文里用 `[[slug]]`。
+- **字段归属**: `title/slug/seo/internalLinks/externalLinks` 可按需调整;`silo:`/`wp:` 归 CLI,勿改;**正文完全归你**。
+- **不造假外链**: externalLinks 只填真实存在的权威 URL。
+
+## CLI 命令
+
+| 命令 | 作用 |
+|---|---|
+| `puffergo silo init --name --url [--tagline]` | 建工作区 |
+| `puffergo silo plan <plan.json>` | 应用计划、写 md 骨架 |
+| `puffergo silo push [--force]` | 推正文+SEO+分类到 WP 草稿 |
+| `puffergo silo pull [--types post,page]` | 从 WP 拉取同步 |
+| `puffergo silo health` | 健康检查(护栏) |
+| `puffergo silo status` | 概览:节点/内容/关键词/待推送/健康 |
+
+所有命令默认作用于当前目录(vault),可用 `--dir <path>` 指定。
+
+## 安全
+
+- 凭据在 vault **之外**的 `~/.puffergo/credentials.json`(按站点分),**只有 CLI 读它**;你不要打开它、不要把内容贴进对话。可用 `--config`/`PUFFERGO_CONFIG` 覆盖路径。
+- 旧版凭据若在 vault 内的 `silo.config.json`,用 `puffergo silo migrate-config` 迁出(避免随 Obsidian Sync/Publish 外泄)。
+- 发布只经 `puffergo silo push`;你从不直接请求 WordPress。

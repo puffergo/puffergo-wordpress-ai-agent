@@ -1,0 +1,22 @@
+{
+  "name": "@puffergo/silo-core",
+  "version": "1.7.0",
+  "description": "Framework-agnostic core of the SEO silo planner: data model, WordPress REST client, sync, health check.",
+  "type": "module",
+  "main": "index.ts",
+  "scripts": {
+    "type-check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "marked": "^14.1.3",
+    "turndown": "^7.2.0",
+    "yaml": "^2.5.1"
+  },
+  "devDependencies": {
+    "@types/turndown": "^5.0.5",
+    "typescript": "5.5.4",
+    "vitest": "^2.1.9"
+  },
+  "license": "MIT"
+}
