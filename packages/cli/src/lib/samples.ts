@@ -3,6 +3,10 @@
  * STRUCTURE — which trade fields the site shows, spec names and order, detail layouts. Stored as
  * name → product id in `.puffergo/samples.json`, per site; the content is fetched fresh every time, so
  * edits made in wp-admin take effect on the next run.
+ *
+ * File shape: site URL → content type → sample name → entry, e.g.
+ * `{ "https://example.com": { "product": { "valves": { "id": 12, "title": "…" } } } }`.
+ * Only `product` exists today; other content types get their own key.
  */
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
@@ -17,7 +21,8 @@ export interface SampleEntry {
   id: number;
   title: string;
 }
-type SamplesFile = Record<string, Record<string, SampleEntry>>;
+export type SampleKind = 'product';
+type SamplesFile = Record<string, Partial<Record<SampleKind, Record<string, SampleEntry>>>>;
 
 const samplesPath = (dir: string): string => join(dir, '.puffergo', 'samples.json');
 
@@ -30,13 +35,22 @@ async function readAll(dir: string): Promise<SamplesFile> {
   }
 }
 
-export async function readSamples(dir: string, siteUrl: string): Promise<Record<string, SampleEntry>> {
-  return (await readAll(dir))[siteUrl] ?? {};
+export async function readSamples(
+  dir: string,
+  siteUrl: string,
+  kind: SampleKind,
+): Promise<Record<string, SampleEntry>> {
+  return (await readAll(dir))[siteUrl]?.[kind] ?? {};
 }
 
-export async function writeSamples(dir: string, siteUrl: string, samples: Record<string, SampleEntry>): Promise<void> {
+export async function writeSamples(
+  dir: string,
+  siteUrl: string,
+  kind: SampleKind,
+  samples: Record<string, SampleEntry>,
+): Promise<void> {
   const all = await readAll(dir);
-  all[siteUrl] = samples;
+  all[siteUrl] = { ...all[siteUrl], [kind]: samples };
   await mkdir(join(dir, '.puffergo'), { recursive: true });
   await writeFile(samplesPath(dir), JSON.stringify(all, null, 2) + '\n', 'utf8');
 }

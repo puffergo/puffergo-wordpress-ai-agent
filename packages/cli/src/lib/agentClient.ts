@@ -30,8 +30,8 @@ export class AgentClient {
     return this.cfg.siteUrl;
   }
 
-  private async call<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const res = await fetch(`${this.base}${path}`, {
+  private async call<T>(method: string, path: string, body?: unknown, base = this.base): Promise<T> {
+    const res = await fetch(`${base}${path}`, {
       method,
       headers: {
         'Content-Type': 'application/json',
@@ -78,6 +78,29 @@ export class AgentClient {
 
   mediaLookup<T = unknown>(sha256: string): Promise<T> {
     return this.call('GET', `/agent/media?sha256=${sha256}`);
+  }
+
+  /** Product category terms via WordPress's own `/wp/v2/puffergo_product_cat` route; `lang` filters under Polylang. */
+  async listCategoryTerms<T = unknown>(lang = ''): Promise<T[]> {
+    const out: T[] = [];
+    for (let page = 1; ; page++) {
+      const batch = await this.call<T[]>(
+        'GET',
+        `/puffergo_product_cat?per_page=100&page=${page}&hide_empty=false&context=edit${lang ? `&lang=${encodeURIComponent(lang)}` : ''}`,
+        undefined,
+        this.wpBase,
+      );
+      out.push(...batch);
+      if (batch.length < 100) return out;
+    }
+  }
+
+  saveCategoryTerm<T = unknown>(id: number | null, body: Record<string, unknown>): Promise<T> {
+    return this.call('POST', `/puffergo_product_cat${id ? `/${id}` : ''}`, body, this.wpBase);
+  }
+
+  private get wpBase(): string {
+    return `${this.cfg.siteUrl.replace(/\/+$/, '')}/wp-json/wp/v2`;
   }
 
   /** POST /wp/v2/media — outside the puffergo/v1 namespace, so bypasses `base`. */

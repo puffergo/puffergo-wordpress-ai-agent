@@ -17310,14 +17310,14 @@ var require_turndown_cjs = __commonJS({
         } else if (node.nodeType === 1) {
           replacement = replacementForNode.call(self, node);
         }
-        return join8(output, replacement);
+        return join9(output, replacement);
       }, "");
     }
     function postProcess(output) {
       var self = this;
       this.rules.forEach(function(rule) {
         if (typeof rule.append === "function") {
-          output = join8(output, rule.append(self.options));
+          output = join9(output, rule.append(self.options));
         }
       });
       return output.replace(/^[\t\r\n]+/, "").replace(/[\t\r\n\s]+$/, "");
@@ -17329,7 +17329,7 @@ var require_turndown_cjs = __commonJS({
       if (whitespace.leading || whitespace.trailing) content = content.trim();
       return whitespace.leading + rule.replacement(content, node, this.options) + whitespace.trailing;
     }
-    function join8(output, replacement) {
+    function join9(output, replacement) {
       var s1 = trimTrailingNewlines(output);
       var s2 = trimLeadingNewlines(replacement);
       var nls = Math.max(output.length - s1.length, replacement.length - s2.length);
@@ -24749,7 +24749,7 @@ div{text-align:center}</style></head><body><div>${ok ? "\u2705 \u5DF2\u6388\u674
 });
 
 // src/index.ts
-import { readFile as readFile11 } from "node:fs/promises";
+import { readFile as readFile12 } from "node:fs/promises";
 
 // ../silo-core/lib/model/types.ts
 var SILO_WORKSPACE_VERSION = 3;
@@ -28939,8 +28939,8 @@ var AgentClient = class {
   get siteUrl() {
     return this.cfg.siteUrl;
   }
-  async call(method, path, body) {
-    const res = await fetch(`${this.base}${path}`, {
+  async call(method, path, body, base = this.base) {
+    const res = await fetch(`${base}${path}`, {
       method,
       headers: {
         "Content-Type": "application/json",
@@ -28981,6 +28981,26 @@ var AgentClient = class {
   }
   mediaLookup(sha256) {
     return this.call("GET", `/agent/media?sha256=${sha256}`);
+  }
+  /** Product category terms via WordPress's own `/wp/v2/puffergo_product_cat` route; `lang` filters under Polylang. */
+  async listCategoryTerms(lang = "") {
+    const out = [];
+    for (let page = 1; ; page++) {
+      const batch = await this.call(
+        "GET",
+        `/puffergo_product_cat?per_page=100&page=${page}&hide_empty=false&context=edit${lang ? `&lang=${encodeURIComponent(lang)}` : ""}`,
+        void 0,
+        this.wpBase
+      );
+      out.push(...batch);
+      if (batch.length < 100) return out;
+    }
+  }
+  saveCategoryTerm(id, body) {
+    return this.call("POST", `/puffergo_product_cat${id ? `/${id}` : ""}`, body, this.wpBase);
+  }
+  get wpBase() {
+    return `${this.cfg.siteUrl.replace(/\/+$/, "")}/wp-json/wp/v2`;
   }
   /** POST /wp/v2/media — outside the puffergo/v1 namespace, so bypasses `base`. */
   async uploadMedia(bytes, filename, mimeType) {
@@ -29495,12 +29515,12 @@ async function readAll(dir2) {
     return {};
   }
 }
-async function readSamples(dir2, siteUrl) {
-  return (await readAll(dir2))[siteUrl] ?? {};
+async function readSamples(dir2, siteUrl, kind) {
+  return (await readAll(dir2))[siteUrl]?.[kind] ?? {};
 }
-async function writeSamples(dir2, siteUrl, samples) {
+async function writeSamples(dir2, siteUrl, kind, samples) {
   const all = await readAll(dir2);
-  all[siteUrl] = samples;
+  all[siteUrl] = { ...all[siteUrl], [kind]: samples };
   await mkdir6(join6(dir2, ".puffergo"), { recursive: true });
   await writeFile6(samplesPath(dir2), JSON.stringify(all, null, 2) + "\n", "utf8");
 }
@@ -29570,6 +29590,65 @@ function sampleReference(remote, schema) {
   return out;
 }
 
+// src/lib/categories.ts
+import { readFile as readFile10 } from "node:fs/promises";
+import { existsSync as existsSync9 } from "node:fs";
+import { join as join7 } from "node:path";
+var CATEGORIES_FILE = "categories.json";
+var MAX_SUGGESTED_DEPTH = 3;
+var SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+async function readCategoriesFile(dir2) {
+  const path = join7(dir2, CATEGORIES_FILE);
+  if (!existsSync9(path)) return null;
+  return JSON.parse(await readFile10(path, "utf8"));
+}
+function planCategories(file, remote) {
+  const errors = [];
+  const warnings = [];
+  const ops = [];
+  const roots = file?.categories;
+  if (!Array.isArray(roots)) return { errors: [`${CATEGORIES_FILE} must be { "categories": [ \u2026 ] }`], warnings, ops };
+  const bySlug = new Map(remote.map((t) => [t.slug, t]));
+  const byId = new Map(remote.map((t) => [t.id, t]));
+  const seen = /* @__PURE__ */ new Set();
+  const walk = (nodes, parentSlug, depth, path) => {
+    nodes.forEach((raw, i) => {
+      const n = raw;
+      const at = `${path}[${i}]`;
+      const name = typeof n?.name === "string" ? n.name.trim() : "";
+      const slug = typeof n?.slug === "string" ? n.slug.trim() : "";
+      if (!name) errors.push(`${at}: name is required`);
+      if (!SLUG_RE.test(slug))
+        errors.push(`${at}: slug "${slug}" must be lowercase English letters, digits and hyphens`);
+      else if (seen.has(slug)) errors.push(`${at}: slug "${slug}" is used twice`);
+      seen.add(slug);
+      if (depth === MAX_SUGGESTED_DEPTH + 1)
+        warnings.push(
+          `"${name}" is level ${depth}. Suggest the customer keep categories to ${MAX_SUGGESTED_DEPTH} levels.`
+        );
+      if (name && SLUG_RE.test(slug)) {
+        const description = typeof n.description === "string" ? n.description : void 0;
+        const existing = bySlug.get(slug);
+        if (!existing) {
+          ops.push({ op: "create", slug, name, description, parentSlug });
+        } else {
+          const currentParent = existing.parent ? byId.get(existing.parent)?.slug ?? "" : "";
+          const changed = existing.name !== name || currentParent !== parentSlug || description !== void 0 && existing.description !== description;
+          ops.push(
+            changed ? { op: "update", id: existing.id, slug, name, description, parentSlug } : { op: "keep", id: existing.id, slug }
+          );
+        }
+      }
+      if (n?.children !== void 0) {
+        if (Array.isArray(n.children)) walk(n.children, slug, depth + 1, `${at}.children`);
+        else errors.push(`${at}.children must be an array`);
+      }
+    });
+  };
+  walk(roots, "", 1, "categories");
+  return { errors, warnings, ops };
+}
+
 // src/lib/productsCmd.ts
 async function client(ctx) {
   const siteFlag = ctx.flags.get("site");
@@ -29588,7 +29667,7 @@ async function cmdSchema(ctx) {
   try {
     const c = await client(ctx);
     const schema = await loadSiteSchema(c);
-    const samples = await readSamples(ctx.dir, c.siteUrl);
+    const samples = await readSamples(ctx.dir, c.siteUrl, "product");
     return {
       ok: true,
       ...schema,
@@ -29639,7 +29718,7 @@ var SampleCtx = class _SampleCtx {
   notUsed = /* @__PURE__ */ new Map();
   static async load(c, dir2) {
     const schema = await loadSiteSchema(c);
-    return new _SampleCtx(c, await readSamples(dir2, c.siteUrl), optionalFactPaths(schema));
+    return new _SampleCtx(c, await readSamples(dir2, c.siteUrl, "product"), optionalFactPaths(schema));
   }
   /** Fields the named sample doesn't use; null when no such sample is saved. */
   async fieldsNotUsed(name) {
@@ -30024,7 +30103,7 @@ async function cmdSample(ctx) {
   const usage = "usage: puffergo products sample <list | set <name> <key|id|link> | show <name> | remove <name>>";
   try {
     const c = await client(ctx);
-    const samples = await readSamples(ctx.dir, c.siteUrl);
+    const samples = await readSamples(ctx.dir, c.siteUrl, "product");
     const missing = () => ({
       ok: false,
       code: "unknown_sample",
@@ -30041,7 +30120,7 @@ async function cmdSample(ctx) {
         const id = await resolveProductId(c, target);
         const remote = await c.getProduct(id);
         samples[name] = { id, title: remote.title };
-        await writeSamples(ctx.dir, c.siteUrl, samples);
+        await writeSamples(ctx.dir, c.siteUrl, "product", samples);
         return { ok: true, name, id, title: remote.title };
       }
       case "show": {
@@ -30061,7 +30140,7 @@ async function cmdSample(ctx) {
         if (!name) return { ok: false, code: "usage", message: usage };
         if (!samples[name]) return missing();
         delete samples[name];
-        await writeSamples(ctx.dir, c.siteUrl, samples);
+        await writeSamples(ctx.dir, c.siteUrl, "product", samples);
         return { ok: true, removed: name };
       }
       default:
@@ -30076,13 +30155,49 @@ async function cmdSample(ctx) {
     return { ok: false, code: "error", message: e instanceof Error ? e.message : String(e) };
   }
 }
+async function cmdCategories(ctx) {
+  const sub = ctx.positional[0];
+  if (sub !== "check" && sub !== "push")
+    return { ok: false, code: "usage", message: "usage: puffergo products categories <check | push>" };
+  try {
+    const file = await readCategoriesFile(ctx.dir);
+    if (file === null) return { ok: false, code: "no_file", message: `No ${CATEGORIES_FILE} in the work folder.` };
+    const c = await client(ctx);
+    const { language } = await loadSiteSchema(c);
+    const remote = await c.listCategoryTerms(language ?? "");
+    const { errors, warnings, ops } = planCategories(file, remote);
+    const summary = ops.filter((o) => o.op !== "keep").map((o) => ({ op: o.op, slug: o.slug }));
+    if (errors.length) return { ok: false, code: "invalid", errors, warnings };
+    if (sub === "check") return { ok: true, changes: summary, warnings };
+    const idBySlug = new Map(remote.map((t) => [t.slug, t.id]));
+    for (const o of ops) {
+      if (o.op === "keep") continue;
+      const body = {
+        name: o.name,
+        slug: o.slug,
+        parent: o.parentSlug ? idBySlug.get(o.parentSlug) ?? 0 : 0,
+        ...o.description !== void 0 ? { description: o.description } : {}
+      };
+      const saved = await c.saveCategoryTerm(o.op === "update" ? o.id : null, body);
+      idBySlug.set(o.slug, saved.id);
+    }
+    return { ok: true, changes: summary, warnings };
+  } catch (e) {
+    const siteErr = siteErrorOutput(e);
+    if (siteErr) return siteErr;
+    if (e instanceof SyntaxError)
+      return { ok: false, code: "invalid_json", message: `${CATEGORIES_FILE}: ${e.message}` };
+    if (e instanceof AgentHttpError) return { ok: false, code: "http_error", status: e.status, body: e.body };
+    return { ok: false, code: "error", message: e instanceof Error ? e.message : String(e) };
+  }
+}
 
 // src/lib/loginCmd.ts
 import { spawn } from "node:child_process";
-import { existsSync as existsSync9 } from "node:fs";
-import { readFile as readFile10, rm as rm2, writeFile as writeFile7, mkdtemp } from "node:fs/promises";
+import { existsSync as existsSync10 } from "node:fs";
+import { readFile as readFile11, rm as rm2, writeFile as writeFile7, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join as join7 } from "node:path";
+import { join as join8 } from "node:path";
 var WAIT_MS = 10 * 60 * 1e3;
 var RESULT_PAGE = (ok) => `<!doctype html><html><head><meta charset="utf-8"><title>PufferGo</title>
 <style>html{font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#1f2430;
@@ -30111,8 +30226,8 @@ async function cmdLogin(dir2, siteArg) {
   } catch {
     return { ok: false, code: "error", message: `Not a valid site URL: ${siteArg}` };
   }
-  const handshakeDir = await mkdtemp(join7(tmpdir(), "puffergo-login-"));
-  const handshake = join7(handshakeDir, "authorize-url");
+  const handshakeDir = await mkdtemp(join8(tmpdir(), "puffergo-login-"));
+  const handshake = join8(handshakeDir, "authorize-url");
   const child = spawn(
     process.execPath,
     [...process.execArgv, process.argv[1], "__login-wait", siteUrl, handshake, dir2],
@@ -30122,7 +30237,7 @@ async function cmdLogin(dir2, siteArg) {
   let authorizeUrl = "";
   for (let i = 0; i < 100 && !authorizeUrl; i++) {
     await new Promise((r) => setTimeout(r, 100));
-    if (existsSync9(handshake)) authorizeUrl = (await readFile10(handshake, "utf8")).trim();
+    if (existsSync10(handshake)) authorizeUrl = (await readFile11(handshake, "utf8")).trim();
   }
   await rm2(handshakeDir, { recursive: true, force: true });
   if (!authorizeUrl) return { ok: false, code: "error", message: "Could not start the local authorization listener." };
@@ -30213,7 +30328,7 @@ async function cmdPlan() {
   if (!file) die("\u7528\u6CD5\uFF1Asilo plan <plan.json>");
   let raw;
   try {
-    raw = await readFile11(file, "utf8");
+    raw = await readFile12(file, "utf8");
   } catch {
     die(`\u672A\u627E\u5230 plan \u6587\u4EF6\uFF1A${file}`);
   }
@@ -30365,7 +30480,7 @@ function emit(result) {
   process.stdout.write(JSON.stringify(result, null, 2) + "\n");
   if (!(result && typeof result === "object" && result.ok === true)) process.exitCode = 1;
 }
-var PRODUCTS_USAGE = 'puffergo products <schema|list [--search q]|check [--only k1,k2]|push [--only k1,k2]|pull <key|id|link>|publish <key\u2026> --customer-said "<customer words>"|sample <list|set <name> <key|id|link>|show <name>|remove <name>>> [--dir <workdir>] [--site <url>]';
+var PRODUCTS_USAGE = 'puffergo products <schema|list [--search q]|check [--only k1,k2]|push [--only k1,k2]|pull <key|id|link>|publish <key\u2026> --customer-said "<customer words>"|sample <list|set <name> <key|id|link>|show <name>|remove <name>>|categories <check|push>> [--dir <workdir>] [--site <url>]';
 async function products() {
   const ctx = { dir, flags, positional };
   switch (cmd) {
@@ -30383,6 +30498,8 @@ async function products() {
       return emit(await cmdPublish(ctx));
     case "sample":
       return emit(await cmdSample(ctx));
+    case "categories":
+      return emit(await cmdCategories(ctx));
     default:
       return emit({ ok: false, code: "usage", message: PRODUCTS_USAGE });
   }

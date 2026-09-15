@@ -10,6 +10,7 @@ import { resolveUpload } from './uploadImage';
 import { readSamples, writeSamples, resolveProductId, sampleReference, TargetError, type SampleEntry } from './samples';
 import { loadSiteSchema, optionalFactPaths, getPath, isEmptyValue, SchemaVersionError } from './siteSchema';
 import type { ProductFile, ValidationError, DetailSection } from './productTypes';
+import { readCategoriesFile, planCategories, CATEGORIES_FILE, type RemoteTerm } from './categories';
 
 export interface CmdCtx {
   dir: string;
@@ -38,7 +39,7 @@ export async function cmdSchema(ctx: CmdCtx): Promise<unknown> {
   try {
     const c = await client(ctx);
     const schema = await loadSiteSchema(c);
-    const samples = await readSamples(ctx.dir, c.siteUrl);
+    const samples = await readSamples(ctx.dir, c.siteUrl, 'product');
     return {
       ok: true,
       ...(schema as Record<string, unknown>),
@@ -109,7 +110,7 @@ export class SampleCtx {
   ) {}
   static async load(c: AgentClient, dir: string): Promise<SampleCtx> {
     const schema = await loadSiteSchema(c);
-    return new SampleCtx(c, await readSamples(dir, c.siteUrl), optionalFactPaths(schema));
+    return new SampleCtx(c, await readSamples(dir, c.siteUrl, 'product'), optionalFactPaths(schema));
   }
   /** Fields the named sample doesn't use; null when no such sample is saved. */
   async fieldsNotUsed(name: string): Promise<Set<string> | null> {
@@ -592,7 +593,7 @@ export async function cmdSample(ctx: CmdCtx): Promise<unknown> {
   const usage = 'usage: puffergo products sample <list | set <name> <key|id|link> | show <name> | remove <name>>';
   try {
     const c = await client(ctx);
-    const samples = await readSamples(ctx.dir, c.siteUrl);
+    const samples = await readSamples(ctx.dir, c.siteUrl, 'product');
     const missing = () => ({
       ok: false,
       code: 'unknown_sample',
@@ -609,7 +610,7 @@ export async function cmdSample(ctx: CmdCtx): Promise<unknown> {
         const id = await resolveProductId(c, target);
         const remote = await c.getProduct<{ title: string }>(id);
         samples[name] = { id, title: remote.title };
-        await writeSamples(ctx.dir, c.siteUrl, samples);
+        await writeSamples(ctx.dir, c.siteUrl, 'product', samples);
         return { ok: true, name, id, title: remote.title };
       }
       case 'show': {
@@ -632,7 +633,7 @@ export async function cmdSample(ctx: CmdCtx): Promise<unknown> {
         if (!name) return { ok: false, code: 'usage', message: usage };
         if (!samples[name]) return missing();
         delete samples[name];
-        await writeSamples(ctx.dir, c.siteUrl, samples);
+        await writeSamples(ctx.dir, c.siteUrl, 'product', samples);
         return { ok: true, removed: name };
       }
       default:
@@ -644,6 +645,48 @@ export async function cmdSample(ctx: CmdCtx): Promise<unknown> {
     if (e instanceof TargetError) return { ok: false, code: e.code, message: e.message };
     if (e instanceof AgentHttpError && e.status === 404)
       return { ok: false, code: 'not_found', message: 'That product no longer exists on the site.' };
+    return { ok: false, code: 'error', message: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// categories check | push — sync categories.json to the site's product categories
+// ---------------------------------------------------------------------------
+
+export async function cmdCategories(ctx: CmdCtx): Promise<unknown> {
+  const sub = ctx.positional[0];
+  if (sub !== 'check' && sub !== 'push')
+    return { ok: false, code: 'usage', message: 'usage: puffergo products categories <check | push>' };
+  try {
+    const file = await readCategoriesFile(ctx.dir);
+    if (file === null) return { ok: false, code: 'no_file', message: `No ${CATEGORIES_FILE} in the work folder.` };
+    const c = await client(ctx);
+    const { language } = (await loadSiteSchema(c)) as { language?: string };
+    const remote = await c.listCategoryTerms<RemoteTerm>(language ?? '');
+    const { errors, warnings, ops } = planCategories(file, remote);
+    const summary = ops.filter(o => o.op !== 'keep').map(o => ({ op: o.op, slug: o.slug }));
+    if (errors.length) return { ok: false, code: 'invalid', errors, warnings };
+    if (sub === 'check') return { ok: true, changes: summary, warnings };
+
+    const idBySlug = new Map(remote.map(t => [t.slug, t.id]));
+    for (const o of ops) {
+      if (o.op === 'keep') continue;
+      const body: Record<string, unknown> = {
+        name: o.name,
+        slug: o.slug,
+        parent: o.parentSlug ? (idBySlug.get(o.parentSlug) ?? 0) : 0,
+        ...(o.description !== undefined ? { description: o.description } : {}),
+      };
+      const saved = await c.saveCategoryTerm<{ id: number }>(o.op === 'update' ? o.id : null, body);
+      idBySlug.set(o.slug, saved.id);
+    }
+    return { ok: true, changes: summary, warnings };
+  } catch (e) {
+    const siteErr = siteErrorOutput(e);
+    if (siteErr) return siteErr;
+    if (e instanceof SyntaxError)
+      return { ok: false, code: 'invalid_json', message: `${CATEGORIES_FILE}: ${e.message}` };
+    if (e instanceof AgentHttpError) return { ok: false, code: 'http_error', status: e.status, body: e.body };
     return { ok: false, code: 'error', message: e instanceof Error ? e.message : String(e) };
   }
 }

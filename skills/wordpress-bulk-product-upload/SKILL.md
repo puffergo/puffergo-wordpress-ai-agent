@@ -25,6 +25,7 @@ description: >-
 | `puffergo products pull <key、id或链接>` | 把网站上的产品拉回本地，用来修改它 |
 | `puffergo products publish <key>… --customer-said "客户原话"` | 发布客户点名的产品 |
 | `puffergo products sample list / set <类型名> <key、id或链接> / show <类型名>` | 样板：列出、保存、读取 |
+| `puffergo products categories check / push` | 校验 / 写入 `categories.json` 里的产品分类 |
 
 没有删除命令，客户要删产品请他在 WordPress 后台操作。
 
@@ -36,7 +37,7 @@ description: >-
 2. **收资料**：图片要有文件路径，拿不到就请客户把图片拖进来或告诉你文件夹。复制到 `images/`，改成规范文件名。客户发来别的网站上的产品链接（如阿里巴巴），读取页面上的资料和图片当作客户资料；读不到就请客户截图。
 3. **整理并校验**：写 `products/<key>.json`，运行 `products check`，`fix: "ai"` 的自己改，`fix: "user"` 的留到下一步问。
 4. **给客户过目**：一条消息里列出标题、简介、分类、交易信息、参数表、详情每一段（排法、标题、用哪张图），以及要客户回答的：
-   - 分类：客户没说放哪个分类，就把 schema 的 `categories` 列出来请他选；他要新分类就用他说的名字。
+   - 分类：客户没说放哪个分类，就把 schema 的 `categories` 列出来请他选；要新分类，按下面「产品分类」加进 `categories.json`，和产品一起给客户过目，先 `categories push` 再推产品。
    - 缺的事实，和 check 提示要客户补的。
 5. **推送**：客户确认后运行 `products push`，把 `previewUrl` 和 `editUrl` 发给客户，说明现在是草稿。
 6. **修改**：先 `products pull` 拉回网站上的最新版（客户可能在后台改过），改完照样给客户过目再 push。push 报 `conflict` 就先 pull，再把改动重做一遍。
@@ -50,6 +51,24 @@ description: >-
 - schema 的 `samples` 里有这类产品的样板：先 `products sample show <类型名>`，照它的结构写，产品文件里写 `"sample": "<类型名>"`。样板 `notUsed` 里的字段不写也不问。
 - 样板只给结构，数值和文字写成了占位；新产品的内容只用客户给的。
 
+## 产品分类
+
+客户要建或整理分类（比如发来一张分类脑图），写工作目录里的 `categories.json`，给客户过目，确认后运行 `products categories push`：
+
+```json
+{
+  "categories": [
+    { "name": "Micro AC Gear Motors", "slug": "micro-ac-gear-motors", "description": "…",
+      "children": [{ "name": "Variable Speed Motors", "slug": "micro-ac-variable-speed-motors" }] }
+  ]
+}
+```
+
+- `name` 必填；`slug` 必填，小写英文、数字和连字符，全文件不重复；`description` 可选；`children` 是下一级。
+- 按 `slug` 对应网站上的分类：有就更新名称、描述和上级，没有就新建，不会删除。
+- 建议客户不超过三级。
+- 分类排序不在这里设。客户问起，请他在 WordPress 后台的产品分类里给每个分类填 Order（数字小的在前），并在产品设置里把分类排序改成手动。
+
 ## 产品文件
 
 一个产品一个文件 `products/<key>.json`：
@@ -59,7 +78,7 @@ description: >-
   "key": "nv60-led-wall-pack",
   "title": "NV-60 LED Wall Pack Light, 60W",
   "excerpt": "…",
-  "categories": ["Outdoor Lighting"],
+  "categories": ["outdoor-lighting"],
   "price": { "type": "contact" },
   "moq": { "value": 100, "unit": "pieces" },
   "leadTime": { "min": 15, "max": 20, "unit": "days" },
@@ -77,6 +96,7 @@ description: >-
 
 - `key`：小写英文、数字和连字符，以型号开头。同一个 key 再推一次就是更新。`id`、`baseModified` 由脚本写入，不要改。
 - **交易信息以 schema 的 `tradeFields` 为准**，只写里面有的字段。`path` 是字段在文件里的位置（`price`、`moq`、`leadTime` 在顶层，自定义字段写在 `"trade": { "<key>": "…" }`）；`unitValue` 写 `{value, unit}` 或 `{min, max, unit}`，单位从 `units` 里选；价格面议写 `{"type": "contact"}`；`text` 按客户原话写。客户给了网站不显示的字段，不写，推送后告诉他可以在后台「产品设置 → 交易信息」里打开。
+- `categories` 写分类的 `slug`，从 schema 的 `categories` 里取。
 - `gallery` 第一张是主图。图片写 `file`（本地）或 `mediaId`（网站上已有的）。
 - 详情排法：`split` 左右图文（`imagePosition` 左右交替）、`full` 通栏大图加文字、`image` 原比例整行大图（长图、尺寸图）、`gallery` 一行 2–4 张图、`text` 纯文字。
 
