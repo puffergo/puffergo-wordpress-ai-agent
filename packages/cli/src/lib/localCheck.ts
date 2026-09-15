@@ -10,6 +10,7 @@ import type { ProductFile } from './productTypes';
 import type { ValidationError } from './productTypes';
 import { walkImageRefs } from './imageRefs';
 import { claimWarnings } from './claims';
+import { placeProblems, suggestion, PLACE_LABELS, type ImagesSpec } from './imageAdvice';
 
 export interface LocalCheckOutcome {
   errors: ValidationError[];
@@ -17,11 +18,15 @@ export interface LocalCheckOutcome {
 }
 
 /** Check every local `file` ref in one product. `baseDir` resolves relative file paths. */
-export async function localCheckProduct(product: ProductFile, baseDir: string): Promise<LocalCheckOutcome> {
+export async function localCheckProduct(
+  product: ProductFile,
+  baseDir: string,
+  images?: ImagesSpec,
+): Promise<LocalCheckOutcome> {
   const errors: ValidationError[] = [];
   const warnings: ValidationError[] = [];
 
-  for (const { path, ref } of walkImageRefs(product)) {
+  for (const { path, ref, place } of walkImageRefs(product)) {
     if (!ref.file) continue;
     const abs = resolve(baseDir, ref.file);
     if (!existsSync(abs)) {
@@ -49,7 +54,18 @@ export async function localCheckProduct(product: ProductFile, baseDir: string): 
       });
       continue;
     }
-    if (width != null && height != null) {
+    const spec = images?.places[place];
+    if (spec && width != null && height != null) {
+      const problems = placeProblems({ bytes: st.size, width, height }, place, spec, images!.maxBytes);
+      if (problems.length) {
+        warnings.push({
+          path,
+          code: 'image_advice',
+          message: `${ref.file} in the ${PLACE_LABELS[place] ?? place}: ${problems.join('; ')}. ${suggestion(spec, images!.maxBytes)}`,
+          fix: 'user',
+        });
+      }
+    } else if (width != null && height != null) {
       const shortest = Math.min(width, height);
       if (shortest < 600) {
         warnings.push({

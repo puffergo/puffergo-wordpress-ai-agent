@@ -5029,9 +5029,9 @@ var require_URL = __commonJS({
       },
       // See: http://tools.ietf.org/html/rfc3986#section-5.2
       // and https://url.spec.whatwg.org/#constructors
-      resolve: function(relative) {
+      resolve: function(relative2) {
         var base = this;
-        var r = new URL2(relative);
+        var r = new URL2(relative2);
         var t = new URL2();
         if (r.scheme !== void 0) {
           t.scheme = r.scheme;
@@ -17310,14 +17310,14 @@ var require_turndown_cjs = __commonJS({
         } else if (node.nodeType === 1) {
           replacement = replacementForNode.call(self, node);
         }
-        return join9(output, replacement);
+        return join10(output, replacement);
       }, "");
     }
     function postProcess(output) {
       var self = this;
       this.rules.forEach(function(rule) {
         if (typeof rule.append === "function") {
-          output = join9(output, rule.append(self.options));
+          output = join10(output, rule.append(self.options));
         }
       });
       return output.replace(/^[\t\r\n]+/, "").replace(/[\t\r\n\s]+$/, "");
@@ -17329,7 +17329,7 @@ var require_turndown_cjs = __commonJS({
       if (whitespace.leading || whitespace.trailing) content = content.trim();
       return whitespace.leading + rule.replacement(content, node, this.options) + whitespace.trailing;
     }
-    function join9(output, replacement) {
+    function join10(output, replacement) {
       var s1 = trimTrailingNewlines(output);
       var s2 = trimLeadingNewlines(replacement);
       var nls = Math.max(output.length - s1.length, replacement.length - s2.length);
@@ -24749,7 +24749,7 @@ div{text-align:center}</style></head><body><div>${ok ? "\u2705 \u5DF2\u6388\u674
 });
 
 // src/index.ts
-import { readFile as readFile12 } from "node:fs/promises";
+import { readFile as readFile13 } from "node:fs/promises";
 
 // ../silo-core/lib/model/types.ts
 var SILO_WORKSPACE_VERSION = 3;
@@ -28918,7 +28918,93 @@ async function scanVault(dir2) {
 }
 
 // src/lib/productsCmd.ts
-import { resolve as resolve3 } from "node:path";
+import { resolve as resolve3, join as join8, relative } from "node:path";
+import { readFile as readFile11, readdir as readdir3, stat as stat2 } from "node:fs/promises";
+
+// src/lib/imageSniff.ts
+var MAX_BYTES = 10 * 1024 * 1024;
+function readUInt16BE(buf, off) {
+  return buf[off] << 8 | buf[off + 1];
+}
+function readUInt32BE(buf, off) {
+  return (buf[off] << 24 | buf[off + 1] << 16 | buf[off + 2] << 8 | buf[off + 3]) >>> 0;
+}
+function sniffFormat(buf) {
+  if (buf.length >= 3 && buf[0] === 255 && buf[1] === 216 && buf[2] === 255) return "jpeg";
+  if (buf.length >= 8 && buf[0] === 137 && buf[1] === 80 && buf[2] === 78 && buf[3] === 71 && buf[4] === 13 && buf[5] === 10 && buf[6] === 26 && buf[7] === 10)
+    return "png";
+  if (buf.length >= 12 && buf[0] === 82 && buf[1] === 73 && buf[2] === 70 && buf[3] === 70 && buf[8] === 87 && buf[9] === 69 && buf[10] === 66 && buf[11] === 80)
+    return "webp";
+  if (buf.length >= 6 && buf[0] === 71 && buf[1] === 73 && buf[2] === 70 && buf[3] === 56 && (buf[4] === 55 || buf[4] === 57) && buf[5] === 97)
+    return "gif";
+  return null;
+}
+function pngDims(buf) {
+  if (buf.length < 24) return null;
+  return { width: readUInt32BE(buf, 16), height: readUInt32BE(buf, 20) };
+}
+function gifDims(buf) {
+  if (buf.length < 10) return null;
+  return { width: buf[6] | buf[7] << 8, height: buf[8] | buf[9] << 8 };
+}
+function jpegDims(buf) {
+  let off = 2;
+  const SOF_MARKERS = /* @__PURE__ */ new Set([192, 193, 194, 195, 197, 198, 199, 201, 202, 203, 205, 206, 207]);
+  while (off + 9 < buf.length) {
+    if (buf[off] !== 255) {
+      off++;
+      continue;
+    }
+    const marker = buf[off + 1];
+    if (marker === 216 || marker === 1 || marker >= 208 && marker <= 215) {
+      off += 2;
+      continue;
+    }
+    if (marker === 217) break;
+    const len = readUInt16BE(buf, off + 2);
+    if (SOF_MARKERS.has(marker)) {
+      const height = readUInt16BE(buf, off + 5);
+      const width = readUInt16BE(buf, off + 7);
+      return { width, height };
+    }
+    off += 2 + len;
+  }
+  return null;
+}
+function webpDims(buf) {
+  if (buf.length < 30) return null;
+  const chunkId = String.fromCharCode(buf[12], buf[13], buf[14], buf[15]);
+  if (chunkId === "VP8 ") {
+    const width = (buf[26] | buf[27] << 8) & 16383;
+    const height = (buf[28] | buf[29] << 8) & 16383;
+    return { width, height };
+  }
+  if (chunkId === "VP8L") {
+    const b0 = buf[21], b1 = buf[22], b2 = buf[23], b3 = buf[24];
+    const width = 1 + ((b1 & 63) << 8 | b0);
+    const height = 1 + ((b3 & 15) << 10 | b2 << 2 | (b1 & 192) >> 6);
+    return { width, height };
+  }
+  if (chunkId === "VP8X") {
+    const width = 1 + (buf[24] | buf[25] << 8 | buf[26] << 16);
+    const height = 1 + (buf[27] | buf[28] << 8 | buf[29] << 16);
+    return { width, height };
+  }
+  return null;
+}
+function sniffImage(buf) {
+  const format = sniffFormat(buf);
+  let dims = null;
+  try {
+    if (format === "jpeg") dims = jpegDims(buf);
+    else if (format === "png") dims = pngDims(buf);
+    else if (format === "gif") dims = gifDims(buf);
+    else if (format === "webp") dims = webpDims(buf);
+  } catch {
+    dims = null;
+  }
+  return { format, width: dims?.width ?? null, height: dims?.height ?? null };
+}
 
 // src/lib/agentClient.ts
 var AgentHttpError = class extends Error {
@@ -29038,12 +29124,15 @@ async function readWorkdirConfig(dir2) {
   if (!existsSync5(path)) return null;
   try {
     const raw = JSON.parse(await readFile5(path, "utf8"));
-    return typeof raw.siteUrl === "string" ? { siteUrl: raw.siteUrl } : null;
+    if (typeof raw.siteUrl !== "string") return null;
+    return raw.editLive ? { siteUrl: raw.siteUrl, editLive: raw.editLive } : { siteUrl: raw.siteUrl };
   } catch {
     return null;
   }
 }
 async function writeWorkdirConfig(dir2, cfg) {
+  const prev = await readWorkdirConfig(dir2);
+  if (!("editLive" in cfg) && prev?.editLive && prev.siteUrl === cfg.siteUrl) cfg = { ...cfg, editLive: prev.editLive };
   const path = configPath(dir2);
   await mkdir4(join4(dir2, ".puffergo"), { recursive: true });
   await writeFile4(path, JSON.stringify(cfg, null, 2), "utf8");
@@ -29077,6 +29166,10 @@ async function resolveSite(dir2, siteFlag) {
   if (cred) return cred;
   const sites = await listCredentialSites();
   throw new NoSiteError(sites);
+}
+async function editLiveAllowed(dir2, siteUrl) {
+  const cfg = await readWorkdirConfig(dir2);
+  return !!cfg?.editLive?.on && cfg.siteUrl === siteUrl;
 }
 
 // src/lib/productFiles.ts
@@ -29143,91 +29236,6 @@ import { stat, readFile as readFile7 } from "node:fs/promises";
 import { existsSync as existsSync7 } from "node:fs";
 import { resolve as resolve2 } from "node:path";
 
-// src/lib/imageSniff.ts
-var MAX_BYTES = 10 * 1024 * 1024;
-function readUInt16BE(buf, off) {
-  return buf[off] << 8 | buf[off + 1];
-}
-function readUInt32BE(buf, off) {
-  return (buf[off] << 24 | buf[off + 1] << 16 | buf[off + 2] << 8 | buf[off + 3]) >>> 0;
-}
-function sniffFormat(buf) {
-  if (buf.length >= 3 && buf[0] === 255 && buf[1] === 216 && buf[2] === 255) return "jpeg";
-  if (buf.length >= 8 && buf[0] === 137 && buf[1] === 80 && buf[2] === 78 && buf[3] === 71 && buf[4] === 13 && buf[5] === 10 && buf[6] === 26 && buf[7] === 10)
-    return "png";
-  if (buf.length >= 12 && buf[0] === 82 && buf[1] === 73 && buf[2] === 70 && buf[3] === 70 && buf[8] === 87 && buf[9] === 69 && buf[10] === 66 && buf[11] === 80)
-    return "webp";
-  if (buf.length >= 6 && buf[0] === 71 && buf[1] === 73 && buf[2] === 70 && buf[3] === 56 && (buf[4] === 55 || buf[4] === 57) && buf[5] === 97)
-    return "gif";
-  return null;
-}
-function pngDims(buf) {
-  if (buf.length < 24) return null;
-  return { width: readUInt32BE(buf, 16), height: readUInt32BE(buf, 20) };
-}
-function gifDims(buf) {
-  if (buf.length < 10) return null;
-  return { width: buf[6] | buf[7] << 8, height: buf[8] | buf[9] << 8 };
-}
-function jpegDims(buf) {
-  let off = 2;
-  const SOF_MARKERS = /* @__PURE__ */ new Set([192, 193, 194, 195, 197, 198, 199, 201, 202, 203, 205, 206, 207]);
-  while (off + 9 < buf.length) {
-    if (buf[off] !== 255) {
-      off++;
-      continue;
-    }
-    const marker = buf[off + 1];
-    if (marker === 216 || marker === 1 || marker >= 208 && marker <= 215) {
-      off += 2;
-      continue;
-    }
-    if (marker === 217) break;
-    const len = readUInt16BE(buf, off + 2);
-    if (SOF_MARKERS.has(marker)) {
-      const height = readUInt16BE(buf, off + 5);
-      const width = readUInt16BE(buf, off + 7);
-      return { width, height };
-    }
-    off += 2 + len;
-  }
-  return null;
-}
-function webpDims(buf) {
-  if (buf.length < 30) return null;
-  const chunkId = String.fromCharCode(buf[12], buf[13], buf[14], buf[15]);
-  if (chunkId === "VP8 ") {
-    const width = (buf[26] | buf[27] << 8) & 16383;
-    const height = (buf[28] | buf[29] << 8) & 16383;
-    return { width, height };
-  }
-  if (chunkId === "VP8L") {
-    const b0 = buf[21], b1 = buf[22], b2 = buf[23], b3 = buf[24];
-    const width = 1 + ((b1 & 63) << 8 | b0);
-    const height = 1 + ((b3 & 15) << 10 | b2 << 2 | (b1 & 192) >> 6);
-    return { width, height };
-  }
-  if (chunkId === "VP8X") {
-    const width = 1 + (buf[24] | buf[25] << 8 | buf[26] << 16);
-    const height = 1 + (buf[27] | buf[28] << 8 | buf[29] << 16);
-    return { width, height };
-  }
-  return null;
-}
-function sniffImage(buf) {
-  const format = sniffFormat(buf);
-  let dims = null;
-  try {
-    if (format === "jpeg") dims = jpegDims(buf);
-    else if (format === "png") dims = pngDims(buf);
-    else if (format === "gif") dims = gifDims(buf);
-    else if (format === "webp") dims = webpDims(buf);
-  } catch {
-    dims = null;
-  }
-  return { format, width: dims?.width ?? null, height: dims?.height ?? null };
-}
-
 // src/lib/imageRefs.ts
 function identOf(product) {
   if (product.key) return product.key;
@@ -29240,6 +29248,7 @@ function walkImageRefs(product) {
   (product.gallery ?? []).forEach((ref, i) => {
     out.push({
       path: `${ident}.gallery[${i}]`,
+      place: "productGallery",
       ref,
       set: (next) => {
         product.gallery[i] = next;
@@ -29251,6 +29260,7 @@ function walkImageRefs(product) {
     if (section.image) {
       out.push({
         path: `${sectionPath}.image`,
+        place: section.layout,
         ref: section.image,
         set: (next) => {
           section.image = next;
@@ -29260,6 +29270,7 @@ function walkImageRefs(product) {
     (section.images ?? []).forEach((ref, j) => {
       out.push({
         path: `${sectionPath}.images[${j}]`,
+        place: "gallery",
         ref,
         set: (next) => {
           section.images[j] = { ...next, title: ref.title, text: ref.text };
@@ -29374,11 +29385,49 @@ function claimWarnings(p) {
   return out;
 }
 
+// src/lib/imageAdvice.ts
+var RATIO_TOLERANCE = 0.05;
+var TOO_LARGE_FACTOR = 1.5;
+var PLACE_LABELS = {
+  productGallery: "product gallery",
+  split: "image + text section",
+  full: "wide banner section",
+  image: "full-width image section",
+  gallery: "image row section"
+};
+function ratioValue(ratio) {
+  const m = /^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/.exec(ratio);
+  return m ? Number(m[1]) / Number(m[2]) : null;
+}
+function ratioFits(info, spec) {
+  const target = spec.ratio ? ratioValue(spec.ratio) : null;
+  if (!target || !info.height) return true;
+  return Math.abs(info.width / info.height / target - 1) <= RATIO_TOLERANCE;
+}
+function placeProblems(info, place, spec, maxBytes) {
+  const out = [];
+  if (info.bytes > maxBytes) out.push(`${Math.round(info.bytes / 1024)}KB, over ${Math.round(maxBytes / 1024)}KB`);
+  if (!ratioFits(info, spec)) {
+    out.push(
+      place === "productGallery" ? `not ${spec.ratio}, so it shows with blank margins` : `not ${spec.ratio}, so the site crops it to ${spec.ratio}`
+    );
+  }
+  if (spec.width && info.width < spec.width)
+    out.push(`${info.width}px wide, smaller than ${spec.width}px, may look blurry`);
+  else if (spec.width && spec.ratio && info.width > spec.width * TOO_LARGE_FACTOR)
+    out.push(`${info.width}x${info.height}, much larger than needed`);
+  return out;
+}
+function suggestion(spec, maxBytes) {
+  const size = spec.height ? `${spec.width}x${spec.height} (${spec.ratio})` : `at least ${spec.width}px wide, any ratio`;
+  return `Suggested ${size}, WebP, under ${Math.round(maxBytes / 1024)}KB. Crop and compress here: ${spec.cropUrl}`;
+}
+
 // src/lib/localCheck.ts
-async function localCheckProduct(product, baseDir) {
+async function localCheckProduct(product, baseDir, images) {
   const errors = [];
   const warnings = [];
-  for (const { path, ref } of walkImageRefs(product)) {
+  for (const { path, ref, place } of walkImageRefs(product)) {
     if (!ref.file) continue;
     const abs = resolve2(baseDir, ref.file);
     if (!existsSync7(abs)) {
@@ -29406,7 +29455,18 @@ async function localCheckProduct(product, baseDir) {
       });
       continue;
     }
-    if (width != null && height != null) {
+    const spec = images?.places[place];
+    if (spec && width != null && height != null) {
+      const problems = placeProblems({ bytes: st.size, width, height }, place, spec, images.maxBytes);
+      if (problems.length) {
+        warnings.push({
+          path,
+          code: "image_advice",
+          message: `${ref.file} in the ${PLACE_LABELS[place] ?? place}: ${problems.join("; ")}. ${suggestion(spec, images.maxBytes)}`,
+          fix: "user"
+        });
+      }
+    } else if (width != null && height != null) {
       const shortest = Math.min(width, height);
       if (shortest < 600) {
         warnings.push({
@@ -29773,7 +29833,7 @@ async function checkOne(c, loaded, baseDir, tpl) {
       warnings: []
     };
   }
-  const local = await localCheckProduct(product, baseDir);
+  const local = await localCheckProduct(product, baseDir, (await loadSiteSchema(c)).images);
   const { clone, strippedPaths } = stripFileRefsForValidate(product);
   let serverErrors = [];
   let serverWarnings = [];
@@ -29872,8 +29932,26 @@ function toWirePayload(product) {
   }
   return clone;
 }
-async function pushOne(c, loaded, ctx, cache2, allowPublish, tpl) {
+async function pushOne(c, loaded, ctx, cache2, allowPublish, tpl, editLive) {
   const { product, path } = loaded;
+  if (!editLive && await isLive(c, product)) {
+    return {
+      key: product.key ?? null,
+      id: product.id ?? null,
+      ok: false,
+      uploaded: 0,
+      reused: 0,
+      errors: [
+        {
+          path: identOf(product),
+          code: "live_locked",
+          fix: "user",
+          message: 'This product is published, so it was left unchanged. If the customer wants to change the live page, they can edit it in wp-admin, or tell you to turn on editing live content (`products edit-live on --customer-said "\u2026"`).'
+        }
+      ],
+      warnings: []
+    };
+  }
   const checkOutcome = await checkOne(c, loaded, ctx.dir, tpl);
   if (checkOutcome.errors.length) {
     return {
@@ -29999,6 +30077,20 @@ async function pushOne(c, loaded, ctx, cache2, allowPublish, tpl) {
     warnings: [...checkOutcome.warnings, ...statusWarnings]
   };
 }
+async function isLive(c, product) {
+  const live = (s) => s === "publish" || s === "future";
+  if (product.id) {
+    try {
+      return live((await c.getProduct(product.id)).status);
+    } catch (e) {
+      if (e instanceof AgentHttpError && e.status === 404) return false;
+      throw e;
+    }
+  }
+  if (!product.key) return false;
+  const found = await c.listProducts({ key: product.key });
+  return live(found.items[0]?.status);
+}
 async function cmdPush(ctx, allowPublish = false) {
   const only = ctx.flags.get("only")?.split(",").filter(Boolean);
   const loaded = await loadProducts(ctx.dir, only);
@@ -30007,9 +30099,10 @@ async function cmdPush(ctx, allowPublish = false) {
     const c = await client(ctx);
     const cache2 = await readUploadsCache(ctx.dir, c.siteUrl);
     const tpl = await SampleCtx.load(c, ctx.dir);
+    const editLive = await editLiveAllowed(ctx.dir, c.siteUrl);
     const results = [];
     for (const item of loaded) {
-      results.push(await pushOne(c, item, ctx, cache2, allowPublish, tpl));
+      results.push(await pushOne(c, item, ctx, cache2, allowPublish, tpl, editLive));
       await writeUploadsCache(ctx.dir, c.siteUrl, cache2);
     }
     const ok = results.every((r) => r.ok);
@@ -30166,11 +30259,22 @@ async function cmdCategories(ctx) {
     const { language } = await loadSiteSchema(c);
     const remote = await c.listCategoryTerms(language ?? "");
     const { errors, warnings, ops } = planCategories(file, remote);
-    const summary = ops.filter((o) => o.op !== "keep").map((o) => ({ op: o.op, slug: o.slug }));
     if (errors.length) return { ok: false, code: "invalid", errors, warnings };
-    if (sub === "check") return { ok: true, changes: summary, warnings };
+    const editLive = await editLiveAllowed(ctx.dir, c.siteUrl);
+    const todo = ops.filter((o) => o.op === "create" || o.op === "update" && editLive);
+    const leftAlone = editLive ? [] : ops.filter((o) => o.op === "update").map((o) => o.slug);
+    const out = {
+      ok: true,
+      changes: todo.map((o) => ({ op: o.op, slug: o.slug })),
+      ...leftAlone.length ? {
+        leftAlone,
+        leftAloneNote: 'These categories already exist on the site and differ from categories.json; they were not changed. The customer can change them in wp-admin, or tell you to turn on editing live content (`products edit-live on --customer-said "\u2026"`).'
+      } : {},
+      warnings
+    };
+    if (sub === "check") return out;
     const idBySlug = new Map(remote.map((t) => [t.slug, t.id]));
-    for (const o of ops) {
+    for (const o of todo) {
       if (o.op === "keep") continue;
       const body = {
         name: o.name,
@@ -30181,7 +30285,7 @@ async function cmdCategories(ctx) {
       const saved = await c.saveCategoryTerm(o.op === "update" ? o.id : null, body);
       idBySlug.set(o.slug, saved.id);
     }
-    return { ok: true, changes: summary, warnings };
+    return out;
   } catch (e) {
     const siteErr = siteErrorOutput(e);
     if (siteErr) return siteErr;
@@ -30191,13 +30295,94 @@ async function cmdCategories(ctx) {
     return { ok: false, code: "error", message: e instanceof Error ? e.message : String(e) };
   }
 }
+async function cmdEditLive(ctx) {
+  const sub = ctx.positional[0];
+  try {
+    const cred = await resolveSite(ctx.dir, ctx.flags.get("site"));
+    const siteUrl = cred.config.siteUrl;
+    const cfg = await readWorkdirConfig(ctx.dir) ?? { siteUrl };
+    if (cfg.siteUrl !== siteUrl)
+      return { ok: false, code: "other_site", message: `This work folder is for ${cfg.siteUrl}.` };
+    if (sub === "on") {
+      const said = (ctx.flags.get("customer-said") ?? "").trim();
+      if (!said)
+        return {
+          ok: false,
+          code: "needs_customer_request",
+          fix: "user",
+          message: "Turn this on only when the customer asks to change published products or existing categories. Pass their exact words with --customer-said."
+        };
+      await writeWorkdirConfig(ctx.dir, {
+        siteUrl,
+        editLive: { on: true, customerSaid: said, at: (/* @__PURE__ */ new Date()).toISOString() }
+      });
+      return {
+        ok: true,
+        editLive: true,
+        note: "push now changes live pages directly. Turn it off with `products edit-live off` when done."
+      };
+    }
+    if (sub === "off") {
+      await writeWorkdirConfig(ctx.dir, { siteUrl, editLive: void 0 });
+      return { ok: true, editLive: false };
+    }
+    if (sub === void 0) return { ok: true, editLive: await editLiveAllowed(ctx.dir, siteUrl) };
+    return { ok: false, code: "usage", message: 'usage: puffergo products edit-live [on --customer-said "\u2026" | off]' };
+  } catch (e) {
+    const siteErr = siteErrorOutput(e);
+    if (siteErr) return siteErr;
+    return { ok: false, code: "error", message: e instanceof Error ? e.message : String(e) };
+  }
+}
+async function cmdImages(ctx) {
+  if (!ctx.positional.length)
+    return { ok: false, code: "usage", message: "usage: puffergo products images <file or folder>\u2026" };
+  try {
+    const c = await client(ctx);
+    const spec = (await loadSiteSchema(c)).images;
+    if (!spec) return { ok: false, code: "update_plugin", message: "The site plugin is too old to give image specs." };
+    const files = [];
+    for (const p of ctx.positional) {
+      const abs = resolve3(ctx.dir, p);
+      const st = await stat2(abs);
+      if (st.isDirectory()) files.push(...(await readdir3(abs)).filter((n) => !n.startsWith(".")).map((n) => join8(abs, n)));
+      else files.push(abs);
+    }
+    const images = [];
+    for (const abs of files) {
+      const bytes = await readFile11(abs);
+      const { format, width, height } = sniffImage(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength));
+      if (!format || width == null || height == null) continue;
+      const info = { bytes: bytes.length, width, height };
+      const fits = Object.entries(spec.places).filter(([place, s]) => placeProblems({ ...info, bytes: 0 }, place, s, spec.maxBytes).length === 0).map(([place]) => place);
+      images.push({
+        file: relative(ctx.dir, abs),
+        sizeKB: Math.round(bytes.length / 1024),
+        width,
+        height,
+        overLimit: bytes.length > spec.maxBytes,
+        fits
+      });
+    }
+    return {
+      ok: true,
+      note: `Tell the customer now, in one message: which photos are over ${Math.round(spec.maxBytes / 1024)}KB, and which don't fit where they are meant to go (fits lists the places whose size and shape already match). Give the cropUrl of that place; the tool crops, resizes and compresses in one go. The customer may also keep them as they are.`,
+      places: spec.places,
+      images
+    };
+  } catch (e) {
+    const siteErr = siteErrorOutput(e);
+    if (siteErr) return siteErr;
+    return { ok: false, code: "error", message: e instanceof Error ? e.message : String(e) };
+  }
+}
 
 // src/lib/loginCmd.ts
 import { spawn } from "node:child_process";
 import { existsSync as existsSync10 } from "node:fs";
-import { readFile as readFile11, rm as rm2, writeFile as writeFile7, mkdtemp } from "node:fs/promises";
+import { readFile as readFile12, rm as rm2, writeFile as writeFile7, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join as join8 } from "node:path";
+import { join as join9 } from "node:path";
 var WAIT_MS = 10 * 60 * 1e3;
 var RESULT_PAGE = (ok) => `<!doctype html><html><head><meta charset="utf-8"><title>PufferGo</title>
 <style>html{font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#1f2430;
@@ -30226,8 +30411,8 @@ async function cmdLogin(dir2, siteArg) {
   } catch {
     return { ok: false, code: "error", message: `Not a valid site URL: ${siteArg}` };
   }
-  const handshakeDir = await mkdtemp(join8(tmpdir(), "puffergo-login-"));
-  const handshake = join8(handshakeDir, "authorize-url");
+  const handshakeDir = await mkdtemp(join9(tmpdir(), "puffergo-login-"));
+  const handshake = join9(handshakeDir, "authorize-url");
   const child = spawn(
     process.execPath,
     [...process.execArgv, process.argv[1], "__login-wait", siteUrl, handshake, dir2],
@@ -30237,7 +30422,7 @@ async function cmdLogin(dir2, siteArg) {
   let authorizeUrl = "";
   for (let i = 0; i < 100 && !authorizeUrl; i++) {
     await new Promise((r) => setTimeout(r, 100));
-    if (existsSync10(handshake)) authorizeUrl = (await readFile11(handshake, "utf8")).trim();
+    if (existsSync10(handshake)) authorizeUrl = (await readFile12(handshake, "utf8")).trim();
   }
   await rm2(handshakeDir, { recursive: true, force: true });
   if (!authorizeUrl) return { ok: false, code: "error", message: "Could not start the local authorization listener." };
@@ -30328,7 +30513,7 @@ async function cmdPlan() {
   if (!file) die("\u7528\u6CD5\uFF1Asilo plan <plan.json>");
   let raw;
   try {
-    raw = await readFile12(file, "utf8");
+    raw = await readFile13(file, "utf8");
   } catch {
     die(`\u672A\u627E\u5230 plan \u6587\u4EF6\uFF1A${file}`);
   }
@@ -30480,7 +30665,7 @@ function emit(result) {
   process.stdout.write(JSON.stringify(result, null, 2) + "\n");
   if (!(result && typeof result === "object" && result.ok === true)) process.exitCode = 1;
 }
-var PRODUCTS_USAGE = 'puffergo products <schema|list [--search q]|check [--only k1,k2]|push [--only k1,k2]|pull <key|id|link>|publish <key\u2026> --customer-said "<customer words>"|sample <list|set <name> <key|id|link>|show <name>|remove <name>>|categories <check|push>> [--dir <workdir>] [--site <url>]';
+var PRODUCTS_USAGE = 'puffergo products <schema|list [--search q]|check [--only k1,k2]|push [--only k1,k2]|pull <key|id|link>|publish <key\u2026> --customer-said "<customer words>"|sample <list|set <name> <key|id|link>|show <name>|remove <name>>|images <file|folder\u2026>|categories <check|push>|edit-live [on --customer-said "<customer words>"|off]> [--dir <workdir>] [--site <url>]';
 async function products() {
   const ctx = { dir, flags, positional };
   switch (cmd) {
@@ -30500,6 +30685,10 @@ async function products() {
       return emit(await cmdSample(ctx));
     case "categories":
       return emit(await cmdCategories(ctx));
+    case "images":
+      return emit(await cmdImages(ctx));
+    case "edit-live":
+      return emit(await cmdEditLive(ctx));
     default:
       return emit({ ok: false, code: "usage", message: PRODUCTS_USAGE });
   }

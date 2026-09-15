@@ -19,13 +19,15 @@ description: >-
 |---|---|
 | `puffergo login <网站地址>` | 在浏览器里授权，只需一次 |
 | `puffergo products schema` | 网站的交易字段、单位、产品分类、已存的样板 |
+| `puffergo products images <文件或文件夹>…` | 查客户给的图片：体积、尺寸、比例适合放哪 |
 | `puffergo products check [--only key,…]` | 校验 `products/*.json`，不写入 |
-| `puffergo products push [--only key,…]` | 上传图片，写成草稿 |
+| `puffergo products push [--only key,…]` | 上传图片，写入网站；新产品是草稿 |
 | `puffergo products list [--search 词]` | 找网站上已有的产品，拿到 id |
 | `puffergo products pull <key、id或链接>` | 把网站上的产品拉回本地，用来修改它 |
 | `puffergo products publish <key>… --customer-said "客户原话"` | 发布客户点名的产品 |
 | `puffergo products sample list / set <类型名> <key、id或链接> / show <类型名>` | 样板：列出、保存、读取 |
 | `puffergo products categories check / push` | 校验 / 写入 `categories.json` 里的产品分类 |
+| `puffergo products edit-live on --customer-said "客户原话" / off` | 允许 / 不允许改已发布的产品和已有分类，默认不允许 |
 
 没有删除命令，客户要删产品请他在 WordPress 后台操作。
 
@@ -34,14 +36,15 @@ description: >-
 **铁律：推送前一定先把整理好的内容给客户过目，客户确认后才推送。**要问客户的事攒在一起，在过目那一条消息里一次问完。
 
 1. **准备**：`node -v` 低于 18 或没装，你自己装最新 LTS（macOS `brew install node` 或 nodejs.org 的 .pkg，Windows `winget install OpenJS.NodeJS.LTS`），系统弹窗要密码请客户自己输。然后运行 `products schema`；提示未登录就问网站地址，运行 `puffergo login <地址>`，请客户在浏览器里批准后再跑一次 `schema`。
-2. **收资料**：图片要有文件路径，拿不到就请客户把图片拖进来或告诉你文件夹。复制到 `images/`，改成规范文件名。客户发来别的网站上的产品链接（如阿里巴巴），读取页面上的资料和图片当作客户资料；读不到就请客户截图。
+2. **收资料**：图片要有文件路径，拿不到就请客户把图片拖进来或告诉你文件夹。复制到 `images/`，改成规范文件名，马上运行 `products images images/`：超过 200KB 的、尺寸或比例放不进打算放的位置的，当场一条消息告诉客户，附上那个位置的 `cropUrl`（PufferGo 图片工具，能一次裁剪、改尺寸、压缩）。客户处理完发回新图就换上；不在乎的就照用原图，这只是提醒，不影响推送。客户发来别的网站上的产品链接（如阿里巴巴），读取页面上的资料和图片当作客户资料；读不到就请客户截图。
 3. **整理并校验**：写 `products/<key>.json`，运行 `products check`，`fix: "ai"` 的自己改，`fix: "user"` 的留到下一步问。
 4. **给客户过目**：一条消息里列出标题、简介、分类、交易信息、参数表、详情每一段（排法、标题、用哪张图），以及要客户回答的：
    - 分类：客户没说放哪个分类，就把 schema 的 `categories` 列出来请他选；要新分类，按下面「产品分类」加进 `categories.json`，和产品一起给客户过目，先 `categories push` 再推产品。
    - 缺的事实，和 check 提示要客户补的。
 5. **推送**：客户确认后运行 `products push`，把 `previewUrl` 和 `editUrl` 发给客户，说明现在是草稿。
 6. **修改**：先 `products pull` 拉回网站上的最新版（客户可能在后台改过），改完照样给客户过目再 push。push 报 `conflict` 就先 pull，再把改动重做一遍。
-7. **发布**：只有客户明确说「发布」「上线」时，才运行 `products publish`，只发布他点名的，`--customer-said` 带上他的原话。「推送」「上传」「更新」都只存草稿。
+   已发布的产品默认改不了，push 报 `live_locked`。客户明确要改线上内容时，才运行 `products edit-live on`，`--customer-said` 带上他的原话；过目时告诉他这次改的是线上页面，改完运行 `products edit-live off`。
+7. **发布**：只有客户明确说「发布」「上线」时，才运行 `products publish`，只发布他点名的，`--customer-said` 带上他的原话。「推送」「上传」「更新」不会发布产品。
 
 ## 样板
 
@@ -65,7 +68,7 @@ description: >-
 ```
 
 - `name` 必填；`slug` 必填，小写英文、数字和连字符，全文件不重复；`description` 可选；`children` 是下一级。
-- 按 `slug` 对应网站上的分类：有就更新名称、描述和上级，没有就新建，不会删除。
+- 按 `slug` 对应网站上的分类：没有就新建，不会删除。已有的分类默认不改（结果里的 `leftAlone`），打开 `edit-live` 后才更新名称、描述和上级。
 - 建议客户不超过三级。
 - 分类排序不在这里设。客户问起，请他在 WordPress 后台的产品分类里给每个分类填 Order（数字小的在前），并在产品设置里把分类排序改成手动。
 
@@ -105,6 +108,7 @@ description: >-
 - 参数、交易信息、认证只来自客户，没给就问，不填猜的值。
 - 文案用英文（客户另有要求除外），和客户对话用客户的语言。详情里不重复交易信息。
 - `check` 报 `unsupported_claim`，就删掉那个没有依据的说法。
+- `check` 报 `image_advice`（图片体积、尺寸、比例和放的位置不符），只是提醒。客户已经说过照用的图不再提，其余的过目时列出来，附上链接。
 - 图片文件名：小写英文加连字符，以型号开头，如 `ck6150-cnc-lathe-control-panel.jpg`。alt：一句带产品名的英文描述；同一张图用在多处时 alt 写成一样的。
 
 ## 安全

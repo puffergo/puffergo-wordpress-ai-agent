@@ -1,8 +1,17 @@
 /** `puffergo products …` command implementations (spec sections 4-7). */
 
-import { resolve } from 'node:path';
+import { resolve, join, relative } from 'node:path';
+import { readFile, readdir, stat } from 'node:fs/promises';
+import { sniffImage } from './imageSniff';
 import { AgentClient, AgentHttpError } from './agentClient';
-import { resolveSite, NoSiteError, NotLoggedInError } from './site';
+import {
+  resolveSite,
+  NoSiteError,
+  NotLoggedInError,
+  editLiveAllowed,
+  readWorkdirConfig,
+  writeWorkdirConfig,
+} from './site';
 import { loadProducts, writeProduct, readUploadsCache, writeUploadsCache, type LoadedProduct } from './productFiles';
 import { localCheckProduct } from './localCheck';
 import { walkImageRefs, identOf } from './imageRefs';
@@ -10,6 +19,7 @@ import { resolveUpload } from './uploadImage';
 import { readSamples, writeSamples, resolveProductId, sampleReference, TargetError, type SampleEntry } from './samples';
 import { loadSiteSchema, optionalFactPaths, getPath, isEmptyValue, SchemaVersionError } from './siteSchema';
 import type { ProductFile, ValidationError, DetailSection } from './productTypes';
+import { placeProblems, type ImagesSpec } from './imageAdvice';
 import { readCategoriesFile, planCategories, CATEGORIES_FILE, type RemoteTerm } from './categories';
 
 export interface CmdCtx {
@@ -178,7 +188,7 @@ async function checkOne(c: AgentClient, loaded: LoadedProduct, baseDir: string, 
       warnings: [],
     };
   }
-  const local = await localCheckProduct(product, baseDir);
+  const local = await localCheckProduct(product, baseDir, (await loadSiteSchema(c)).images as ImagesSpec | undefined);
   const { clone, strippedPaths } = stripFileRefsForValidate(product);
   let serverErrors: ValidationError[] = [];
   let serverWarnings: ValidationError[] = [];
@@ -313,8 +323,28 @@ async function pushOne(
   cache: Record<string, { mediaId: number; url: string }>,
   allowPublish: boolean,
   tpl: SampleCtx,
+  editLive: boolean,
 ): Promise<PushOneResult> {
   const { product, path } = loaded;
+  if (!editLive && (await isLive(c, product))) {
+    return {
+      key: product.key ?? null,
+      id: product.id ?? null,
+      ok: false,
+      uploaded: 0,
+      reused: 0,
+      errors: [
+        {
+          path: identOf(product),
+          code: 'live_locked',
+          fix: 'user',
+          message:
+            'This product is published, so it was left unchanged. If the customer wants to change the live page, they can edit it in wp-admin, or tell you to turn on editing live content (`products edit-live on --customer-said "…"`).',
+        },
+      ],
+      warnings: [],
+    };
+  }
   const checkOutcome = await checkOne(c, loaded, ctx.dir, tpl);
   if (checkOutcome.errors.length) {
     return {
@@ -464,6 +494,22 @@ async function pushOne(
   };
 }
 
+/** Published (or scheduled) on the site. A product not on the site yet is not live. */
+async function isLive(c: AgentClient, product: ProductFile): Promise<boolean> {
+  const live = (s: unknown) => s === 'publish' || s === 'future';
+  if (product.id) {
+    try {
+      return live((await c.getProduct<{ status?: string }>(product.id)).status);
+    } catch (e) {
+      if (e instanceof AgentHttpError && e.status === 404) return false;
+      throw e;
+    }
+  }
+  if (!product.key) return false;
+  const found = await c.listProducts<{ items: Array<{ status: string }> }>({ key: product.key });
+  return live(found.items[0]?.status);
+}
+
 export async function cmdPush(ctx: CmdCtx, allowPublish = false): Promise<unknown> {
   const only = ctx.flags.get('only')?.split(',').filter(Boolean);
   const loaded = await loadProducts(ctx.dir, only);
@@ -472,9 +518,10 @@ export async function cmdPush(ctx: CmdCtx, allowPublish = false): Promise<unknow
     const c = await client(ctx);
     const cache = await readUploadsCache(ctx.dir, c.siteUrl);
     const tpl = await SampleCtx.load(c, ctx.dir);
+    const editLive = await editLiveAllowed(ctx.dir, c.siteUrl);
     const results: PushOneResult[] = [];
     for (const item of loaded) {
-      results.push(await pushOne(c, item, ctx, cache, allowPublish, tpl));
+      results.push(await pushOne(c, item, ctx, cache, allowPublish, tpl, editLive));
       await writeUploadsCache(ctx.dir, c.siteUrl, cache); // persist as we go — an early failure shouldn't lose earlier uploads' cache entries
     }
     const ok = results.every(r => r.ok);
@@ -664,12 +711,27 @@ export async function cmdCategories(ctx: CmdCtx): Promise<unknown> {
     const { language } = (await loadSiteSchema(c)) as { language?: string };
     const remote = await c.listCategoryTerms<RemoteTerm>(language ?? '');
     const { errors, warnings, ops } = planCategories(file, remote);
-    const summary = ops.filter(o => o.op !== 'keep').map(o => ({ op: o.op, slug: o.slug }));
     if (errors.length) return { ok: false, code: 'invalid', errors, warnings };
-    if (sub === 'check') return { ok: true, changes: summary, warnings };
+    // Switch off (default): existing categories are left alone, only missing ones are created.
+    const editLive = await editLiveAllowed(ctx.dir, c.siteUrl);
+    const todo = ops.filter(o => o.op === 'create' || (o.op === 'update' && editLive));
+    const leftAlone = editLive ? [] : ops.filter(o => o.op === 'update').map(o => o.slug);
+    const out = {
+      ok: true,
+      changes: todo.map(o => ({ op: o.op, slug: o.slug })),
+      ...(leftAlone.length
+        ? {
+            leftAlone,
+            leftAloneNote:
+              'These categories already exist on the site and differ from categories.json; they were not changed. The customer can change them in wp-admin, or tell you to turn on editing live content (`products edit-live on --customer-said "…"`).',
+          }
+        : {}),
+      warnings,
+    };
+    if (sub === 'check') return out;
 
     const idBySlug = new Map(remote.map(t => [t.slug, t.id]));
-    for (const o of ops) {
+    for (const o of todo) {
       if (o.op === 'keep') continue;
       const body: Record<string, unknown> = {
         name: o.name,
@@ -680,13 +742,107 @@ export async function cmdCategories(ctx: CmdCtx): Promise<unknown> {
       const saved = await c.saveCategoryTerm<{ id: number }>(o.op === 'update' ? o.id : null, body);
       idBySlug.set(o.slug, saved.id);
     }
-    return { ok: true, changes: summary, warnings };
+    return out;
   } catch (e) {
     const siteErr = siteErrorOutput(e);
     if (siteErr) return siteErr;
     if (e instanceof SyntaxError)
       return { ok: false, code: 'invalid_json', message: `${CATEGORIES_FILE}: ${e.message}` };
     if (e instanceof AgentHttpError) return { ok: false, code: 'http_error', status: e.status, body: e.body };
+    return { ok: false, code: 'error', message: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// edit-live [on --customer-said "…" | off] — may push change live products and existing categories?
+// ---------------------------------------------------------------------------
+
+export async function cmdEditLive(ctx: CmdCtx): Promise<unknown> {
+  const sub = ctx.positional[0];
+  try {
+    const cred = await resolveSite(ctx.dir, ctx.flags.get('site'));
+    const siteUrl = cred.config.siteUrl;
+    const cfg = (await readWorkdirConfig(ctx.dir)) ?? { siteUrl };
+    if (cfg.siteUrl !== siteUrl)
+      return { ok: false, code: 'other_site', message: `This work folder is for ${cfg.siteUrl}.` };
+    if (sub === 'on') {
+      const said = (ctx.flags.get('customer-said') ?? '').trim();
+      if (!said)
+        return {
+          ok: false,
+          code: 'needs_customer_request',
+          fix: 'user',
+          message:
+            'Turn this on only when the customer asks to change published products or existing categories. Pass their exact words with --customer-said.',
+        };
+      await writeWorkdirConfig(ctx.dir, {
+        siteUrl,
+        editLive: { on: true, customerSaid: said, at: new Date().toISOString() },
+      });
+      return {
+        ok: true,
+        editLive: true,
+        note: 'push now changes live pages directly. Turn it off with `products edit-live off` when done.',
+      };
+    }
+    if (sub === 'off') {
+      await writeWorkdirConfig(ctx.dir, { siteUrl, editLive: undefined });
+      return { ok: true, editLive: false };
+    }
+    if (sub === undefined) return { ok: true, editLive: await editLiveAllowed(ctx.dir, siteUrl) };
+    return { ok: false, code: 'usage', message: 'usage: puffergo products edit-live [on --customer-said "…" | off]' };
+  } catch (e) {
+    const siteErr = siteErrorOutput(e);
+    if (siteErr) return siteErr;
+    return { ok: false, code: 'error', message: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// images <file|folder…> — look over the customer's photos as soon as they arrive
+// ---------------------------------------------------------------------------
+
+export async function cmdImages(ctx: CmdCtx): Promise<unknown> {
+  if (!ctx.positional.length)
+    return { ok: false, code: 'usage', message: 'usage: puffergo products images <file or folder>…' };
+  try {
+    const c = await client(ctx);
+    const spec = (await loadSiteSchema(c)).images as ImagesSpec | undefined;
+    if (!spec) return { ok: false, code: 'update_plugin', message: 'The site plugin is too old to give image specs.' };
+    const files: string[] = [];
+    for (const p of ctx.positional) {
+      const abs = resolve(ctx.dir, p);
+      const st = await stat(abs);
+      if (st.isDirectory()) files.push(...(await readdir(abs)).filter(n => !n.startsWith('.')).map(n => join(abs, n)));
+      else files.push(abs);
+    }
+    const images = [];
+    for (const abs of files) {
+      const bytes = await readFile(abs);
+      const { format, width, height } = sniffImage(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength));
+      if (!format || width == null || height == null) continue;
+      const info = { bytes: bytes.length, width, height };
+      const fits = Object.entries(spec.places)
+        .filter(([place, s]) => placeProblems({ ...info, bytes: 0 }, place, s, spec.maxBytes).length === 0)
+        .map(([place]) => place);
+      images.push({
+        file: relative(ctx.dir, abs),
+        sizeKB: Math.round(bytes.length / 1024),
+        width,
+        height,
+        overLimit: bytes.length > spec.maxBytes,
+        fits,
+      });
+    }
+    return {
+      ok: true,
+      note: `Tell the customer now, in one message: which photos are over ${Math.round(spec.maxBytes / 1024)}KB, and which don't fit where they are meant to go (fits lists the places whose size and shape already match). Give the cropUrl of that place; the tool crops, resizes and compresses in one go. The customer may also keep them as they are.`,
+      places: spec.places,
+      images,
+    };
+  } catch (e) {
+    const siteErr = siteErrorOutput(e);
+    if (siteErr) return siteErr;
     return { ok: false, code: 'error', message: e instanceof Error ? e.message : String(e) };
   }
 }

@@ -45,6 +45,8 @@ import {
   cmdPublish,
   cmdSample,
   cmdCategories,
+  cmdEditLive,
+  cmdImages,
 } from './lib/productsCmd';
 import { cmdLogin, cmdLoginWait } from './lib/loginCmd';
 
@@ -300,7 +302,7 @@ function emit(result: unknown): void {
 }
 
 const PRODUCTS_USAGE =
-  'puffergo products <schema|list [--search q]|check [--only k1,k2]|push [--only k1,k2]|pull <key|id|link>|publish <key…> --customer-said "<customer words>"|sample <list|set <name> <key|id|link>|show <name>|remove <name>>|categories <check|push>> [--dir <workdir>] [--site <url>]';
+  'puffergo products <schema|list [--search q]|check [--only k1,k2]|push [--only k1,k2]|pull <key|id|link>|publish <key…> --customer-said "<customer words>"|sample <list|set <name> <key|id|link>|show <name>|remove <name>>|images <file|folder…>|categories <check|push>|edit-live [on --customer-said "<customer words>"|off]> [--dir <workdir>] [--site <url>]';
 
 async function products(): Promise<void> {
   const ctx = { dir, flags, positional };
@@ -321,6 +323,10 @@ async function products(): Promise<void> {
       return emit(await cmdSample(ctx));
     case 'categories':
       return emit(await cmdCategories(ctx));
+    case 'images':
+      return emit(await cmdImages(ctx));
+    case 'edit-live':
+      return emit(await cmdEditLive(ctx));
     default:
       return emit({ ok: false, code: 'usage', message: PRODUCTS_USAGE });
   }

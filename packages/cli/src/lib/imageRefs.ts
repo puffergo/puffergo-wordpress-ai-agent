@@ -12,6 +12,8 @@ export function identOf(product: ProductFile): string {
 
 export interface WalkedRef {
   path: string;
+  /** Where the image shows: `productGallery`, or the detail layout (`split`/`full`/`image`/`gallery`). */
+  place: string;
   ref: ImageRef;
   set: (next: ImageRef) => void;
 }
@@ -23,6 +25,7 @@ export function walkImageRefs(product: ProductFile): WalkedRef[] {
   (product.gallery ?? []).forEach((ref, i) => {
     out.push({
       path: `${ident}.gallery[${i}]`,
+      place: 'productGallery',
       ref,
       set: next => {
         product.gallery![i] = next;
@@ -35,6 +38,7 @@ export function walkImageRefs(product: ProductFile): WalkedRef[] {
     if (section.image) {
       out.push({
         path: `${sectionPath}.image`,
+        place: section.layout,
         ref: section.image,
         set: next => {
           section.image = next;
@@ -44,6 +48,7 @@ export function walkImageRefs(product: ProductFile): WalkedRef[] {
     (section.images ?? []).forEach((ref, j) => {
       out.push({
         path: `${sectionPath}.images[${j}]`,
+        place: 'gallery',
         ref,
         set: next => {
           section.images![j] = { ...next, title: ref.title, text: ref.text };
