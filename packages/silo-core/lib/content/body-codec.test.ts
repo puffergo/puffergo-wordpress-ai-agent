@@ -35,18 +35,27 @@ describe('rootRelativePermalink', () => {
 });
 
 describe('buildLinkResolver', () => {
-  it('maps slug ↔ permalink for contents that have both', () => {
-    const a = createContent('n', 'A', 'post', { slug: 'guide', wpLink: 'https://x.com/guide' });
+  it('resolves a target by note file name, slug or id, and maps a permalink back to the note name', () => {
+    const a = createContent('n', 'Solar Guide', 'post', { slug: 'guide', wpLink: 'https://x.com/guide' });
     const r = buildLinkResolver(wsWith([a]));
-    expect(r.permalinkForSlug('guide')).toBe('https://x.com/guide');
-    expect(r.permalinkForSlug('GUIDE')).toBe('https://x.com/guide'); // case-insensitive
-    expect(r.slugForUrl('https://x.com/guide')).toBe('guide');
+    expect(r.permalinkFor('Solar Guide')).toBe('https://x.com/guide'); // note name (title-named file)
+    expect(r.permalinkFor('guide')).toBe('https://x.com/guide'); // legacy slug link
+    expect(r.permalinkFor('GUIDE')).toBe('https://x.com/guide'); // case-insensitive
+    expect(r.permalinkFor(a.id)).toBe('https://x.com/guide');
+    expect(r.targetForUrl('https://x.com/guide')).toBe('Solar Guide');
   });
 
-  it('ignores contents without a slug or without a permalink', () => {
+  it('uses the real note file name the host reports over the title-derived default', () => {
+    const a = createContent('n', 'Solar Guide', 'post', { slug: 'guide', wpLink: 'https://x.com/guide' });
+    const r = buildLinkResolver(wsWith([a]), new Map([[a.id, 'my renamed note']]));
+    expect(r.permalinkFor('my renamed note')).toBe('https://x.com/guide');
+    expect(r.targetForUrl('https://x.com/guide')).toBe('my renamed note');
+  });
+
+  it('ignores contents without a permalink', () => {
     const noLink = createContent('n', 'B', 'post', { slug: 'draft' }); // never pushed
     const r = buildLinkResolver(wsWith([noLink]));
-    expect(r.permalinkForSlug('draft')).toBeUndefined();
+    expect(r.permalinkFor('draft')).toBeUndefined();
   });
 });
 
@@ -61,6 +70,12 @@ describe('markdownToWpHtml', () => {
     expect(html).not.toContain('x.com'); // domain must not leak into in-content links
     expect(html).toContain('>guide</a>');
     expect(unresolved).toEqual([]);
+  });
+
+  it('rewrites a [[note name|text]] link (the form Obsidian can click through)', () => {
+    const { html } = markdownToWpHtml('Read the [[Guide|full guide]].', resolver);
+    expect(html).toContain('href="/guide"');
+    expect(html).toContain('>full guide</a>');
   });
 
   it('honors a [[slug|alias]] display text', () => {

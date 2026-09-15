@@ -24,4 +24,5 @@ export * from './lib/content/body-codec';
 export * from './lib/sync/sync-content';
 export * from './lib/sync/import-content';
 export * from './lib/vault/frontmatter';
+export * from './lib/vault/note-links';
 export * from './lib/vault/adopt';

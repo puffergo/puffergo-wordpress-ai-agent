@@ -2,6 +2,8 @@
 
 给外贸独立站的 WordPress AI 智能体：用 Codex、Claude Code 等 AI 工具对话式批量上架产品、规划 SEO Silo。
 
+📖 **图文教程：[用 AI 上传网站产品](https://puffergo.com/docs/ai-product-upload/)**——在豆包、千问、WorkBuddy、Claude Code、Codex 里安装 Skill，连接网站，核对草稿，发布。
+
 - **网站是你的，凭据也只在你电脑上。** AI 看不到你的 WordPress 密码。在浏览器里一键授权后，应用密码只保存在你电脑的 `~/.puffergo/credentials.json`（仅本人可读），只有自带的脚本会读它。
 - **用代码校验，而不是靠提示词。** 每个产品写入前，脚本和你的网站都会检查一遍。错误以结构化 JSON 返回（`path`、`code`、`message`、`fix: "ai" | "user"`），AI 能改的自己改，需要你确认的会停下来问你。
 - **默认存草稿，永远不删除。** 发布必须有你亲口说「发布」；没有删除命令。
@@ -17,18 +19,26 @@
 
 ## 需要
 
-- Node.js 18 或更新版本。
+- Node.js 18 或更新版本（没有的话 AI 会自己装）。
 - 一个你有管理员权限的 WordPress 网站。
 - **上架产品**需要安装 PufferGo WordPress 插件（提供产品类型和校验接口）。
 - **SEO Silo** 需要 Rank Math 写 SEO 字段；导入已有关键词需要 PufferGo 插件。
 
 ## 安装 Skill
 
-把 `skills/` 下的文件夹复制到 AI 工具的 skills 目录，例如 Claude Code 的 `~/.claude/skills/`（所有项目）或 `<项目>/.claude/skills/`。然后直接说：
+把这句话发给你的 AI 工具（豆包、千问电脑版先切到「工作」模式；WorkBuddy、Codex、Claude Code 等直接发）：
+
+```text
+帮我安装这个技能：https://github.com/puffergo/puffergo-wordpress-ai-agent/tree/main/skills/wordpress-bulk-product-upload
+```
+
+AI 会自己下载装好；电脑上没有 Node.js 的话，第一次用时 AI 也会自己装。装好后直接说：
 
 > 把桌面 pg-500 文件夹里的照片上架成新产品：PG-500 Industrial 3D Printer，成型尺寸 500×500×500 mm，起订量 1 台，交期 15–25 天，先存草稿。
 
-第一次使用会在浏览器打开 WordPress，点一次「批准」即可。
+第一次使用会在浏览器打开 WordPress，点一次「核准」即可。
+
+连接网站、核对草稿、产品样板、交易信息字段和常见问题，见[图文教程](https://puffergo.com/docs/ai-product-upload/)。
 
 ## 许可
 

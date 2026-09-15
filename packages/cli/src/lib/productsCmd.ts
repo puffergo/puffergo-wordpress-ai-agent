@@ -7,14 +7,7 @@ import { loadProducts, writeProduct, readUploadsCache, writeUploadsCache, type L
 import { localCheckProduct } from './localCheck';
 import { walkImageRefs, identOf } from './imageRefs';
 import { resolveUpload } from './uploadImage';
-import {
-  readTemplates,
-  writeTemplates,
-  resolveProductId,
-  templateReference,
-  TargetError,
-  type TemplateEntry,
-} from './templates';
+import { readSamples, writeSamples, resolveProductId, sampleReference, TargetError, type SampleEntry } from './samples';
 import { loadSiteSchema, optionalFactPaths, getPath, isEmptyValue, SchemaVersionError } from './siteSchema';
 import type { ProductFile, ValidationError, DetailSection } from './productTypes';
 
@@ -45,17 +38,11 @@ export async function cmdSchema(ctx: CmdCtx): Promise<unknown> {
   try {
     const c = await client(ctx);
     const schema = await loadSiteSchema(c);
-    const templates = await readTemplates(ctx.dir, c.siteUrl);
+    const samples = await readSamples(ctx.dir, c.siteUrl);
     return {
       ok: true,
       ...(schema as Record<string, unknown>),
-      templates: Object.entries(templates).map(([name, t]) => ({ name, id: t.id, title: t.title })),
-      ...(Object.keys(templates).length
-        ? {
-            templatesNote:
-              'This site has product templates. Pick one per product, read it with `products template show <name>`, and set "template" in the product file ("" if none fits).',
-          }
-        : {}),
+      samples: Object.entries(samples).map(([name, t]) => ({ name, id: t.id, title: t.title })),
     };
   } catch (e) {
     const siteErr = siteErrorOutput(e);
@@ -99,7 +86,7 @@ export function stripFileRefsForValidate(product: ProductFile): { clone: Product
     }
   }
   if (clone.detail) delete clone.detail.unmanagedHtml;
-  delete clone.template;
+  delete clone.sample;
   return { clone, strippedPaths };
 }
 
@@ -108,25 +95,25 @@ function filterStrippedErrors(list: ValidationError[], strippedPaths: Set<string
 }
 
 // ---------------------------------------------------------------------------
-// templates: a product naming a template skips the "missing_source" warnings for the fields that template
+// samples: a product naming a sample skips the "missing_source" warnings for the fields that sample
 // leaves out on purpose (the site doesn't show a price, say) — otherwise the AI would ask about them again.
 // ---------------------------------------------------------------------------
 
-export class TemplateCtx {
+export class SampleCtx {
   private notUsed = new Map<string, Set<string>>();
   constructor(
     private c: AgentClient,
-    readonly templates: Record<string, TemplateEntry>,
+    readonly samples: Record<string, SampleEntry>,
     /** The site's optional facts (trade fields from the schema + specs), as product-file paths. */
     private factPaths: string[],
   ) {}
-  static async load(c: AgentClient, dir: string): Promise<TemplateCtx> {
+  static async load(c: AgentClient, dir: string): Promise<SampleCtx> {
     const schema = await loadSiteSchema(c);
-    return new TemplateCtx(c, await readTemplates(dir, c.siteUrl), optionalFactPaths(schema));
+    return new SampleCtx(c, await readSamples(dir, c.siteUrl), optionalFactPaths(schema));
   }
-  /** Fields the named template doesn't use; null when no such template is saved. */
+  /** Fields the named sample doesn't use; null when no such sample is saved. */
   async fieldsNotUsed(name: string): Promise<Set<string> | null> {
-    const entry = this.templates[name];
+    const entry = this.samples[name];
     if (!entry) return null;
     if (!this.notUsed.has(name)) {
       const remote = await this.c.getProduct<Record<string, unknown>>(entry.id);
@@ -136,34 +123,21 @@ export class TemplateCtx {
   }
 }
 
-export async function applyTemplate(
+export async function applySample(
   product: ProductFile,
-  tpl: TemplateCtx,
+  tpl: SampleCtx,
   warnings: ValidationError[],
 ): Promise<{ errors: ValidationError[]; warnings: ValidationError[] }> {
-  const names = Object.keys(tpl.templates);
-  if (product.template === undefined && names.length) {
-    return {
-      errors: [
-        {
-          path: `${identOf(product)}.template`,
-          code: 'template_required',
-          message: `This site has product templates: ${names.join(', ')}. Read the one this product belongs to (\`products template show <name>\`), follow its structure, and set "template" to its name — or set "template": "" if none fits.`,
-          fix: 'ai',
-        },
-      ],
-      warnings,
-    };
-  }
-  if (!product.template) return { errors: [], warnings };
-  const notUsed = await tpl.fieldsNotUsed(product.template);
+  const names = Object.keys(tpl.samples);
+  if (!product.sample) return { errors: [], warnings };
+  const notUsed = await tpl.fieldsNotUsed(product.sample);
   if (!notUsed) {
     return {
       errors: [
         {
-          path: `${identOf(product)}.template`,
-          code: 'unknown_template',
-          message: `No template named "${product.template}". Saved templates: ${names.length ? names.join(', ') : 'none'} (see \`products template list\`).`,
+          path: `${identOf(product)}.sample`,
+          code: 'unknown_sample',
+          message: `No sample named "${product.sample}". Saved samples: ${names.length ? names.join(', ') : 'none'} (see \`products sample list\`).`,
           fix: 'ai',
         },
       ],
@@ -186,12 +160,7 @@ export interface CheckResult {
   warnings: ValidationError[];
 }
 
-async function checkOne(
-  c: AgentClient,
-  loaded: LoadedProduct,
-  baseDir: string,
-  tpl: TemplateCtx,
-): Promise<CheckResult> {
+async function checkOne(c: AgentClient, loaded: LoadedProduct, baseDir: string, tpl: SampleCtx): Promise<CheckResult> {
   const { product } = loaded;
   if (loaded.parseError) {
     return {
@@ -227,12 +196,12 @@ async function checkOne(
       { path: identOf(product), code: 'error', message: e instanceof Error ? e.message : String(e), fix: 'ai' },
     ];
   }
-  const templated = await applyTemplate(product, tpl, [...local.warnings, ...serverWarnings]);
+  const sampled = await applySample(product, tpl, [...local.warnings, ...serverWarnings]);
   return {
     key: product.key ?? null,
     id: product.id ?? null,
-    errors: [...local.errors, ...serverErrors, ...templated.errors],
-    warnings: templated.warnings,
+    errors: [...local.errors, ...serverErrors, ...sampled.errors],
+    warnings: sampled.warnings,
   };
 }
 
@@ -242,7 +211,7 @@ export async function cmdCheck(ctx: CmdCtx): Promise<unknown> {
   if (!loaded.length) return { ok: true, results: [] };
   try {
     const c = await client(ctx);
-    const tpl = await TemplateCtx.load(c, ctx.dir);
+    const tpl = await SampleCtx.load(c, ctx.dir);
     const results: CheckResult[] = [];
     for (const item of loaded) results.push(await checkOne(c, item, ctx.dir, tpl));
     const ok = results.every(r => r.errors.length === 0);
@@ -329,7 +298,7 @@ export function readbackMismatches(local: ProductFile, remote: Record<string, un
 function toWirePayload(product: ProductFile): Record<string, unknown> {
   const clone: ProductFile = JSON.parse(JSON.stringify(product));
   if (clone.detail) delete clone.detail.unmanagedHtml;
-  delete clone.template;
+  delete clone.sample;
   for (const { ref } of walkImageRefs(clone)) {
     delete ref.file;
   }
@@ -342,7 +311,7 @@ async function pushOne(
   ctx: CmdCtx,
   cache: Record<string, { mediaId: number; url: string }>,
   allowPublish: boolean,
-  tpl: TemplateCtx,
+  tpl: SampleCtx,
 ): Promise<PushOneResult> {
   const { product, path } = loaded;
   const checkOutcome = await checkOne(c, loaded, ctx.dir, tpl);
@@ -501,7 +470,7 @@ export async function cmdPush(ctx: CmdCtx, allowPublish = false): Promise<unknow
   try {
     const c = await client(ctx);
     const cache = await readUploadsCache(ctx.dir, c.siteUrl);
-    const tpl = await TemplateCtx.load(c, ctx.dir);
+    const tpl = await SampleCtx.load(c, ctx.dir);
     const results: PushOneResult[] = [];
     for (const item of loaded) {
       results.push(await pushOne(c, item, ctx, cache, allowPublish, tpl));
@@ -546,9 +515,9 @@ export async function cmdPull(ctx: CmdCtx): Promise<unknown> {
     const existing = await loadProducts(ctx.dir);
     let key = remote.key;
     if (!key) key = deriveKeyFromTitle(remote.title, new Set(existing.map(p => p.fileKey)));
-    // `template` lives only in the local file — keep it across a pull.
-    const template = existing.find(p => p.fileKey === key)?.product.template;
-    const product: ProductFile = { ...remote, key, ...(template ? { template } : {}) };
+    // `sample` lives only in the local file — keep it across a pull.
+    const sample = existing.find(p => p.fileKey === key)?.product.sample;
+    const product: ProductFile = { ...remote, key, ...(sample ? { sample } : {}) };
     await writeProduct(ctx.dir, key, product);
     if (product.detail?.unmanagedHtml) {
       process.stderr.write(
@@ -560,7 +529,7 @@ export async function cmdPull(ctx: CmdCtx): Promise<unknown> {
       key,
       id,
       path: `products/${key}.json`,
-      hint: 'pull is for editing THIS product. If the customer wants new products to look like it, run `products template set <type name> <this link or id>` instead.',
+      hint: 'pull is for editing THIS product. If the customer wants new products to look like it, run `products sample set <type name> <this link or id>` instead.',
     };
   } catch (e) {
     const siteErr = siteErrorOutput(e);
@@ -615,37 +584,37 @@ export async function cmdPublish(ctx: CmdCtx): Promise<unknown> {
 }
 
 // ---------------------------------------------------------------------------
-// template list | set <name> <key|id|link> | show <name> | remove <name>
+// sample list | set <name> <key|id|link> | show <name> | remove <name>
 // ---------------------------------------------------------------------------
 
-export async function cmdTemplate(ctx: CmdCtx): Promise<unknown> {
+export async function cmdSample(ctx: CmdCtx): Promise<unknown> {
   const [sub, name, target] = ctx.positional;
-  const usage = 'usage: puffergo products template <list | set <name> <key|id|link> | show <name> | remove <name>>';
+  const usage = 'usage: puffergo products sample <list | set <name> <key|id|link> | show <name> | remove <name>>';
   try {
     const c = await client(ctx);
-    const templates = await readTemplates(ctx.dir, c.siteUrl);
+    const samples = await readSamples(ctx.dir, c.siteUrl);
     const missing = () => ({
       ok: false,
-      code: 'unknown_template',
-      message: `No template named "${name}". Saved: ${Object.keys(templates).join(', ') || 'none'}.`,
+      code: 'unknown_sample',
+      message: `No sample named "${name}". Saved: ${Object.keys(samples).join(', ') || 'none'}.`,
     });
     switch (sub) {
       case 'list':
         return {
           ok: true,
-          templates: Object.entries(templates).map(([n, t]) => ({ name: n, id: t.id, title: t.title })),
+          samples: Object.entries(samples).map(([n, t]) => ({ name: n, id: t.id, title: t.title })),
         };
       case 'set': {
         if (!name || !target) return { ok: false, code: 'usage', message: usage };
         const id = await resolveProductId(c, target);
         const remote = await c.getProduct<{ title: string }>(id);
-        templates[name] = { id, title: remote.title };
-        await writeTemplates(ctx.dir, c.siteUrl, templates);
+        samples[name] = { id, title: remote.title };
+        await writeSamples(ctx.dir, c.siteUrl, samples);
         return { ok: true, name, id, title: remote.title };
       }
       case 'show': {
         if (!name) return { ok: false, code: 'usage', message: usage };
-        const entry = templates[name];
+        const entry = samples[name];
         if (!entry) return missing();
         const remote = await c.getProduct<ProductFile>(entry.id);
         return {
@@ -653,17 +622,17 @@ export async function cmdTemplate(ctx: CmdCtx): Promise<unknown> {
           name,
           id: entry.id,
           note:
-            'Structure reference only. Follow which fields it uses (notUsed = the site does not show these: do not write them and do not ask), its units, spec names and order, section layouts, image placement and text lengths. Write every text from the customer\'s facts; drop a section the customer gave nothing for. Set "template": "' +
+            'Structure reference only. Follow which fields it uses (notUsed = the site does not show these: do not write them and do not ask), its units, spec names and order, section layouts, image placement and text lengths. Write every text from the customer\'s facts; drop a section the customer gave nothing for. Set "sample": "' +
             name +
             '" in each product file that follows it.',
-          reference: templateReference(remote, await loadSiteSchema(c)),
+          reference: sampleReference(remote, await loadSiteSchema(c)),
         };
       }
       case 'remove': {
         if (!name) return { ok: false, code: 'usage', message: usage };
-        if (!templates[name]) return missing();
-        delete templates[name];
-        await writeTemplates(ctx.dir, c.siteUrl, templates);
+        if (!samples[name]) return missing();
+        delete samples[name];
+        await writeSamples(ctx.dir, c.siteUrl, samples);
         return { ok: true, removed: name };
       }
       default:

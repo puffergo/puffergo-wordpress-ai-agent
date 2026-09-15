@@ -22,7 +22,7 @@ description: >-
 3. **写正文 / 调 SEO**:逐个打开生成的 `.md`,在 frontmatter 下方撰写文章正文(Markdown)。`purpose` 字段说明这篇的目的,照它写。
    - 正文完全归你;`title/slug/purpose/seoTitle/seoDescription/coreKeywords/longTailKeywords/internalLinks/externalLinks` 这些**扁平**字段可按需调整(push 时会从 frontmatter 读回并推送;`purpose` 只留本地不推 WP)。
    - `silo:` 和 `wp:` 这两段(嵌套)**绝不修改**——它们是系统 id/永久链接。
-   - 内链用 `[[目标slug]]` 指向兄弟篇(push 时自动解析成真实永久链接)。
+   - 内链用 `[[目标笔记的文件名|显示文字]]` 指向兄弟篇(push 时自动解析成真实永久链接)。用文件名,不用 slug——Obsidian 点击只认文件名。
 4. **发布**:`puffergo silo push` —— 把正文 + SEO + 分类推成 WordPress 草稿(已存在则只更新,不覆盖你之外的改动)。
 5. **护栏自检**:每步后跑 `puffergo silo health`,读出的问题**自己修**(补内链消除孤岛、补分类归档 SEO、核心词进标题等),修完再 `puffergo silo push`。目标:critical 归零。
 6. **同步**:需要时 `puffergo silo pull` 从 WordPress 拉回最新状态。
@@ -53,7 +53,7 @@ description: >-
 
 - **SEO 长度**: seo.title 30–60 字符、description 120–160 字符(英文;中文站减半);核心词进 seo.title 和正文首段。过长会被 SERP 截断,过短浪费展示位。
 - **焦点关键词数量**: 每页 **恰好 1 个** coreKeywords(主焦点词)+ **最多 4 个** longTailKeywords = **总数 ≤ 5**。这是 Rank Math 的真实上限,写更多也不生效。
-- **内链**: 每篇至少 1 进 1 出,别留孤岛;正文里用 `[[slug]]`。
+- **内链**: 每篇至少 1 进 1 出,别留孤岛;正文里用 `[[目标笔记的文件名|显示文字]]`。
 - **字段归属**: `title/slug/seo/internalLinks/externalLinks` 可按需调整;`silo:`/`wp:` 归 CLI,勿改;**正文完全归你**。
 - **不造假外链**: externalLinks 只填真实存在的权威 URL。
 

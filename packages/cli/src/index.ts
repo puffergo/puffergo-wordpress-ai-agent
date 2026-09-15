@@ -23,6 +23,7 @@ import {
   getPendingContents,
   updateContent,
   buildLinkResolver,
+  noteNamesFromScan,
   markdownToWpHtml,
   resolveBodyAssets,
   type SiloWorkspace,
@@ -42,7 +43,7 @@ import {
   cmdPush as cmdProductsPush,
   cmdPull as cmdProductsPull,
   cmdPublish,
-  cmdTemplate,
+  cmdSample,
 } from './lib/productsCmd';
 import { cmdLogin, cmdLoginWait } from './lib/loginCmd';
 
@@ -173,6 +174,7 @@ async function cmdPush(): Promise<void> {
   if (uploaded) log(`⬆ 上传图片 ${uploaded} 张并改写为线上地址`);
 
   const bodyOf = (id: string): string => resolvedBody.get(id) ?? '';
+  const noteNames = noteNamesFromScan(bodies);
 
   let ok = 0;
   let conflict = 0;
@@ -180,9 +182,9 @@ async function cmdPush(): Promise<void> {
   // Notes whose body referenced a sibling that had no permalink yet this run — re-authored in pass 2.
   const needsRelink = new Set<string>();
   for (const item of ws.contents) {
-    // Resolve `[[slug]]` internal links to real permalinks via the glue codec. Rebuilt each iteration so
+    // Resolve `[[…]]` internal links to real permalinks via the glue codec. Rebuilt each iteration so
     // it picks up permalinks assigned to siblings earlier in this same run.
-    const { html, unresolved } = markdownToWpHtml(bodyOf(item.id), buildLinkResolver(ws));
+    const { html, unresolved } = markdownToWpHtml(bodyOf(item.id), buildLinkResolver(ws, noteNames));
     const res = await syncContent(client, ws, item, { force, content: html || undefined });
     if (res.ok) {
       ws = updateContent(ws, item.id, res.patch);
@@ -201,7 +203,7 @@ async function cmdPush(): Promise<void> {
   // Pass 2: now every pushed item has a permalink — re-author the bodies that referenced a then-unpushed
   // sibling, so their internal links resolve to real URLs. force:true (we just changed their modified time).
   if (needsRelink.size) {
-    const resolver = buildLinkResolver(ws);
+    const resolver = buildLinkResolver(ws, noteNames);
     let relinked = 0;
     for (const item of ws.contents) {
       if (!needsRelink.has(item.id)) continue;
@@ -297,7 +299,7 @@ function emit(result: unknown): void {
 }
 
 const PRODUCTS_USAGE =
-  'puffergo products <schema|list [--search q]|check [--only k1,k2]|push [--only k1,k2]|pull <key|id|link>|publish <key…> --customer-said "<customer words>"|template <list|set <name> <key|id|link>|show <name>|remove <name>>> [--dir <workdir>] [--site <url>]';
+  'puffergo products <schema|list [--search q]|check [--only k1,k2]|push [--only k1,k2]|pull <key|id|link>|publish <key…> --customer-said "<customer words>"|sample <list|set <name> <key|id|link>|show <name>|remove <name>>> [--dir <workdir>] [--site <url>]';
 
 async function products(): Promise<void> {
   const ctx = { dir, flags, positional };
@@ -314,8 +316,8 @@ async function products(): Promise<void> {
       return emit(await cmdProductsPull(ctx));
     case 'publish':
       return emit(await cmdPublish(ctx));
-    case 'template':
-      return emit(await cmdTemplate(ctx));
+    case 'sample':
+      return emit(await cmdSample(ctx));
     default:
       return emit({ ok: false, code: 'usage', message: PRODUCTS_USAGE });
   }

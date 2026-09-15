@@ -48,7 +48,7 @@ function stubNetwork(): NetworkPort {
 }
 
 describe('importFromWp — body pull', () => {
-  it("converts each post's content.rendered to Markdown and rewrites the resolved internal link to [[slug]]", async () => {
+  it("converts each post's content.rendered to Markdown and rewrites the resolved internal link to [[note name|text]]", async () => {
     const client = new WpClient(stubNetwork(), { siteUrl: SITE, username: 'a', appPassword: 'b' });
     const ws = emptyWorkspace({ name: 'T', url: SITE });
 
@@ -58,11 +58,22 @@ describe('importFromWp — body pull', () => {
     const source = result.ws.contents.find(c => c.wpPostId === 11)!;
     expect(result.bodies.get(target.id)).toContain('Plain target body.');
     const sourceBody = result.bodies.get(source.id)!;
-    expect(sourceBody).toContain('[[target-post|Target]]');
+    // Named after the target's note file (its title) — Obsidian resolves a click by file name, not slug.
+    expect(sourceBody).toContain('[[Target Post|Target]]');
     expect(sourceBody).toContain('[External](https://other.com/y)');
     // The edge and the body agree: this is what makes it safe to reuse resolveInternalTarget for both.
     expect(result.ws.edges.some(e => e.from === source.id && e.to === target.id && e.type === 'internal-link')).toBe(
       true,
     );
+  });
+
+  it('links to the note name the host reports when the target note already exists under another name', async () => {
+    const client = new WpClient(stubNetwork(), { siteUrl: SITE, username: 'a', appPassword: 'b' });
+    const first = await importFromWp(client, emptyWorkspace({ name: 'T', url: SITE }), ['post']);
+    const target = first.ws.contents.find(c => c.wpPostId === 10)!;
+    const source = first.ws.contents.find(c => c.wpPostId === 11)!;
+
+    const again = await importFromWp(client, first.ws, ['post'], { noteNames: new Map([[target.id, 'target-post']]) });
+    expect(again.bodies.get(source.id)).toContain('[[target-post|Target]]');
   });
 });

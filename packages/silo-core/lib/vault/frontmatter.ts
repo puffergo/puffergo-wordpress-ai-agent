@@ -13,6 +13,7 @@
 import { parse as parseYaml } from 'yaml';
 import type { ContentItem, SiloWorkspace } from '../model/types';
 import { getNodePath } from '../model/selectors';
+import { buildNoteLinkIndex, noteNamesFromScan } from './note-links';
 import { updateContent, setContentLinks } from '../model/mutations';
 
 /** Filesystem-safe slug from a term/title. */
@@ -76,8 +77,8 @@ export function contentFileFallbackName(content: ContentItem): string {
 /** File basename (no directory, no `.md`) for a NEW note: its title, so the vault reads like a table of
  *  contents; falls back to slug/id when there's no title. Only applies at creation — hosts locate an
  *  existing note by `silo.id` and keep whatever name it already has (a title edit never renames a file,
- *  and pre-existing slug-named notes are left alone). Wikilinks keep working via the `aliases: [slug]`
- *  that renderFrontmatter emits. */
+ *  and pre-existing slug-named notes are left alone). Links to it are written with this file name
+ *  (see note-links.ts — Obsidian resolves clicks by file name, not by `aliases`). */
 export function contentFileBaseName(content: ContentItem): string {
   return titleToFileName(content.title) || contentFileFallbackName(content);
 }
@@ -140,7 +141,7 @@ export interface FrontmatterEdits {
   seoDescription?: string;
   coreKeywords?: string[];
   longTailKeywords?: string[];
-  internalLinks?: string[]; // items may be "[[slug]]" or bare "slug"
+  internalLinks?: string[]; // items may be "[[note name]]", "[[slug]]" or a bare name/slug
   externalLinks?: string[];
 }
 
@@ -172,7 +173,7 @@ export function parseFrontmatterEdits(fm: string): FrontmatterEdits | null {
   };
 }
 
-/** Strip an Obsidian `[[wikilink]]` (and any `#heading`/`|alias`) down to the bare target slug. */
+/** Strip an Obsidian `[[wikilink]]` (and any `#heading`/`|alias`) down to the bare target. */
 export function wikilinkTarget(raw: string): string {
   return raw
     .replace(/^\[\[|\]\]$/g, '')
@@ -199,15 +200,15 @@ const norm = (s: string): string => s.trim().toLowerCase();
  * Read user edits from every note's frontmatter back into the workspace model, so what the user tuned
  * in the vault (SEO, keywords, title/slug, links) is what gets pushed. Called right before a push. Only
  * the flat editable fields are honored; `silo:`/`wp:` are ignored. A file whose YAML fails to parse is
- * skipped (its model values are kept, never wiped). Internal `[[slug]]` links resolve to sibling
- * content ids. Returns the updated workspace + how many notes contributed an edit.
+ * skipped (its model values are kept, never wiped). Internal `[[…]]` links resolve to sibling content
+ * ids by note name, slug or id (note-links.ts). Returns the updated workspace + how many notes
+ * contributed an edit. `path` (when the host knows it) supplies each note's real file name.
  */
 export function applyFrontmatterEdits(
   ws: SiloWorkspace,
-  scanned: Map<string, { fm: string }>,
+  scanned: Map<string, { fm: string; path?: string }>,
 ): { ws: SiloWorkspace; changed: number } {
-  const slugToId = new Map<string, string>();
-  for (const c of ws.contents) if (c.slug) slugToId.set(norm(c.slug), c.id);
+  const links = buildNoteLinkIndex(ws, noteNamesFromScan(scanned));
   let next = ws;
   let changed = 0;
   for (const c of ws.contents) {
@@ -237,7 +238,7 @@ export function applyFrontmatterEdits(
     // Links: resolve desired sets and rewrite only when they differ from the current edges.
     if (e.internalLinks || e.externalLinks) {
       const desiredInternal = (e.internalLinks ?? [])
-        .map(raw => slugToId.get(norm(wikilinkTarget(raw))))
+        .map(raw => links.idFor(wikilinkTarget(raw)))
         .filter((x): x is string => !!x);
       const desiredExternal = e.externalLinks ?? [];
       const curInternal = next.edges.filter(g => g.from === c.id && g.type === 'internal-link').map(g => g.to);

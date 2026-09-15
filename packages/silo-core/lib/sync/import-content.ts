@@ -14,6 +14,7 @@ import { createContent, createNode } from '../model/factory';
 import { reconcileKeywords } from '../model/keywords';
 import { parseLinks, canonicalHost, isFallbackPermalink, type RawLink } from '../wp/parse-links';
 import { wpHtmlToMarkdown } from '../content/body-codec';
+import { buildNoteLinkIndex } from '../vault/note-links';
 import type { WpClient, WpRawPost } from '../wp/client';
 
 /** Per-document analysis surfaced in the UI at a glance (counts + the raw links behind them). */
@@ -87,6 +88,9 @@ function seoFromYoastHead(head: WpRawPost['yoast_head_json']): Partial<ContentIt
 
 export interface ImportOptions {
   onProgress?: (done: number, total: number, label: string) => void;
+  /** Content id → existing note file name, so pulled bodies link to notes by their real names
+   *  (note-links.ts). Contents without an entry use the name their note will be created with. */
+  noteNames?: ReadonlyMap<string, string>;
 }
 
 /** Catch-all node term for content of a type that carries no taxonomy term. */
@@ -407,17 +411,16 @@ export async function importFromWp(
   // its silo edges must never disagree about what counts as "internal". Never the homepage's full themed
   // HTML (only `parseLinks` wants that, for the nav fan-out reason documented above): the vault body is
   // always just the article's own `content.rendered`.
-  const contentById = new Map(contents.map(c => [c.id, c]));
-  const resolveWikilinkSlug = (url: string): string | undefined => {
+  const noteLinks = buildNoteLinkIndex({ ...ws, contents }, opts.noteNames);
+  const resolveWikilinkName = (url: string): string | undefined => {
     const targetId = resolveInternalTarget(url);
-    if (!targetId) return undefined;
-    return contentById.get(targetId)?.slug || undefined;
+    return targetId ? noteLinks.nameFor(targetId) : undefined;
   };
   const bodies = new Map<string, string>();
 
   for (const { item, post } of imported) {
     const bodyHtml = post.content?.rendered ?? '';
-    if (bodyHtml) bodies.set(item.id, wpHtmlToMarkdown(bodyHtml, resolveWikilinkSlug));
+    if (bodyHtml) bodies.set(item.id, wpHtmlToMarkdown(bodyHtml, resolveWikilinkName));
 
     const html = (item.id === homeDoc?.item.id && homeHtml) || bodyHtml;
     const { internal, external } = parseLinks(html, siteUrl, post.link);

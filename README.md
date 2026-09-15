@@ -4,6 +4,8 @@
 
 [中文说明](README.zh-CN.md)
 
+📖 **Step-by-step guide (Chinese, with screenshots): [用 AI 上传网站产品](https://puffergo.com/docs/ai-product-upload/)** — install the skill in 豆包 / 千问 / WorkBuddy / Claude Code / Codex, connect your site, review and publish.
+
 - **Your site, your credentials.** The agent never sees your WordPress password. A one-click WordPress Application Password is stored on your own machine (`~/.puffergo/credentials.json`, owner-only) and read only by the bundled script.
 - **Validated in code, not by prompt.** Every product is checked by the script and by your site before anything is written. Errors come back as structured JSON (`path`, `code`, `message`, `fix: "ai" | "user"`), so the agent fixes what it can and asks you about the rest.
 - **Drafts by default. Nothing is ever deleted.** Publishing requires your own words asking for it. There is no delete command.
@@ -19,18 +21,26 @@
 
 ## Requirements
 
-- Node.js 18 or newer.
+- Node.js 18 or newer (the agent installs it if missing).
 - A WordPress site you administer.
 - **Product upload** needs the PufferGo WordPress plugin, which provides the product type and the validation endpoints.
 - **SEO silo** works on WordPress with Rank Math for the SEO fields; importing existing keywords needs the PufferGo plugin.
 
 ## Install a skill
 
-Copy a folder from `skills/` into your agent's skills directory — for Claude Code, `~/.claude/skills/` (all projects) or `<project>/.claude/skills/`. Then ask in plain language:
+Send this to your AI agent (Claude Code, Codex, WorkBuddy, 豆包 or 千问 desktop in work mode, and most agents that support skills):
+
+```text
+Install this skill: https://github.com/puffergo/puffergo-wordpress-ai-agent/tree/main/skills/wordpress-bulk-product-upload
+```
+
+The agent downloads and installs it, and installs Node.js on first use if it is missing. Then ask in plain language:
 
 > Upload the photos in `~/Desktop/pg-500` as a new product: PG-500 Industrial 3D Printer, build volume 500×500×500 mm, MOQ 1 set, lead time 15–25 days. Save it as a draft.
 
 The first run opens WordPress in your browser; click **Approve** once and the site stays connected.
+
+The full walkthrough — connecting the site, reviewing drafts, product samples, trade-info fields and FAQ — is in the [guide](https://puffergo.com/docs/ai-product-upload/).
 
 ## CLI
 

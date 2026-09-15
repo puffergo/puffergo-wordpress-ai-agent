@@ -41,8 +41,8 @@ export interface ProductFile {
   id?: number;
   baseModified?: string;
   status?: 'draft' | 'publish';
-  /** Local only (never sent): the template this product follows, by name from `.puffergo/templates.json`. */
-  template?: string;
+  /** Local only (never sent): the sample this product follows, by name from `.puffergo/samples.json`. */
+  sample?: string;
   title: string;
   excerpt?: string;
   categories?: string[];

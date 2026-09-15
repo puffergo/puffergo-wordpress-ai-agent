@@ -161,4 +161,17 @@ describe('applyFrontmatterEdits', () => {
     const { ws: next } = applyFrontmatterEdits(ws2, new Map([[content.id, { fm }]]));
     expect(next.edges).toContainEqual({ from: content.id, to: sibling.id, type: 'internal-link' });
   });
+
+  it('resolves an internal link written with the note file name (the scanned path wins over the title)', () => {
+    const { ws, content } = buildWorkspace();
+    const sibling = createContent(content.siloNodeId, 'Sibling', 'post', { slug: 'sibling-slug' });
+    const ws2 = { ...ws, contents: [...ws.contents, sibling] };
+    const fm = `internalLinks: ["[[Sibling renamed]]"]\n`;
+    const scanned = new Map([
+      [content.id, { fm }],
+      [sibling.id, { fm: '', path: 'site/docs/Sibling renamed.md' }],
+    ]);
+    const { ws: next } = applyFrontmatterEdits(ws2, scanned);
+    expect(next.edges).toContainEqual({ from: content.id, to: sibling.id, type: 'internal-link' });
+  });
 });

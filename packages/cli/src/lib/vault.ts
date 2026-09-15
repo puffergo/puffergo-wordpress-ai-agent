@@ -15,6 +15,9 @@ import {
   contentDirSegments,
   contentFileBaseName,
   contentFileFallbackName,
+  buildNoteLinkIndex,
+  noteNamesFromScan,
+  formatWikilink,
   renderFrontmatter,
   splitFrontmatter,
   siloIdOf,
@@ -85,6 +88,7 @@ export async function writeContentFile(
  */
 export async function scaffoldVault(dir: string, ws: SiloWorkspace, purposes?: Map<string, string>): Promise<number> {
   const existing = await scanVault(dir);
+  const links = buildNoteLinkIndex(ws, noteNamesFromScan(existing));
   let files = 0;
   for (const c of ws.contents) {
     const outbound = ws.edges.filter(e => e.from === c.id);
@@ -92,7 +96,7 @@ export async function scaffoldVault(dir: string, ws: SiloWorkspace, purposes?: M
       .filter(e => e.type === 'internal-link')
       .map(e => ws.contents.find(x => x.id === e.to))
       .filter((x): x is ContentItem => !!x)
-      .map(x => `[[${x.slug ?? x.id}]]`);
+      .map(x => formatWikilink(links.nameFor(x.id) ?? x.slug ?? x.id));
     const external = outbound.filter(e => e.type === 'external-link').map(e => e.to);
     await writeContentFile(dir, ws, c, internalWikilinks, external, purposes?.get(c.id), existing.get(c.id)?.path);
     files++;

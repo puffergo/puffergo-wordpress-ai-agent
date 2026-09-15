@@ -1,7 +1,7 @@
 /**
- * Product templates: products the customer made (or approved) that new products should follow in
+ * Product samples: products the customer made (or approved) that new products should follow in
  * STRUCTURE — which trade fields the site shows, spec names and order, detail layouts. Stored as
- * name → product id in `.puffergo/templates.json`, per site; the content is fetched fresh every time, so
+ * name → product id in `.puffergo/samples.json`, per site; the content is fetched fresh every time, so
  * edits made in wp-admin take effect on the next run.
  */
 
@@ -13,36 +13,32 @@ import { walkImageRefs } from './imageRefs';
 import type { ProductFile, UnitValue } from './productTypes';
 import { getPath, setPath, isEmptyValue, optionalFactPaths, type SiteSchema } from './siteSchema';
 
-export interface TemplateEntry {
+export interface SampleEntry {
   id: number;
   title: string;
 }
-type TemplatesFile = Record<string, Record<string, TemplateEntry>>;
+type SamplesFile = Record<string, Record<string, SampleEntry>>;
 
-const templatesPath = (dir: string): string => join(dir, '.puffergo', 'templates.json');
+const samplesPath = (dir: string): string => join(dir, '.puffergo', 'samples.json');
 
-async function readAll(dir: string): Promise<TemplatesFile> {
-  if (!existsSync(templatesPath(dir))) return {};
+async function readAll(dir: string): Promise<SamplesFile> {
+  if (!existsSync(samplesPath(dir))) return {};
   try {
-    return JSON.parse(await readFile(templatesPath(dir), 'utf8')) as TemplatesFile;
+    return JSON.parse(await readFile(samplesPath(dir), 'utf8')) as SamplesFile;
   } catch {
     return {};
   }
 }
 
-export async function readTemplates(dir: string, siteUrl: string): Promise<Record<string, TemplateEntry>> {
+export async function readSamples(dir: string, siteUrl: string): Promise<Record<string, SampleEntry>> {
   return (await readAll(dir))[siteUrl] ?? {};
 }
 
-export async function writeTemplates(
-  dir: string,
-  siteUrl: string,
-  templates: Record<string, TemplateEntry>,
-): Promise<void> {
+export async function writeSamples(dir: string, siteUrl: string, samples: Record<string, SampleEntry>): Promise<void> {
   const all = await readAll(dir);
-  all[siteUrl] = templates;
+  all[siteUrl] = samples;
   await mkdir(join(dir, '.puffergo'), { recursive: true });
-  await writeFile(templatesPath(dir), JSON.stringify(all, null, 2) + '\n', 'utf8');
+  await writeFile(samplesPath(dir), JSON.stringify(all, null, 2) + '\n', 'utf8');
 }
 
 export class TargetError extends Error {
@@ -86,14 +82,11 @@ function maskUnitValue(v: UnitValue | undefined): unknown {
 }
 
 /**
- * The template as a structure reference: which fields it uses, units, spec names and order, section layouts
+ * The sample as a structure reference: which fields it uses, units, spec names and order, section layouts
  * and where images go. Values, spec values, every piece of text and images become placeholders, so nothing
- * of the template product itself can leak into a new one. Trade fields come from the site's schema.
+ * of the sample product itself can leak into a new one. Trade fields come from the site's schema.
  */
-export function templateReference(
-  remote: ProductFile,
-  schema: Pick<SiteSchema, 'tradeFields'>,
-): Record<string, unknown> {
+export function sampleReference(remote: ProductFile, schema: Pick<SiteSchema, 'tradeFields'>): Record<string, unknown> {
   const p: ProductFile = JSON.parse(JSON.stringify(remote));
   for (const k of ['id', 'key', 'baseModified', 'status'] as const) delete p[k];
   if (p.detail) delete p.detail.unmanagedHtml;
@@ -108,7 +101,7 @@ export function templateReference(
     setPath(out, f.path, f.kind === 'unitValue' ? maskUnitValue(v as UnitValue) : FROM_CUSTOMER);
   }
   if (p.specs) out.specs = p.specs.map(s => ({ key: s.key, value: FROM_CUSTOMER }));
-  // Any sentence of the template carries that product's own facts (sizes, uses, materials) — models copy
+  // Any sentence of the sample carries that product's own facts (sizes, uses, materials) — models copy
   // them even when told not to. Keep only where text goes; no length either, or models pad it with claims.
   const shape = (t: string | undefined) => (t?.trim() ? TEXT : t);
   p.title = shape(p.title)!;
@@ -124,7 +117,7 @@ export function templateReference(
       }
     }
   }
-  // Same rule as the check command's TemplateCtx, so what the AI is told matches what check enforces.
+  // Same rule as the check command's SampleCtx, so what the AI is told matches what check enforces.
   out.notUsed = optionalFactPaths(schema).filter(path => isEmptyValue(getPath(remote, path)));
   return out;
 }

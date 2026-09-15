@@ -38,7 +38,7 @@ coreKeywords:            # 恰好 1 个
 longTailKeywords:        # ≤ 4 个（核心+长尾 总数 ≤ 5）
   - "how do solar street lights work"
 internalLinks:           # 规划的内链目标(正文里也要以 [[wikilink]] 出现)
-  - "[[solar-street-light-guide-africa]]"
+  - "[[Solar Street Light Guide for Africa]]"   # 目标笔记的文件名
 externalLinks:           # 引用的站外权威源(只记录，人工确认)
   - "https://example.org/standard"
 status: draft            # draft | publish(发布权归人)
@@ -54,7 +54,7 @@ wp:                      # ⚠️ 运行时事实，系统所有(嵌套=Obsidian
 
 1. **字段归属**:`silo:` 和 `wp:` 归 Silo(嵌套=Obsidian 只读),**绝不修改**;`title/slug/seoTitle/seoDescription/coreKeywords/longTailKeywords/internalLinks/externalLinks` 可编辑;**正文完全归 agent**。
 2. **frontmatter 是内容字段的事实源**:一旦笔记存在,`push` 会先把上述可编辑字段从 frontmatter **读回** workspace 再推——所以在 Obsidian 里改 SEO/关键词会真正生效。改完 `silo push` 即可。
-3. **内链 = wikilink**:正文里用 `[[slug]]` 链到兄弟篇(Obsidian 原生图谱渲染)。**push 时由 body-codec 胶水层自动把 `[[slug]]` 解析成目标文章的真实 WP 永久链接** `<a href>`——所以线上是正常链接,不是中括号文本。目标还没推送时本次降级为纯文本,下次 push 自动补链。不要硬塞裸 URL 内链。
+3. **内链 = wikilink**:正文里用 `[[目标笔记的文件名|显示文字]]` 链到兄弟篇。**必须用文件名**:Obsidian 点击链接只按文件名找,不认 `aliases`,写 `[[slug]]` 点过去会新建一个空笔记。**push 时由 body-codec 胶水层自动把链接解析成目标文章的真实 WP 永久链接** `<a href>`——所以线上是正常链接,不是中括号文本。旧的 `[[slug]]` 写法 push 仍能解析,但 Obsidian 里点不通,应迁移。目标还没推送时本次降级为纯文本,下次 push 自动补链。不要硬塞裸 URL 内链。
 4. **图片 = 本地引用**:正文里用 `![alt](本地图.png)` 或 Obsidian 嵌入 `![[本地图.png]]`(图放笔记同目录或 vault 根)。**push 时自动上传到 WP 媒体库**,并把引用改写成线上 media 地址(笔记也改写,Obsidian 可预览;再次 push 不重复上传)。远程 URL / `data:` 引用原样保留。
 4. **SEO 约束**:seoTitle 30–60、seoDescription 120–160;coreKeywords 恰好 1 个、longTailKeywords ≤ 4(总数 ≤ 5);核心词进 seoTitle 和正文首段。
 5. **发布只经 CLI**:agent 不自己读 `silo.config.json`、不自己调 WP;发布一律 `silo push`(密码只由 CLI 碰)。

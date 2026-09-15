@@ -56,7 +56,7 @@ export function loadSiteSchema(c: AgentClient): Promise<SiteSchema> {
   return cache.get(c)!;
 }
 
-/** Facts a product may leave out on purpose (a template that doesn't use them): the trade fields + specs. */
+/** Facts a product may leave out on purpose (a sample that doesn't use them): the trade fields + specs. */
 export function optionalFactPaths(schema: Pick<SiteSchema, 'tradeFields'>): string[] {
   return [...schema.tradeFields.map(f => f.path), 'specs'];
 }

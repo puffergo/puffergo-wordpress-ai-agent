@@ -17,7 +17,7 @@
 |---|---|---|
 | `silo init --name "站点名" --url "http://site" [--tagline "定位"]` | 在当前目录建工作区(`.silo/workspace.json`) | ❌ |
 | `silo plan <plan.json>` | 应用 AI 出的计划:建关键词/节点/内容,按 silo 路径写出 `.md`(含 `purpose`);幂等(重跑不重复) | ❌ |
-| `silo push [--force]` | 把正文+SEO+分类推成 WP 草稿。顺带:内链 `[[slug]]`→真实永久链接、本地图片→上传 WP 媒体库、frontmatter 编辑读回、回写 `wp.postId/link` | ❌ |
+| `silo push [--force]` | 把正文+SEO+分类推成 WP 草稿。顺带:内链 `[[笔记文件名]]`→真实永久链接、本地图片→上传 WP 媒体库、frontmatter 编辑读回、回写 `wp.postId/link` | ❌ |
 | `silo pull [--types post,page]` | 从 WP 拉回内容,更新工作区并刷新 `.md` | ❌ |
 | `silo health` | 健康检查(孤岛页/自噬/缺 SEO/关键词超限/标题描述长度…) | ❌ |
 | `silo status` | 概览:节点/内容/关键词/待推送/健康问题数 | ❌ |

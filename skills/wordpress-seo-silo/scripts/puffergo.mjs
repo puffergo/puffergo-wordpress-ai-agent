@@ -27927,7 +27927,181 @@ var lexer = _Lexer.lex;
 
 // ../silo-core/lib/content/body-codec.ts
 var import_turndown = __toESM(require_turndown_cjs(), 1);
+
+// ../silo-core/lib/vault/frontmatter.ts
+var import_yaml = __toESM(require_dist(), 1);
+var slugify = (s) => s.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "untitled";
+function contentDirSegments(ws, content) {
+  return getNodePath(ws, content.siloNodeId).map((n) => slugify(n.term));
+}
+var FILENAME_CHAR_MAP = {
+  "\\": "\uFF3C",
+  "/": "\uFF0F",
+  ":": "\uFF1A",
+  "*": "\uFF0A",
+  "?": "\uFF1F",
+  '"': "\uFF02",
+  "<": "\uFF1C",
+  ">": "\uFF1E",
+  "|": "\uFF5C",
+  "#": "\uFF03",
+  "^": "\uFF3E",
+  "[": "\uFF3B",
+  "]": "\uFF3D"
+};
+var decodeEntities = (s) => s.replace(/&#(\d+);/g, (_m, n) => String.fromCodePoint(Number(n))).replace(/&#x([0-9a-f]+);/gi, (_m, n) => String.fromCodePoint(parseInt(n, 16))).replace(/&nbsp;/g, " ").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+function titleToFileName(title) {
+  return decodeEntities(title ?? "").replace(/[\\/:*?"<>|#^[\]]/g, (ch) => FILENAME_CHAR_MAP[ch] ?? "-").replace(/[\x00-\x1f\u200B-\u200D\uFEFF]/g, "").replace(/\s+/g, " ").trim().replace(/^\.+/, "").slice(0, 120).trim();
+}
+function contentFileFallbackName(content) {
+  return content.slug ? slugify(content.slug) : content.id;
+}
+function contentFileBaseName(content) {
+  return titleToFileName(content.title) || contentFileFallbackName(content);
+}
+var esc = (s) => String(s ?? "").replace(/"/g, '\\"');
+var yamlList = (items) => items.length ? "\n" + items.map((i) => `  - "${esc(i)}"`).join("\n") : " []";
+function renderFrontmatter(ws, content, internalLinks, externalLinks, purpose = "") {
+  const nodePath = getNodePath(ws, content.siloNodeId).map((n) => n.term).join(" / ");
+  const s = content.seo;
+  return [
+    "---",
+    "silo:",
+    // system-owned, read-only in Obsidian (nested)
+    `  id: ${content.id}`,
+    `  node: "${esc(nodePath)}"`,
+    `  postType: ${content.postType}`,
+    `title: "${esc(content.title)}"`,
+    content.slug ? `slug: ${slugify(content.slug)}` : "slug:",
+    // Lets Obsidian resolve `[[slug]]` / `[[slug|text]]` even though the file is named after the title.
+    ...content.slug ? ["aliases:", `  - "${esc(slugify(content.slug))}"`] : [],
+    `purpose: "${esc(purpose)}"`,
+    // 这篇的目的（对齐 Step3），可编辑，不推送到 WP
+    `seoTitle: "${esc(s.title)}"`,
+    `seoDescription: "${esc(s.description)}"`,
+    `coreKeywords:${yamlList(s.coreKeywords)}`,
+    `longTailKeywords:${yamlList(s.longTailKeywords)}`,
+    `internalLinks:${yamlList(internalLinks)}`,
+    `externalLinks:${yamlList(externalLinks)}`,
+    `status: ${content.wpStatus ?? "draft"}`,
+    "wp:",
+    // system-owned, read-only in Obsidian (nested)
+    `  postId: ${content.wpPostId ?? "null"}`,
+    `  link: ${content.wpLink ? `"${esc(content.wpLink)}"` : "null"}`,
+    "---",
+    ""
+  ].join("\n");
+}
+function parseFrontmatterEdits(fm) {
+  let doc;
+  try {
+    doc = (0, import_yaml.parse)(fm);
+  } catch {
+    return null;
+  }
+  if (!doc || typeof doc !== "object") return null;
+  const d = doc;
+  const str = (v) => typeof v === "string" ? v : v == null ? void 0 : String(v);
+  const list2 = (v) => Array.isArray(v) ? v.map((x) => String(x).trim()).filter(Boolean) : void 0;
+  return {
+    title: str(d.title),
+    slug: str(d.slug),
+    purpose: str(d.purpose),
+    seoTitle: str(d.seoTitle),
+    seoDescription: str(d.seoDescription),
+    coreKeywords: list2(d.coreKeywords),
+    longTailKeywords: list2(d.longTailKeywords),
+    internalLinks: list2(d.internalLinks),
+    externalLinks: list2(d.externalLinks)
+  };
+}
+function wikilinkTarget(raw) {
+  return raw.replace(/^\[\[|\]\]$/g, "").split(/[#|]/)[0].trim();
+}
+function splitFrontmatter(raw) {
+  const m = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+  if (!m) return { fm: "", body: raw };
+  return { fm: m[1], body: m[2] };
+}
+function siloIdOf(fm) {
+  const m = fm.match(/\n {2}id:\s*(c_\w+)/) ?? fm.match(/^ {2}id:\s*(c_\w+)/);
+  return m ? m[1] : null;
+}
 var norm = (s) => s.trim().toLowerCase();
+function applyFrontmatterEdits(ws, scanned) {
+  const links = buildNoteLinkIndex(ws, noteNamesFromScan(scanned));
+  let next = ws;
+  let changed = 0;
+  for (const c of ws.contents) {
+    const scan = scanned.get(c.id);
+    if (!scan) continue;
+    const e = parseFrontmatterEdits(scan.fm);
+    if (!e) continue;
+    let touched = false;
+    const seo = { ...c.seo };
+    if (e.seoTitle !== void 0 && e.seoTitle !== seo.title) seo.title = e.seoTitle, touched = true;
+    if (e.seoDescription !== void 0 && e.seoDescription !== seo.description)
+      seo.description = e.seoDescription, touched = true;
+    const eqList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+    if (e.coreKeywords && !eqList(e.coreKeywords, seo.coreKeywords))
+      seo.coreKeywords = e.coreKeywords, touched = true;
+    if (e.longTailKeywords && !eqList(e.longTailKeywords, seo.longTailKeywords))
+      seo.longTailKeywords = e.longTailKeywords, touched = true;
+    const patch = {};
+    if (touched) patch.seo = seo;
+    if (e.title !== void 0 && e.title !== c.title) patch.title = e.title, touched = true;
+    if (e.slug !== void 0 && norm(e.slug) !== norm(c.slug ?? "")) patch.slug = e.slug, touched = true;
+    if (Object.keys(patch).length) next = updateContent(next, c.id, patch);
+    if (e.internalLinks || e.externalLinks) {
+      const desiredInternal = (e.internalLinks ?? []).map((raw) => links.idFor(wikilinkTarget(raw))).filter((x) => !!x);
+      const desiredExternal = e.externalLinks ?? [];
+      const curInternal = next.edges.filter((g) => g.from === c.id && g.type === "internal-link").map((g) => g.to);
+      const curExternal = next.edges.filter((g) => g.from === c.id && g.type === "external-link").map((g) => g.to);
+      if (!eqList(desiredInternal, curInternal) || !eqList(desiredExternal, curExternal)) {
+        next = setContentLinks(next, c.id, desiredInternal, desiredExternal);
+        touched = true;
+      }
+    }
+    if (touched) changed++;
+  }
+  return { ws: next, changed };
+}
+
+// ../silo-core/lib/vault/note-links.ts
+var norm2 = (s) => s.trim().toLowerCase();
+function noteNameFromPath(path) {
+  return (path.split(/[\\/]/).pop() ?? path).replace(/\.md$/i, "");
+}
+function noteNamesFromScan(scanned) {
+  const out = /* @__PURE__ */ new Map();
+  for (const [id, s] of scanned) if (s.path) out.set(id, noteNameFromPath(s.path));
+  return out;
+}
+function buildNoteLinkIndex(ws, noteNames) {
+  const nameById = /* @__PURE__ */ new Map();
+  for (const c of ws.contents) nameById.set(c.id, noteNames?.get(c.id) ?? contentFileBaseName(c));
+  const byName = /* @__PURE__ */ new Map();
+  const bySlug = /* @__PURE__ */ new Map();
+  const byId = /* @__PURE__ */ new Map();
+  for (const c of ws.contents) {
+    const name = nameById.get(c.id);
+    if (name && !byName.has(norm2(name))) byName.set(norm2(name), c.id);
+    if (c.slug && !bySlug.has(norm2(c.slug))) bySlug.set(norm2(c.slug), c.id);
+    byId.set(norm2(c.id), c.id);
+  }
+  return {
+    idFor: (target) => {
+      const k = norm2(target);
+      return byName.get(k) ?? bySlug.get(k) ?? byId.get(k);
+    },
+    nameFor: (id) => nameById.get(id)
+  };
+}
+function formatWikilink(name, text) {
+  return text && text !== name ? `[[${name}|${text}]]` : `[[${name}]]`;
+}
+
+// ../silo-core/lib/content/body-codec.ts
 var isLocalAssetRef = (ref) => !/^(https?:)?\/\//i.test(ref.trim()) && !/^data:/i.test(ref.trim());
 var MD_IMAGE_RE = /(!\[[^\]]*\]\(\s*)([^)\s]+)((?:\s+"[^"]*")?\s*\))/g;
 var EMBED_IMAGE_RE = /!\[\[([^\]|#]+)(?:[#|][^\]]*)?\]\]/g;
@@ -27973,18 +28147,25 @@ function rootRelativePermalink(url) {
     return url;
   }
 }
-function buildLinkResolver(ws) {
-  const permalinkBySlug = /* @__PURE__ */ new Map();
-  const slugByUrl = /* @__PURE__ */ new Map();
+function buildLinkResolver(ws, noteNames) {
+  const index = buildNoteLinkIndex(ws, noteNames);
+  const wpLinkById = /* @__PURE__ */ new Map();
+  const idByUrl = /* @__PURE__ */ new Map();
   for (const c of ws.contents) {
-    if (c.slug && c.wpLink) {
-      permalinkBySlug.set(norm(c.slug), c.wpLink);
-      slugByUrl.set(c.wpLink, c.slug);
+    if (c.wpLink) {
+      wpLinkById.set(c.id, c.wpLink);
+      idByUrl.set(c.wpLink, c.id);
     }
   }
   return {
-    permalinkForSlug: (slug) => permalinkBySlug.get(norm(slug)),
-    slugForUrl: (url) => slugByUrl.get(url)
+    permalinkFor: (target) => {
+      const id = index.idFor(target);
+      return id ? wpLinkById.get(id) : void 0;
+    },
+    targetForUrl: (url) => {
+      const id = idByUrl.get(url);
+      return id ? index.nameFor(id) : void 0;
+    }
   };
 }
 var WIKILINK_RE = /\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|([^\]]+))?\]\]/g;
@@ -27995,7 +28176,7 @@ function markdownToWpHtml(md, resolver) {
   const withLinks = trimmed.replace(WIKILINK_RE, (_m, rawTarget, alias) => {
     const target = rawTarget.trim();
     const text = (alias ?? target).trim();
-    const permalink = resolver.permalinkForSlug(target);
+    const permalink = resolver.permalinkFor(target);
     if (!permalink) {
       unresolved.push(target);
       return text;
@@ -28011,14 +28192,14 @@ function wpHtmlToMarkdown(html2, resolveInternalLink) {
   const trimmed = html2.trim();
   if (!trimmed) return "";
   const withMarkedLinks = trimmed.replace(/(<a\s[^>]*href=["'])([^"']+)(["'][^>]*>)/gi, (whole, pre, href, post) => {
-    const slug = resolveInternalLink(href);
-    return slug ? `${pre}wikilink:${encodeURIComponent(slug)}${post}` : whole;
+    const name = resolveInternalLink(href);
+    return name ? `${pre}wikilink:${encodeURIComponent(name)}${post}` : whole;
   });
   const md = turndown.turndown(withMarkedLinks);
-  return md.replace(/\[([^\]]*)\]\(wikilink:([^)]+)\)/g, (_m, text, encodedSlug) => {
-    const slug = decodeURIComponent(encodedSlug);
-    return text && text !== slug ? `[[${slug}|${text}]]` : `[[${slug}]]`;
-  });
+  return md.replace(
+    /\[([^\]]*)\]\(wikilink:([^)]+)\)/g,
+    (_m, text, encodedName) => formatWikilink(decodeURIComponent(encodedName), text)
+  );
 }
 
 // ../silo-core/lib/sync/sync-content.ts
@@ -28311,16 +28492,15 @@ async function importFromWp(client2, ws, postTypes, opts = {}) {
     }
   };
   const resolveInternalTarget = (url) => isFallbackPermalink(url, siteUrl) ? byId(url) : byUrl.get(canon(url));
-  const contentById = new Map(contents.map((c) => [c.id, c]));
-  const resolveWikilinkSlug = (url) => {
+  const noteLinks = buildNoteLinkIndex({ ...ws, contents }, opts.noteNames);
+  const resolveWikilinkName = (url) => {
     const targetId = resolveInternalTarget(url);
-    if (!targetId) return void 0;
-    return contentById.get(targetId)?.slug || void 0;
+    return targetId ? noteLinks.nameFor(targetId) : void 0;
   };
   const bodies = /* @__PURE__ */ new Map();
   for (const { item, post } of imported) {
     const bodyHtml = post.content?.rendered ?? "";
-    if (bodyHtml) bodies.set(item.id, wpHtmlToMarkdown(bodyHtml, resolveWikilinkSlug));
+    if (bodyHtml) bodies.set(item.id, wpHtmlToMarkdown(bodyHtml, resolveWikilinkName));
     const html2 = item.id === homeDoc?.item.id && homeHtml || bodyHtml;
     const { internal, external } = parseLinks(html2, siteUrl, post.link);
     const internalUnresolved = [];
@@ -28399,146 +28579,6 @@ async function importFromWp(client2, ws, postTypes, opts = {}) {
     bodies,
     seoProvider
   };
-}
-
-// ../silo-core/lib/vault/frontmatter.ts
-var import_yaml = __toESM(require_dist(), 1);
-var slugify = (s) => s.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "untitled";
-function contentDirSegments(ws, content) {
-  return getNodePath(ws, content.siloNodeId).map((n) => slugify(n.term));
-}
-var FILENAME_CHAR_MAP = {
-  "\\": "\uFF3C",
-  "/": "\uFF0F",
-  ":": "\uFF1A",
-  "*": "\uFF0A",
-  "?": "\uFF1F",
-  '"': "\uFF02",
-  "<": "\uFF1C",
-  ">": "\uFF1E",
-  "|": "\uFF5C",
-  "#": "\uFF03",
-  "^": "\uFF3E",
-  "[": "\uFF3B",
-  "]": "\uFF3D"
-};
-var decodeEntities = (s) => s.replace(/&#(\d+);/g, (_m, n) => String.fromCodePoint(Number(n))).replace(/&#x([0-9a-f]+);/gi, (_m, n) => String.fromCodePoint(parseInt(n, 16))).replace(/&nbsp;/g, " ").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
-function titleToFileName(title) {
-  return decodeEntities(title ?? "").replace(/[\\/:*?"<>|#^[\]]/g, (ch) => FILENAME_CHAR_MAP[ch] ?? "-").replace(/[\x00-\x1f\u200B-\u200D\uFEFF]/g, "").replace(/\s+/g, " ").trim().replace(/^\.+/, "").slice(0, 120).trim();
-}
-function contentFileFallbackName(content) {
-  return content.slug ? slugify(content.slug) : content.id;
-}
-function contentFileBaseName(content) {
-  return titleToFileName(content.title) || contentFileFallbackName(content);
-}
-var esc = (s) => String(s ?? "").replace(/"/g, '\\"');
-var yamlList = (items) => items.length ? "\n" + items.map((i) => `  - "${esc(i)}"`).join("\n") : " []";
-function renderFrontmatter(ws, content, internalLinks, externalLinks, purpose = "") {
-  const nodePath = getNodePath(ws, content.siloNodeId).map((n) => n.term).join(" / ");
-  const s = content.seo;
-  return [
-    "---",
-    "silo:",
-    // system-owned, read-only in Obsidian (nested)
-    `  id: ${content.id}`,
-    `  node: "${esc(nodePath)}"`,
-    `  postType: ${content.postType}`,
-    `title: "${esc(content.title)}"`,
-    content.slug ? `slug: ${slugify(content.slug)}` : "slug:",
-    // Lets Obsidian resolve `[[slug]]` / `[[slug|text]]` even though the file is named after the title.
-    ...content.slug ? ["aliases:", `  - "${esc(slugify(content.slug))}"`] : [],
-    `purpose: "${esc(purpose)}"`,
-    // 这篇的目的（对齐 Step3），可编辑，不推送到 WP
-    `seoTitle: "${esc(s.title)}"`,
-    `seoDescription: "${esc(s.description)}"`,
-    `coreKeywords:${yamlList(s.coreKeywords)}`,
-    `longTailKeywords:${yamlList(s.longTailKeywords)}`,
-    `internalLinks:${yamlList(internalLinks)}`,
-    `externalLinks:${yamlList(externalLinks)}`,
-    `status: ${content.wpStatus ?? "draft"}`,
-    "wp:",
-    // system-owned, read-only in Obsidian (nested)
-    `  postId: ${content.wpPostId ?? "null"}`,
-    `  link: ${content.wpLink ? `"${esc(content.wpLink)}"` : "null"}`,
-    "---",
-    ""
-  ].join("\n");
-}
-function parseFrontmatterEdits(fm) {
-  let doc;
-  try {
-    doc = (0, import_yaml.parse)(fm);
-  } catch {
-    return null;
-  }
-  if (!doc || typeof doc !== "object") return null;
-  const d = doc;
-  const str = (v) => typeof v === "string" ? v : v == null ? void 0 : String(v);
-  const list2 = (v) => Array.isArray(v) ? v.map((x) => String(x).trim()).filter(Boolean) : void 0;
-  return {
-    title: str(d.title),
-    slug: str(d.slug),
-    purpose: str(d.purpose),
-    seoTitle: str(d.seoTitle),
-    seoDescription: str(d.seoDescription),
-    coreKeywords: list2(d.coreKeywords),
-    longTailKeywords: list2(d.longTailKeywords),
-    internalLinks: list2(d.internalLinks),
-    externalLinks: list2(d.externalLinks)
-  };
-}
-function wikilinkTarget(raw) {
-  return raw.replace(/^\[\[|\]\]$/g, "").split(/[#|]/)[0].trim();
-}
-function splitFrontmatter(raw) {
-  const m = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
-  if (!m) return { fm: "", body: raw };
-  return { fm: m[1], body: m[2] };
-}
-function siloIdOf(fm) {
-  const m = fm.match(/\n {2}id:\s*(c_\w+)/) ?? fm.match(/^ {2}id:\s*(c_\w+)/);
-  return m ? m[1] : null;
-}
-var norm2 = (s) => s.trim().toLowerCase();
-function applyFrontmatterEdits(ws, scanned) {
-  const slugToId = /* @__PURE__ */ new Map();
-  for (const c of ws.contents) if (c.slug) slugToId.set(norm2(c.slug), c.id);
-  let next = ws;
-  let changed = 0;
-  for (const c of ws.contents) {
-    const scan = scanned.get(c.id);
-    if (!scan) continue;
-    const e = parseFrontmatterEdits(scan.fm);
-    if (!e) continue;
-    let touched = false;
-    const seo = { ...c.seo };
-    if (e.seoTitle !== void 0 && e.seoTitle !== seo.title) seo.title = e.seoTitle, touched = true;
-    if (e.seoDescription !== void 0 && e.seoDescription !== seo.description)
-      seo.description = e.seoDescription, touched = true;
-    const eqList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
-    if (e.coreKeywords && !eqList(e.coreKeywords, seo.coreKeywords))
-      seo.coreKeywords = e.coreKeywords, touched = true;
-    if (e.longTailKeywords && !eqList(e.longTailKeywords, seo.longTailKeywords))
-      seo.longTailKeywords = e.longTailKeywords, touched = true;
-    const patch = {};
-    if (touched) patch.seo = seo;
-    if (e.title !== void 0 && e.title !== c.title) patch.title = e.title, touched = true;
-    if (e.slug !== void 0 && norm2(e.slug) !== norm2(c.slug ?? "")) patch.slug = e.slug, touched = true;
-    if (Object.keys(patch).length) next = updateContent(next, c.id, patch);
-    if (e.internalLinks || e.externalLinks) {
-      const desiredInternal = (e.internalLinks ?? []).map((raw) => slugToId.get(norm2(wikilinkTarget(raw)))).filter((x) => !!x);
-      const desiredExternal = e.externalLinks ?? [];
-      const curInternal = next.edges.filter((g) => g.from === c.id && g.type === "internal-link").map((g) => g.to);
-      const curExternal = next.edges.filter((g) => g.from === c.id && g.type === "external-link").map((g) => g.to);
-      if (!eqList(desiredInternal, curInternal) || !eqList(desiredExternal, curExternal)) {
-        next = setContentLinks(next, c.id, desiredInternal, desiredExternal);
-        touched = true;
-      }
-    }
-    if (touched) changed++;
-  }
-  return { ws: next, changed };
 }
 
 // src/index.ts
@@ -28841,10 +28881,11 @@ async function writeContentFile(dir2, ws, content, internalLinks, externalLinks,
 }
 async function scaffoldVault(dir2, ws, purposes) {
   const existing = await scanVault(dir2);
+  const links = buildNoteLinkIndex(ws, noteNamesFromScan(existing));
   let files = 0;
   for (const c of ws.contents) {
     const outbound = ws.edges.filter((e) => e.from === c.id);
-    const internalWikilinks = outbound.filter((e) => e.type === "internal-link").map((e) => ws.contents.find((x) => x.id === e.to)).filter((x) => !!x).map((x) => `[[${x.slug ?? x.id}]]`);
+    const internalWikilinks = outbound.filter((e) => e.type === "internal-link").map((e) => ws.contents.find((x) => x.id === e.to)).filter((x) => !!x).map((x) => formatWikilink(links.nameFor(x.id) ?? x.slug ?? x.id));
     const external = outbound.filter((e) => e.type === "external-link").map((e) => e.to);
     await writeContentFile(dir2, ws, c, internalWikilinks, external, purposes?.get(c.id), existing.get(c.id)?.path);
     files++;
@@ -29386,7 +29427,7 @@ async function resolveUpload(client2, cache2, absPath) {
   return { mediaId: id, sha256, reused: false };
 }
 
-// src/lib/templates.ts
+// src/lib/samples.ts
 import { readFile as readFile9, writeFile as writeFile6, mkdir as mkdir6 } from "node:fs/promises";
 import { existsSync as existsSync8 } from "node:fs";
 import { join as join6 } from "node:path";
@@ -29444,24 +29485,24 @@ function isEmptyValue(v) {
   return false;
 }
 
-// src/lib/templates.ts
-var templatesPath = (dir2) => join6(dir2, ".puffergo", "templates.json");
+// src/lib/samples.ts
+var samplesPath = (dir2) => join6(dir2, ".puffergo", "samples.json");
 async function readAll(dir2) {
-  if (!existsSync8(templatesPath(dir2))) return {};
+  if (!existsSync8(samplesPath(dir2))) return {};
   try {
-    return JSON.parse(await readFile9(templatesPath(dir2), "utf8"));
+    return JSON.parse(await readFile9(samplesPath(dir2), "utf8"));
   } catch {
     return {};
   }
 }
-async function readTemplates(dir2, siteUrl) {
+async function readSamples(dir2, siteUrl) {
   return (await readAll(dir2))[siteUrl] ?? {};
 }
-async function writeTemplates(dir2, siteUrl, templates) {
+async function writeSamples(dir2, siteUrl, samples) {
   const all = await readAll(dir2);
-  all[siteUrl] = templates;
+  all[siteUrl] = samples;
   await mkdir6(join6(dir2, ".puffergo"), { recursive: true });
-  await writeFile6(templatesPath(dir2), JSON.stringify(all, null, 2) + "\n", "utf8");
+  await writeFile6(samplesPath(dir2), JSON.stringify(all, null, 2) + "\n", "utf8");
 }
 var TargetError = class extends Error {
   constructor(code, message) {
@@ -29496,7 +29537,7 @@ function maskUnitValue(v) {
   if (v.unit) out.unit = v.unit;
   return out;
 }
-function templateReference(remote, schema) {
+function sampleReference(remote, schema) {
   const p = JSON.parse(JSON.stringify(remote));
   for (const k of ["id", "key", "baseModified", "status"]) delete p[k];
   if (p.detail) delete p.detail.unmanagedHtml;
@@ -29547,14 +29588,11 @@ async function cmdSchema(ctx) {
   try {
     const c = await client(ctx);
     const schema = await loadSiteSchema(c);
-    const templates = await readTemplates(ctx.dir, c.siteUrl);
+    const samples = await readSamples(ctx.dir, c.siteUrl);
     return {
       ok: true,
       ...schema,
-      templates: Object.entries(templates).map(([name, t]) => ({ name, id: t.id, title: t.title })),
-      ...Object.keys(templates).length ? {
-        templatesNote: 'This site has product templates. Pick one per product, read it with `products template show <name>`, and set "template" in the product file ("" if none fits).'
-      } : {}
+      samples: Object.entries(samples).map(([name, t]) => ({ name, id: t.id, title: t.title }))
     };
   } catch (e) {
     const siteErr = siteErrorOutput(e);
@@ -29586,26 +29624,26 @@ function stripFileRefsForValidate(product) {
     }
   }
   if (clone.detail) delete clone.detail.unmanagedHtml;
-  delete clone.template;
+  delete clone.sample;
   return { clone, strippedPaths };
 }
 function filterStrippedErrors(list2, strippedPaths) {
   return list2.filter((e) => !strippedPaths.has(e.path));
 }
-var TemplateCtx = class _TemplateCtx {
-  constructor(c, templates, factPaths) {
+var SampleCtx = class _SampleCtx {
+  constructor(c, samples, factPaths) {
     this.c = c;
-    this.templates = templates;
+    this.samples = samples;
     this.factPaths = factPaths;
   }
   notUsed = /* @__PURE__ */ new Map();
   static async load(c, dir2) {
     const schema = await loadSiteSchema(c);
-    return new _TemplateCtx(c, await readTemplates(dir2, c.siteUrl), optionalFactPaths(schema));
+    return new _SampleCtx(c, await readSamples(dir2, c.siteUrl), optionalFactPaths(schema));
   }
-  /** Fields the named template doesn't use; null when no such template is saved. */
+  /** Fields the named sample doesn't use; null when no such sample is saved. */
   async fieldsNotUsed(name) {
-    const entry = this.templates[name];
+    const entry = this.samples[name];
     if (!entry) return null;
     if (!this.notUsed.has(name)) {
       const remote = await this.c.getProduct(entry.id);
@@ -29614,30 +29652,17 @@ var TemplateCtx = class _TemplateCtx {
     return this.notUsed.get(name);
   }
 };
-async function applyTemplate(product, tpl, warnings) {
-  const names = Object.keys(tpl.templates);
-  if (product.template === void 0 && names.length) {
-    return {
-      errors: [
-        {
-          path: `${identOf(product)}.template`,
-          code: "template_required",
-          message: `This site has product templates: ${names.join(", ")}. Read the one this product belongs to (\`products template show <name>\`), follow its structure, and set "template" to its name \u2014 or set "template": "" if none fits.`,
-          fix: "ai"
-        }
-      ],
-      warnings
-    };
-  }
-  if (!product.template) return { errors: [], warnings };
-  const notUsed = await tpl.fieldsNotUsed(product.template);
+async function applySample(product, tpl, warnings) {
+  const names = Object.keys(tpl.samples);
+  if (!product.sample) return { errors: [], warnings };
+  const notUsed = await tpl.fieldsNotUsed(product.sample);
   if (!notUsed) {
     return {
       errors: [
         {
-          path: `${identOf(product)}.template`,
-          code: "unknown_template",
-          message: `No template named "${product.template}". Saved templates: ${names.length ? names.join(", ") : "none"} (see \`products template list\`).`,
+          path: `${identOf(product)}.sample`,
+          code: "unknown_sample",
+          message: `No sample named "${product.sample}". Saved samples: ${names.length ? names.join(", ") : "none"} (see \`products sample list\`).`,
           fix: "ai"
         }
       ],
@@ -29685,12 +29710,12 @@ async function checkOne(c, loaded, baseDir, tpl) {
       { path: identOf(product), code: "error", message: e instanceof Error ? e.message : String(e), fix: "ai" }
     ];
   }
-  const templated = await applyTemplate(product, tpl, [...local.warnings, ...serverWarnings]);
+  const sampled = await applySample(product, tpl, [...local.warnings, ...serverWarnings]);
   return {
     key: product.key ?? null,
     id: product.id ?? null,
-    errors: [...local.errors, ...serverErrors, ...templated.errors],
-    warnings: templated.warnings
+    errors: [...local.errors, ...serverErrors, ...sampled.errors],
+    warnings: sampled.warnings
   };
 }
 async function cmdCheck(ctx) {
@@ -29699,7 +29724,7 @@ async function cmdCheck(ctx) {
   if (!loaded.length) return { ok: true, results: [] };
   try {
     const c = await client(ctx);
-    const tpl = await TemplateCtx.load(c, ctx.dir);
+    const tpl = await SampleCtx.load(c, ctx.dir);
     const results = [];
     for (const item of loaded) results.push(await checkOne(c, item, ctx.dir, tpl));
     const ok = results.every((r) => r.errors.length === 0);
@@ -29762,7 +29787,7 @@ function readbackMismatches(local, remote) {
 function toWirePayload(product) {
   const clone = JSON.parse(JSON.stringify(product));
   if (clone.detail) delete clone.detail.unmanagedHtml;
-  delete clone.template;
+  delete clone.sample;
   for (const { ref } of walkImageRefs(clone)) {
     delete ref.file;
   }
@@ -29902,7 +29927,7 @@ async function cmdPush(ctx, allowPublish = false) {
   try {
     const c = await client(ctx);
     const cache2 = await readUploadsCache(ctx.dir, c.siteUrl);
-    const tpl = await TemplateCtx.load(c, ctx.dir);
+    const tpl = await SampleCtx.load(c, ctx.dir);
     const results = [];
     for (const item of loaded) {
       results.push(await pushOne(c, item, ctx, cache2, allowPublish, tpl));
@@ -29936,8 +29961,8 @@ async function cmdPull(ctx) {
     const existing = await loadProducts(ctx.dir);
     let key = remote.key;
     if (!key) key = deriveKeyFromTitle(remote.title, new Set(existing.map((p) => p.fileKey)));
-    const template = existing.find((p) => p.fileKey === key)?.product.template;
-    const product = { ...remote, key, ...template ? { template } : {} };
+    const sample = existing.find((p) => p.fileKey === key)?.product.sample;
+    const product = { ...remote, key, ...sample ? { sample } : {} };
     await writeProduct(ctx.dir, key, product);
     if (product.detail?.unmanagedHtml) {
       process.stderr.write(
@@ -29950,7 +29975,7 @@ async function cmdPull(ctx) {
       key,
       id,
       path: `products/${key}.json`,
-      hint: "pull is for editing THIS product. If the customer wants new products to look like it, run `products template set <type name> <this link or id>` instead."
+      hint: "pull is for editing THIS product. If the customer wants new products to look like it, run `products sample set <type name> <this link or id>` instead."
     };
   } catch (e) {
     const siteErr = siteErrorOutput(e);
@@ -29994,49 +30019,49 @@ async function cmdPublish(ctx) {
   }
   return cmdPush({ ...ctx, flags: new Map([...ctx.flags, ["only", keys.join(",")]]) }, true);
 }
-async function cmdTemplate(ctx) {
+async function cmdSample(ctx) {
   const [sub, name, target] = ctx.positional;
-  const usage = "usage: puffergo products template <list | set <name> <key|id|link> | show <name> | remove <name>>";
+  const usage = "usage: puffergo products sample <list | set <name> <key|id|link> | show <name> | remove <name>>";
   try {
     const c = await client(ctx);
-    const templates = await readTemplates(ctx.dir, c.siteUrl);
+    const samples = await readSamples(ctx.dir, c.siteUrl);
     const missing = () => ({
       ok: false,
-      code: "unknown_template",
-      message: `No template named "${name}". Saved: ${Object.keys(templates).join(", ") || "none"}.`
+      code: "unknown_sample",
+      message: `No sample named "${name}". Saved: ${Object.keys(samples).join(", ") || "none"}.`
     });
     switch (sub) {
       case "list":
         return {
           ok: true,
-          templates: Object.entries(templates).map(([n, t]) => ({ name: n, id: t.id, title: t.title }))
+          samples: Object.entries(samples).map(([n, t]) => ({ name: n, id: t.id, title: t.title }))
         };
       case "set": {
         if (!name || !target) return { ok: false, code: "usage", message: usage };
         const id = await resolveProductId(c, target);
         const remote = await c.getProduct(id);
-        templates[name] = { id, title: remote.title };
-        await writeTemplates(ctx.dir, c.siteUrl, templates);
+        samples[name] = { id, title: remote.title };
+        await writeSamples(ctx.dir, c.siteUrl, samples);
         return { ok: true, name, id, title: remote.title };
       }
       case "show": {
         if (!name) return { ok: false, code: "usage", message: usage };
-        const entry = templates[name];
+        const entry = samples[name];
         if (!entry) return missing();
         const remote = await c.getProduct(entry.id);
         return {
           ok: true,
           name,
           id: entry.id,
-          note: `Structure reference only. Follow which fields it uses (notUsed = the site does not show these: do not write them and do not ask), its units, spec names and order, section layouts, image placement and text lengths. Write every text from the customer's facts; drop a section the customer gave nothing for. Set "template": "` + name + '" in each product file that follows it.',
-          reference: templateReference(remote, await loadSiteSchema(c))
+          note: `Structure reference only. Follow which fields it uses (notUsed = the site does not show these: do not write them and do not ask), its units, spec names and order, section layouts, image placement and text lengths. Write every text from the customer's facts; drop a section the customer gave nothing for. Set "sample": "` + name + '" in each product file that follows it.',
+          reference: sampleReference(remote, await loadSiteSchema(c))
         };
       }
       case "remove": {
         if (!name) return { ok: false, code: "usage", message: usage };
-        if (!templates[name]) return missing();
-        delete templates[name];
-        await writeTemplates(ctx.dir, c.siteUrl, templates);
+        if (!samples[name]) return missing();
+        delete samples[name];
+        await writeSamples(ctx.dir, c.siteUrl, samples);
         return { ok: true, removed: name };
       }
       default:
@@ -30234,12 +30259,13 @@ async function cmdPush2() {
   }
   if (uploaded) log(`\u2B06 \u4E0A\u4F20\u56FE\u7247 ${uploaded} \u5F20\u5E76\u6539\u5199\u4E3A\u7EBF\u4E0A\u5730\u5740`);
   const bodyOf = (id) => resolvedBody.get(id) ?? "";
+  const noteNames = noteNamesFromScan(bodies);
   let ok = 0;
   let conflict = 0;
   let failed = 0;
   const needsRelink = /* @__PURE__ */ new Set();
   for (const item of ws.contents) {
-    const { html: html2, unresolved } = markdownToWpHtml(bodyOf(item.id), buildLinkResolver(ws));
+    const { html: html2, unresolved } = markdownToWpHtml(bodyOf(item.id), buildLinkResolver(ws, noteNames));
     const res = await syncContent(client2, ws, item, { force, content: html2 || void 0 });
     if (res.ok) {
       ws = updateContent(ws, item.id, res.patch);
@@ -30255,7 +30281,7 @@ async function cmdPush2() {
     }
   }
   if (needsRelink.size) {
-    const resolver = buildLinkResolver(ws);
+    const resolver = buildLinkResolver(ws, noteNames);
     let relinked = 0;
     for (const item of ws.contents) {
       if (!needsRelink.has(item.id)) continue;
@@ -30339,7 +30365,7 @@ function emit(result) {
   process.stdout.write(JSON.stringify(result, null, 2) + "\n");
   if (!(result && typeof result === "object" && result.ok === true)) process.exitCode = 1;
 }
-var PRODUCTS_USAGE = 'puffergo products <schema|list [--search q]|check [--only k1,k2]|push [--only k1,k2]|pull <key|id|link>|publish <key\u2026> --customer-said "<customer words>"|template <list|set <name> <key|id|link>|show <name>|remove <name>>> [--dir <workdir>] [--site <url>]';
+var PRODUCTS_USAGE = 'puffergo products <schema|list [--search q]|check [--only k1,k2]|push [--only k1,k2]|pull <key|id|link>|publish <key\u2026> --customer-said "<customer words>"|sample <list|set <name> <key|id|link>|show <name>|remove <name>>> [--dir <workdir>] [--site <url>]';
 async function products() {
   const ctx = { dir, flags, positional };
   switch (cmd) {
@@ -30355,8 +30381,8 @@ async function products() {
       return emit(await cmdPull(ctx));
     case "publish":
       return emit(await cmdPublish(ctx));
-    case "template":
-      return emit(await cmdTemplate(ctx));
+    case "sample":
+      return emit(await cmdSample(ctx));
     default:
       return emit({ ok: false, code: "usage", message: PRODUCTS_USAGE });
   }

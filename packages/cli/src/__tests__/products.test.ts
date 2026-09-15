@@ -258,8 +258,8 @@ describe('publish needs the customer asking for it', () => {
   });
 });
 
-// ---- templates -------------------------------------------------------------------------------------
-import { templateReference, resolveProductId, TargetError } from '../lib/templates';
+// ---- samples -------------------------------------------------------------------------------------
+import { sampleReference, resolveProductId, TargetError } from '../lib/samples';
 import { optionalFactPaths, loadSiteSchema, SchemaVersionError, type TradeField } from '../lib/siteSchema';
 
 const SCHEMA3: { tradeFields: TradeField[] } = {
@@ -269,10 +269,10 @@ const SCHEMA3: { tradeFields: TradeField[] } = {
     { path: 'leadTime', kind: 'unitValue', unitType: 'time', label: 'Lead Time' },
   ],
 };
-import { TemplateCtx, applyTemplate } from '../lib/productsCmd';
+import { SampleCtx, applySample } from '../lib/productsCmd';
 import type { AgentClient } from '../lib/agentClient';
 
-describe('templateReference', () => {
+describe('sampleReference', () => {
   const remote: ProductFile = {
     id: 9,
     key: 'pg-500',
@@ -284,7 +284,7 @@ describe('templateReference', () => {
     gallery: [{ mediaId: 3, alt: 'front' }],
     detail: { sections: [{ layout: 'split', heading: 'Quiet', body: 'Runs at 60 dB.', image: { mediaId: 4 } }] },
   };
-  const ref = templateReference(remote, SCHEMA3) as Record<string, any>;
+  const ref = sampleReference(remote, SCHEMA3) as Record<string, any>;
 
   it('hides every number and spec value, keeps units and spec names', () => {
     expect(ref.moq).toEqual({ value: '<from customer>', unit: 'sets' });
@@ -302,27 +302,27 @@ describe('templateReference', () => {
     expect(ref.detail.sections[0].image).toEqual({ file: '<customer photo>' });
   });
   it('keeps "price on request" as is', () => {
-    expect((templateReference({ title: 't', price: { type: 'contact' } }, SCHEMA3) as any).price).toEqual({
+    expect((sampleReference({ title: 't', price: { type: 'contact' } }, SCHEMA3) as any).price).toEqual({
       type: 'contact',
     });
   });
 });
 
-describe('templates in check', () => {
+describe('samples in check', () => {
   const fake = (remote: Record<string, unknown>) =>
     ({ siteUrl: 'http://shop.test', getProduct: vi.fn(async () => remote) }) as unknown as AgentClient;
 
-  it('knows which optional facts a template leaves out (fetched once)', async () => {
+  it('knows which optional facts a sample leaves out (fetched once)', async () => {
     const c = fake({ title: 'T', moq: { value: 1, unit: 'sets' }, specs: [] });
-    const tpl = new TemplateCtx(c, { pumps: { id: 9, title: 'T' } }, optionalFactPaths(SCHEMA3));
+    const tpl = new SampleCtx(c, { pumps: { id: 9, title: 'T' } }, optionalFactPaths(SCHEMA3));
     expect([...(await tpl.fieldsNotUsed('pumps'))!].sort()).toEqual(['leadTime', 'price', 'specs']);
     await tpl.fieldsNotUsed('pumps');
     expect(c.getProduct).toHaveBeenCalledTimes(1);
     expect(await tpl.fieldsNotUsed('nope')).toBeNull();
   });
 
-  it('requires a template choice when the site has templates, and drops warnings for unused fields', async () => {
-    const tpl = new TemplateCtx(
+  it('a product following a sample drops warnings for fields the sample does not use', async () => {
+    const tpl = new SampleCtx(
       fake({ title: 'T', moq: { value: 1, unit: 'sets' } }),
       {
         pumps: { id: 9, title: 'T' },
@@ -331,13 +331,14 @@ describe('templates in check', () => {
     );
     const w = (f: string) => ({ path: `p-1.${f}`, code: 'missing_source', message: '', fix: 'user' as const });
     const warnings = [w('price'), w('moq'), w('leadTime')];
-    expect((await applyTemplate({ key: 'p-1', title: 'x' }, tpl, warnings)).errors[0].code).toBe('template_required');
-    expect((await applyTemplate({ key: 'p-1', title: 'x', template: '' }, tpl, warnings)).warnings).toHaveLength(3);
-    const used = await applyTemplate({ key: 'p-1', title: 'x', template: 'pumps' }, tpl, warnings);
+    const none = await applySample({ key: 'p-1', title: 'x' }, tpl, warnings);
+    expect(none.errors).toEqual([]);
+    expect(none.warnings).toHaveLength(3);
+    const used = await applySample({ key: 'p-1', title: 'x', sample: 'pumps' }, tpl, warnings);
     expect(used.errors).toEqual([]);
     expect(used.warnings.map(x => x.path)).toEqual(['p-1.moq']);
-    expect((await applyTemplate({ key: 'p-1', title: 'x', template: 'nope' }, tpl, [])).errors[0].code).toBe(
-      'unknown_template',
+    expect((await applySample({ key: 'p-1', title: 'x', sample: 'nope' }, tpl, [])).errors[0].code).toBe(
+      'unknown_sample',
     );
   });
 });
@@ -388,7 +389,7 @@ describe('site schema drives trade fields', () => {
     ],
   };
   it('masks custom trade values and lists unused ones from the schema, not a hard-coded list', () => {
-    const ref = templateReference(
+    const ref = sampleReference(
       {
         title: 't',
         trade: { payment_terms: 'T/T 30%' },

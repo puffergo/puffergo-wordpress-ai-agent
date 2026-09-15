@@ -5,9 +5,10 @@
  * all push/pull bodies through the SAME codec, so link/asset handling stays identical everywhere.
  *
  * Two directions:
- *   • PUSH (up):  markdownToWpHtml — resolve `[[slug]]` to the target's live permalink, then Markdown→HTML.
+ *   • PUSH (up):  markdownToWpHtml — resolve `[[target]]` to the target's live permalink, then Markdown→HTML.
  *   • PULL (down): wpHtmlToMarkdown — HTML→Markdown (via turndown), rewriting any `<a href>` the caller's
- *     resolver recognizes as an internal link back into `[[slug]]`. Which links are "internal" (import's
+ *     resolver recognizes as an internal link back into `[[note name|text]]`. What a target may be and
+ *     which name gets written is `lib/vault/note-links.ts`'s rule (Obsidian resolves clicks by file name). Which links are "internal" (import's
  *     own canonicalized/id-fallback-aware matching, not just a raw string match) is the caller's job —
  *     see `import-content.ts`'s own resolver built around `resolveInternalTarget`.
  *
@@ -20,16 +21,16 @@
 import { marked } from 'marked';
 import TurndownService from 'turndown';
 import type { SiloWorkspace } from '../model/types';
-
-const norm = (s: string): string => s.trim().toLowerCase();
+import { buildNoteLinkIndex, formatWikilink } from '../vault/note-links';
 
 /** Resolves internal-link references both ways. Built once from a workspace and reused for a whole
- *  push/pull run. slug↔permalink is the stable pair we round-trip on. */
+ *  push/pull run. */
 export interface LinkResolver {
-  /** A content's live WP permalink for its slug, or undefined if it has none yet (never pushed). */
-  permalinkForSlug(slug: string): string | undefined;
-  /** The vault slug for a WP permalink (inverse), or undefined if the URL isn't one of ours. */
-  slugForUrl(url: string): string | undefined;
+  /** A content's live WP permalink for a wikilink target (note name, slug or id — see note-links.ts),
+   *  or undefined if the target is unknown or has no permalink yet (never pushed). */
+  permalinkFor(target: string): string | undefined;
+  /** The wikilink target (note name) for a WP permalink (inverse), or undefined if the URL isn't ours. */
+  targetForUrl(url: string): string | undefined;
 }
 
 /**
@@ -115,31 +116,39 @@ export function rootRelativePermalink(url: string): string {
   }
 }
 
-/** Derive a LinkResolver from the workspace (slug ↔ wpLink for every content that has both). */
-export function buildLinkResolver(ws: SiloWorkspace): LinkResolver {
-  const permalinkBySlug = new Map<string, string>();
-  const slugByUrl = new Map<string, string>();
+/** Derive a LinkResolver from the workspace. `noteNames` (content id → note file name) comes from the
+ *  host's vault scan; without it, names default to what the notes are created as. */
+export function buildLinkResolver(ws: SiloWorkspace, noteNames?: ReadonlyMap<string, string>): LinkResolver {
+  const index = buildNoteLinkIndex(ws, noteNames);
+  const wpLinkById = new Map<string, string>();
+  const idByUrl = new Map<string, string>();
   for (const c of ws.contents) {
-    if (c.slug && c.wpLink) {
-      permalinkBySlug.set(norm(c.slug), c.wpLink);
-      slugByUrl.set(c.wpLink, c.slug);
+    if (c.wpLink) {
+      wpLinkById.set(c.id, c.wpLink);
+      idByUrl.set(c.wpLink, c.id);
     }
   }
   return {
-    permalinkForSlug: slug => permalinkBySlug.get(norm(slug)),
-    slugForUrl: url => slugByUrl.get(url),
+    permalinkFor: target => {
+      const id = index.idFor(target);
+      return id ? wpLinkById.get(id) : undefined;
+    },
+    targetForUrl: url => {
+      const id = idByUrl.get(url);
+      return id ? index.nameFor(id) : undefined;
+    },
   };
 }
 
-// `[[target]]` or `[[target|alias]]` (optionally `[[target#heading|alias]]`). Target is a content slug.
+// `[[target]]` or `[[target|alias]]` (optionally `[[target#heading|alias]]`). Target: note name, slug or id.
 const WIKILINK_RE = /\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|([^\]]+))?\]\]/g;
 
 /**
  * PUSH transform: Markdown body (vault form) → WordPress HTML.
- * Each `[[slug]]` is rewritten to a real Markdown link `[text](permalink)` when the target has a
+ * Each `[[target]]` is rewritten to a real Markdown link `[text](permalink)` when the target has a
  * permalink, so WP receives a proper `<a href>`. Targets not yet pushed can't be linked this run — they
  * degrade to their plain anchor text and are reported in `unresolved` (the caller can re-push after the
- * target exists; the vault Markdown keeps the `[[slug]]`, so the next push links it). Returns '' for an
+ * target exists; the vault Markdown keeps the `[[target]]`, so the next push links it). Returns '' for an
  * empty body (→ shell push, never overwrites the WP body).
  */
 export function markdownToWpHtml(md: string, resolver: LinkResolver): { html: string; unresolved: string[] } {
@@ -150,7 +159,7 @@ export function markdownToWpHtml(md: string, resolver: LinkResolver): { html: st
   const withLinks = trimmed.replace(WIKILINK_RE, (_m, rawTarget: string, alias?: string) => {
     const target = rawTarget.trim();
     const text = (alias ?? target).trim();
-    const permalink = resolver.permalinkForSlug(target);
+    const permalink = resolver.permalinkFor(target);
     if (!permalink) {
       unresolved.push(target);
       return text; // can't link yet — emit plain text, keep the wikilink in the source for next time
@@ -177,8 +186,9 @@ turndown.remove(['script', 'style', 'noscript', 'template']);
 
 /**
  * PULL transform: WordPress HTML (as returned by `content.rendered`) → vault Markdown.
- * Any `<a href>` `resolveInternalLink` recognizes is rewritten to `[[slug]]` (or `[[slug|anchor text]]`
- * when the link text differs from the slug) instead of a plain Markdown link, so the note round-trips
+ * Any `<a href>` `resolveInternalLink` recognizes is rewritten to `[[name]]` (or `[[name|anchor text]]`
+ * when the link text differs; `name` is whatever the resolver returns — the target note's file name)
+ * instead of a plain Markdown link, so the note round-trips
  * through a push exactly like one authored by hand. `resolveInternalLink` returning undefined (an
  * external link, or an internal one the caller couldn't resolve) leaves the link as plain `[text](url)`.
  */
@@ -192,13 +202,12 @@ export function wpHtmlToMarkdown(html: string, resolveInternalLink: (url: string
   // text that legitimately contains parentheses. Doing it on the INPUT keeps turndown's own escaping of
   // the anchor text correct, and the marker is trivial to peel back off afterward.
   const withMarkedLinks = trimmed.replace(/(<a\s[^>]*href=["'])([^"']+)(["'][^>]*>)/gi, (whole, pre, href, post) => {
-    const slug = resolveInternalLink(href);
-    return slug ? `${pre}wikilink:${encodeURIComponent(slug)}${post}` : whole;
+    const name = resolveInternalLink(href);
+    return name ? `${pre}wikilink:${encodeURIComponent(name)}${post}` : whole;
   });
 
   const md = turndown.turndown(withMarkedLinks);
-  return md.replace(/\[([^\]]*)\]\(wikilink:([^)]+)\)/g, (_m, text: string, encodedSlug: string) => {
-    const slug = decodeURIComponent(encodedSlug);
-    return text && text !== slug ? `[[${slug}|${text}]]` : `[[${slug}]]`;
-  });
+  return md.replace(/\[([^\]]*)\]\(wikilink:([^)]+)\)/g, (_m, text: string, encodedName: string) =>
+    formatWikilink(decodeURIComponent(encodedName), text),
+  );
 }
