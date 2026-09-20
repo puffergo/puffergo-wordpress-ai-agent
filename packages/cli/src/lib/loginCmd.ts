@@ -6,18 +6,48 @@
  * (`__login-wait`) that owns the one-shot 127.0.0.1 callback server for up to 10 minutes, waits for the
  * child to report the authorize URL, opens the browser, prints `{ok:true,pending:true,authorizeUrl}` and
  * exits. The child writes the credentials into ~/.puffergo/credentials.json when WordPress redirects
- * back, then exits. The AI confirms with `puffergo products schema`.
+ * back, then exits.
+ *
+ * Both processes also keep `~/.puffergo/login-state.json` up to date, so the AI never has to ask the
+ * customer whether they clicked: `puffergo login status` blocks until the child reports back (approved,
+ * denied or timed out) and answers the moment the browser redirect lands.
  */
 
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { readFile, rm, writeFile, mkdtemp } from 'node:fs/promises';
+import { readFile, rm, writeFile, mkdtemp, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { upsertCredential } from '../adapters/credentials';
+import { dirname, join } from 'node:path';
+import { upsertCredential, PUFFERGO_DIR } from '../adapters/credentials';
 import { writeWorkdirConfig } from './site';
 
 const WAIT_MS = 10 * 60 * 1000;
+/** How long `login status` blocks by default — under the 2-minute command timeout AI tools use. */
+const STATUS_WAIT_MS = 100 * 1000;
+
+const LOGIN_STATE = join(PUFFERGO_DIR, 'login-state.json');
+
+export interface LoginState {
+  siteUrl: string;
+  /** `pending` until the browser comes back; then `approved`, or `failed` (denied / 10-minute timeout). */
+  status: 'pending' | 'approved' | 'failed';
+  startedAt: number;
+  username?: string;
+}
+
+async function writeLoginState(state: LoginState, path = LOGIN_STATE): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, JSON.stringify(state, null, 2), 'utf8');
+}
+
+async function readLoginState(path = LOGIN_STATE): Promise<LoginState | null> {
+  try {
+    const s = JSON.parse(await readFile(path, 'utf8')) as LoginState;
+    return s && typeof s.siteUrl === 'string' && typeof s.status === 'string' ? s : null;
+  } catch {
+    return null;
+  }
+}
 
 const RESULT_PAGE = (ok: boolean): string => `<!doctype html><html><head><meta charset="utf-8"><title>PufferGo</title>
 <style>html{font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#1f2430;
@@ -60,6 +90,7 @@ export async function cmdLogin(dir: string, siteArg: string | undefined): Promis
     return { ok: false, code: 'error', message: `Not a valid site URL: ${siteArg}` };
   }
 
+  await writeLoginState({ siteUrl, status: 'pending', startedAt: Date.now() });
   const handshakeDir = await mkdtemp(join(tmpdir(), 'puffergo-login-'));
   const handshake = join(handshakeDir, 'authorize-url');
   // Re-run this same script (bundle, or tsx entry with its loader flags) as the detached waiter.
@@ -87,7 +118,63 @@ export async function cmdLogin(dir: string, siteArg: string | undefined): Promis
     pending: true,
     siteUrl,
     authorizeUrl,
-    next: 'Ask the user to click Approve in the browser (log in to WordPress first if asked), then run `puffergo products schema` to confirm. The link stays valid for 10 minutes.',
+    next: 'Tell the user the authorization page is open and to click Approve (logging in to WordPress first if asked), then run `puffergo login status` right away — it waits for the click and answers by itself, so never ask the user to report back. If it returns `waiting`, tell the user you are still waiting and run it again. The link stays valid for 10 minutes.',
+  };
+}
+
+/**
+ * `puffergo login status [--wait <seconds>]` — block until the detached waiter reports back.
+ *
+ * The callback server is ours and runs on this machine, so the approval is observable: this returns the
+ * moment WordPress redirects back, and the AI can say "I saw you approve it" without asking.
+ */
+export async function cmdLoginStatus(waitSeconds?: string): Promise<unknown> {
+  const waitMs = waitSeconds ? Math.max(0, Number(waitSeconds) * 1000) : STATUS_WAIT_MS;
+  if (Number.isNaN(waitMs))
+    return { ok: false, code: 'usage', message: 'usage: puffergo login status [--wait <seconds>]' };
+
+  const deadline = Date.now() + waitMs;
+  let state = await readLoginState();
+  if (!state)
+    return {
+      ok: false,
+      code: 'no_login',
+      message: 'No authorization is in progress. Run `puffergo login <siteUrl>` first.',
+    };
+
+  while (state?.status === 'pending' && Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, 300));
+    state = await readLoginState();
+  }
+  if (!state)
+    return {
+      ok: false,
+      code: 'no_login',
+      message: 'No authorization is in progress. Run `puffergo login <siteUrl>` first.',
+    };
+
+  if (state.status === 'approved')
+    return {
+      ok: true,
+      status: 'approved',
+      siteUrl: state.siteUrl,
+      username: state.username,
+      next: 'Tell the user you saw the approval come through, then check what it can do with `puffergo products schema` (or `pages types`) and report the result.',
+    };
+  if (state.status === 'failed')
+    return {
+      ok: false,
+      code: 'denied',
+      status: 'failed',
+      siteUrl: state.siteUrl,
+      message:
+        'WordPress came back without granting access (the approval was declined, or the 10-minute window ran out). Run `puffergo login <siteUrl>` again.',
+    };
+  return {
+    ok: true,
+    status: 'waiting',
+    siteUrl: state.siteUrl,
+    next: 'The user has not clicked Approve yet. Tell them you are still waiting on that browser page, then run `puffergo login status` again.',
   };
 }
 
@@ -107,8 +194,12 @@ export async function cmdLoginWait(siteUrl: string, handshake: string, dir: stri
     },
     { appName: 'PufferGo AI', timeoutMs: WAIT_MS, resultPage: RESULT_PAGE },
   );
+  const startedAt = (await readLoginState())?.startedAt ?? Date.now();
   if (creds) {
     await upsertCredential({ siteUrl, username: creds.username, appPassword: creds.appPassword });
     await writeWorkdirConfig(dir, { siteUrl });
+    await writeLoginState({ siteUrl, status: 'approved', startedAt, username: creds.username });
+  } else {
+    await writeLoginState({ siteUrl, status: 'failed', startedAt });
   }
 }

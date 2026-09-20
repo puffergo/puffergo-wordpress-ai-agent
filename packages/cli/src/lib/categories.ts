@@ -8,10 +8,15 @@ import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
+/** The term meta the plugin sorts categories by when the site's category order is set to manual. */
+export const CAT_ORDER_META = '_puffergo_cat_order';
+
 export interface CategoryNode {
   name: string;
   slug: string;
   description?: string;
+  /** Manual sort position among its siblings; 1 first. Omitted/0 puts the category last. */
+  order?: number;
   children?: CategoryNode[];
 }
 
@@ -21,12 +26,19 @@ export interface RemoteTerm {
   slug: string;
   description: string;
   parent: number;
+  meta?: Record<string, unknown>;
 }
 
 export type CategoryOp =
-  | { op: 'create'; slug: string; name: string; description?: string; parentSlug: string }
-  | { op: 'update'; id: number; slug: string; name: string; description?: string; parentSlug: string }
+  | { op: 'create'; slug: string; name: string; description?: string; order?: number; parentSlug: string }
+  | { op: 'update'; id: number; slug: string; name: string; description?: string; order?: number; parentSlug: string }
   | { op: 'keep'; id: number; slug: string };
+
+/** A term's stored manual order (0 / missing / not exposed by an older plugin all read as 0). */
+export function remoteOrder(term: RemoteTerm): number {
+  const raw = term.meta?.[CAT_ORDER_META];
+  return typeof raw === 'number' ? raw : Number(raw ?? 0) || 0;
+}
 
 export const CATEGORIES_FILE = 'categories.json';
 export const MAX_SUGGESTED_DEPTH = 3;
@@ -52,6 +64,7 @@ export function planCategories(
   const bySlug = new Map(remote.map(t => [t.slug, t]));
   const byId = new Map(remote.map(t => [t.id, t]));
   const seen = new Set<string>();
+  const ordersByParent = new Map<string, Set<number>>();
 
   const walk = (nodes: unknown[], parentSlug: string, depth: number, path: string) => {
     nodes.forEach((raw, i) => {
@@ -69,20 +82,35 @@ export function planCategories(
           `"${name}" is level ${depth}. Suggest the customer keep categories to ${MAX_SUGGESTED_DEPTH} levels.`,
         );
 
+      let order: number | undefined;
+      if (n?.order !== undefined) {
+        if (typeof n.order !== 'number' || !Number.isInteger(n.order) || n.order < 1)
+          errors.push(`${at}: order must be a whole number ≥ 1 (leave it out to put the category last)`);
+        else order = n.order;
+      }
+      if (order !== undefined) {
+        const siblings = ordersByParent.get(parentSlug) ?? new Set<number>();
+        if (siblings.has(order))
+          warnings.push(`Two categories under "${parentSlug || 'the top level'}" both have order ${order}.`);
+        siblings.add(order);
+        ordersByParent.set(parentSlug, siblings);
+      }
+
       if (name && SLUG_RE.test(slug)) {
         const description = typeof n.description === 'string' ? n.description : undefined;
         const existing = bySlug.get(slug);
         if (!existing) {
-          ops.push({ op: 'create', slug, name, description, parentSlug });
+          ops.push({ op: 'create', slug, name, description, order, parentSlug });
         } else {
           const currentParent = existing.parent ? (byId.get(existing.parent)?.slug ?? '') : '';
           const changed =
             existing.name !== name ||
             currentParent !== parentSlug ||
-            (description !== undefined && existing.description !== description);
+            (description !== undefined && existing.description !== description) ||
+            (order !== undefined && remoteOrder(existing) !== order);
           ops.push(
             changed
-              ? { op: 'update', id: existing.id, slug, name, description, parentSlug }
+              ? { op: 'update', id: existing.id, slug, name, description, order, parentSlug }
               : { op: 'keep', id: existing.id, slug },
           );
         }

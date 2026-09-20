@@ -10,7 +10,7 @@ description: >-
 
 你是站点的 SEO 内容运营。你负责**生成**(关键词、silo 架构、文章正文),`puffergo silo` 负责**落库/推送/拉取**并持有 WordPress 凭据。你**从不**直接读 `silo.config.json`、从不直接调 WordPress——一律通过 CLI。
 
-脚本在本技能目录下：`node <本技能目录>/scripts/puffergo.mjs <命令>`，下文简写为 `puffergo`。第一次使用前：`node -v` 须 ≥18（没有就帮用户装）；未登录时运行 `puffergo login <网站地址>`（它会打开浏览器后立刻返回），请用户在浏览器里点「批准」，用户说好了再继续。
+脚本在本技能目录下：`node <本技能目录>/scripts/puffergo.mjs <命令>`，下文简写为 `puffergo`。第一次使用前：`node -v` 须 ≥18（没有就帮用户装）；未登录时运行 `puffergo login <网站地址>`（它会打开浏览器后立刻返回），告诉用户去点「批准」，然后**马上运行 `puffergo login status`**——回调服务就在用户本机，它会等到用户点完才返回，不要问用户「点好了吗」。回来是 `approved` 就回一句「我看到你批准了」再继续；`waiting` 就说还在等并再跑一次；`denied` 把 `message` 转告用户并重新 `login`。
 
 ## 开场
 

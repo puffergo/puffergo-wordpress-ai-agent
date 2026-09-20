@@ -28720,7 +28720,7 @@ async function importFromWp(client2, ws, postTypes, opts = {}) {
 }
 
 // src/index.ts
-import { dirname as dirname5 } from "node:path";
+import { dirname as dirname6 } from "node:path";
 
 // src/adapters/fileStore.ts
 import { readFile, writeFile, mkdir } from "node:fs/promises";
@@ -30124,6 +30124,11 @@ async function uploadHtmlImages(c, cache2, html2, baseDir) {
 import { readFile as readFile11 } from "node:fs/promises";
 import { existsSync as existsSync11 } from "node:fs";
 import { join as join8 } from "node:path";
+var CAT_ORDER_META = "_puffergo_cat_order";
+function remoteOrder(term) {
+  const raw = term.meta?.[CAT_ORDER_META];
+  return typeof raw === "number" ? raw : Number(raw ?? 0) || 0;
+}
 var CATEGORIES_FILE = "categories.json";
 var MAX_SUGGESTED_DEPTH = 3;
 var SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -30141,6 +30146,7 @@ function planCategories(file, remote) {
   const bySlug = new Map(remote.map((t) => [t.slug, t]));
   const byId = new Map(remote.map((t) => [t.id, t]));
   const seen = /* @__PURE__ */ new Set();
+  const ordersByParent = /* @__PURE__ */ new Map();
   const walk = (nodes, parentSlug, depth, path) => {
     nodes.forEach((raw, i) => {
       const n = raw;
@@ -30156,16 +30162,29 @@ function planCategories(file, remote) {
         warnings.push(
           `"${name}" is level ${depth}. Suggest the customer keep categories to ${MAX_SUGGESTED_DEPTH} levels.`
         );
+      let order;
+      if (n?.order !== void 0) {
+        if (typeof n.order !== "number" || !Number.isInteger(n.order) || n.order < 1)
+          errors.push(`${at}: order must be a whole number \u2265 1 (leave it out to put the category last)`);
+        else order = n.order;
+      }
+      if (order !== void 0) {
+        const siblings = ordersByParent.get(parentSlug) ?? /* @__PURE__ */ new Set();
+        if (siblings.has(order))
+          warnings.push(`Two categories under "${parentSlug || "the top level"}" both have order ${order}.`);
+        siblings.add(order);
+        ordersByParent.set(parentSlug, siblings);
+      }
       if (name && SLUG_RE.test(slug)) {
         const description = typeof n.description === "string" ? n.description : void 0;
         const existing = bySlug.get(slug);
         if (!existing) {
-          ops.push({ op: "create", slug, name, description, parentSlug });
+          ops.push({ op: "create", slug, name, description, order, parentSlug });
         } else {
           const currentParent = existing.parent ? byId.get(existing.parent)?.slug ?? "" : "";
-          const changed = existing.name !== name || currentParent !== parentSlug || description !== void 0 && existing.description !== description;
+          const changed = existing.name !== name || currentParent !== parentSlug || description !== void 0 && existing.description !== description || order !== void 0 && remoteOrder(existing) !== order;
           ops.push(
-            changed ? { op: "update", id: existing.id, slug, name, description, parentSlug } : { op: "keep", id: existing.id, slug }
+            changed ? { op: "update", id: existing.id, slug, name, description, order, parentSlug } : { op: "keep", id: existing.id, slug }
           );
         }
       }
@@ -30840,10 +30859,21 @@ async function cmdCategories(ctx) {
     const file = await readCategoriesFile(ctx.dir);
     if (file === null) return { ok: false, code: "no_file", message: `No ${CATEGORIES_FILE} in the work folder.` };
     const c = await client(ctx);
-    const { language } = await loadSiteSchema(c);
-    const remote = await c.listCategoryTerms(language ?? "");
+    const schema = await loadSiteSchema(c);
+    const remote = await c.listCategoryTerms(schema.language ?? "");
     const { errors, warnings, ops } = planCategories(file, remote);
     if (errors.length) return { ok: false, code: "invalid", errors, warnings };
+    const wantsOrder = ops.some((o) => o.op !== "keep" && o.order !== void 0);
+    if (wantsOrder && !schema.categoryOrder)
+      return {
+        ok: false,
+        code: "update_plugin",
+        message: "This site's PufferGo plugin is too old to set category order from here. Ask the customer to update the plugin, or to fill in Order on each category in wp-admin."
+      };
+    if (wantsOrder && schema.categoryOrder?.orderby !== "manual")
+      warnings.push(
+        `Category order is written, but the site sorts product categories by "${schema.categoryOrder?.orderby ?? "name"}", so it has no visible effect yet. Ask the customer to set \u4EA7\u54C1\u8BBE\u7F6E \u2192 \u5206\u7C7B\u6392\u5E8F to \u624B\u52A8 (Manual).`
+      );
     const editLive = await editLiveAllowed(ctx.dir, c.siteUrl);
     const todo = ops.filter((o) => o.op === "create" || o.op === "update" && editLive);
     const leftAlone = editLive ? [] : ops.filter((o) => o.op === "update").map((o) => o.slug);
@@ -30864,7 +30894,8 @@ async function cmdCategories(ctx) {
         name: o.name,
         slug: o.slug,
         parent: o.parentSlug ? idBySlug.get(o.parentSlug) ?? 0 : 0,
-        ...o.description !== void 0 ? { description: o.description } : {}
+        ...o.description !== void 0 ? { description: o.description } : {},
+        ...o.order !== void 0 ? { meta: { [CAT_ORDER_META]: o.order } } : {}
       };
       const saved = await c.saveCategoryTerm(o.op === "update" ? o.id : null, body);
       idBySlug.set(o.slug, saved.id);
@@ -30920,10 +30951,24 @@ async function cmdImages(ctx) {
 // src/lib/loginCmd.ts
 import { spawn } from "node:child_process";
 import { existsSync as existsSync12 } from "node:fs";
-import { readFile as readFile13, rm as rm2, writeFile as writeFile8, mkdtemp } from "node:fs/promises";
+import { readFile as readFile13, rm as rm2, writeFile as writeFile8, mkdtemp, mkdir as mkdir8 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join as join10 } from "node:path";
+import { dirname as dirname4, join as join10 } from "node:path";
 var WAIT_MS = 10 * 60 * 1e3;
+var STATUS_WAIT_MS = 100 * 1e3;
+var LOGIN_STATE = join10(PUFFERGO_DIR, "login-state.json");
+async function writeLoginState(state, path = LOGIN_STATE) {
+  await mkdir8(dirname4(path), { recursive: true });
+  await writeFile8(path, JSON.stringify(state, null, 2), "utf8");
+}
+async function readLoginState(path = LOGIN_STATE) {
+  try {
+    const s = JSON.parse(await readFile13(path, "utf8"));
+    return s && typeof s.siteUrl === "string" && typeof s.status === "string" ? s : null;
+  } catch {
+    return null;
+  }
+}
 var RESULT_PAGE = (ok) => `<!doctype html><html><head><meta charset="utf-8"><title>PufferGo</title>
 <style>html{font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#1f2430;
 display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f6f7fb}
@@ -30951,6 +30996,7 @@ async function cmdLogin(dir2, siteArg) {
   } catch {
     return { ok: false, code: "error", message: `Not a valid site URL: ${siteArg}` };
   }
+  await writeLoginState({ siteUrl, status: "pending", startedAt: Date.now() });
   const handshakeDir = await mkdtemp(join10(tmpdir(), "puffergo-login-"));
   const handshake = join10(handshakeDir, "authorize-url");
   const child = spawn(
@@ -30974,7 +31020,52 @@ async function cmdLogin(dir2, siteArg) {
     pending: true,
     siteUrl,
     authorizeUrl,
-    next: "Ask the user to click Approve in the browser (log in to WordPress first if asked), then run `puffergo products schema` to confirm. The link stays valid for 10 minutes."
+    next: "Tell the user the authorization page is open and to click Approve (logging in to WordPress first if asked), then run `puffergo login status` right away \u2014 it waits for the click and answers by itself, so never ask the user to report back. If it returns `waiting`, tell the user you are still waiting and run it again. The link stays valid for 10 minutes."
+  };
+}
+async function cmdLoginStatus(waitSeconds) {
+  const waitMs = waitSeconds ? Math.max(0, Number(waitSeconds) * 1e3) : STATUS_WAIT_MS;
+  if (Number.isNaN(waitMs))
+    return { ok: false, code: "usage", message: "usage: puffergo login status [--wait <seconds>]" };
+  const deadline = Date.now() + waitMs;
+  let state = await readLoginState();
+  if (!state)
+    return {
+      ok: false,
+      code: "no_login",
+      message: "No authorization is in progress. Run `puffergo login <siteUrl>` first."
+    };
+  while (state?.status === "pending" && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 300));
+    state = await readLoginState();
+  }
+  if (!state)
+    return {
+      ok: false,
+      code: "no_login",
+      message: "No authorization is in progress. Run `puffergo login <siteUrl>` first."
+    };
+  if (state.status === "approved")
+    return {
+      ok: true,
+      status: "approved",
+      siteUrl: state.siteUrl,
+      username: state.username,
+      next: "Tell the user you saw the approval come through, then check what it can do with `puffergo products schema` (or `pages types`) and report the result."
+    };
+  if (state.status === "failed")
+    return {
+      ok: false,
+      code: "denied",
+      status: "failed",
+      siteUrl: state.siteUrl,
+      message: "WordPress came back without granting access (the approval was declined, or the 10-minute window ran out). Run `puffergo login <siteUrl>` again."
+    };
+  return {
+    ok: true,
+    status: "waiting",
+    siteUrl: state.siteUrl,
+    next: "The user has not clicked Approve yet. Tell them you are still waiting on that browser page, then run `puffergo login status` again."
   };
 }
 async function cmdLoginWait(siteUrl, handshake, dir2) {
@@ -30987,16 +31078,20 @@ async function cmdLoginWait(siteUrl, handshake, dir2) {
     },
     { appName: "PufferGo AI", timeoutMs: WAIT_MS, resultPage: RESULT_PAGE }
   );
+  const startedAt = (await readLoginState())?.startedAt ?? Date.now();
   if (creds) {
     await upsertCredential({ siteUrl, username: creds.username, appPassword: creds.appPassword });
     await writeWorkdirConfig(dir2, { siteUrl });
+    await writeLoginState({ siteUrl, status: "approved", startedAt, username: creds.username });
+  } else {
+    await writeLoginState({ siteUrl, status: "failed", startedAt });
   }
 }
 
 // src/lib/pagesCmd.ts
 import { existsSync as existsSync13 } from "node:fs";
-import { mkdir as mkdir8, readFile as readFile14, readdir as readdir4, stat as stat3, writeFile as writeFile9 } from "node:fs/promises";
-import { dirname as dirname4, join as join11, relative as relative2, resolve as resolve6 } from "node:path";
+import { mkdir as mkdir9, readFile as readFile14, readdir as readdir4, stat as stat3, writeFile as writeFile9 } from "node:fs/promises";
+import { dirname as dirname5, join as join11, relative as relative2, resolve as resolve6 } from "node:path";
 var editable = (b) => b.kind === "static" || b.kind === "config";
 async function componentInput(c, ctx, file) {
   const name = relative2(ctx.dir, file);
@@ -31017,7 +31112,7 @@ async function componentInput(c, ctx, file) {
   try {
     for (const { value, set } of configImages(cf.data, cf.schema)) {
       if (!isLocalImage(value)) continue;
-      const abs = [resolve6(dirname4(file), value), resolve6(ctx.dir, value)].find((p) => existsSync13(p));
+      const abs = [resolve6(dirname5(file), value), resolve6(ctx.dir, value)].find((p) => existsSync13(p));
       if (!abs)
         throw new FileError(
           "image_not_found",
@@ -31067,7 +31162,7 @@ async function withUploadedImages(c, ctx, files) {
   try {
     for (const file of files) {
       try {
-        const up = await uploadHtmlImages(c, cache2, await readFile14(file, "utf8"), dirname4(file));
+        const up = await uploadHtmlImages(c, cache2, await readFile14(file, "utf8"), dirname5(file));
         uploaded.push(...up.uploaded.map((abs) => relative2(ctx.dir, abs)));
         sections.push(up.html);
       } catch (e) {
@@ -31176,7 +31271,7 @@ function cmdGet(ctx) {
         const { component, guide, schema, data } = block2;
         const json = JSON.stringify({ component, guide, schema, data }, null, 2) + "\n";
         const file2 = join11("pages", String(id), `block-${path}.json`);
-        await mkdir8(join11(ctx.dir, "pages", String(id)), { recursive: true });
+        await mkdir9(join11(ctx.dir, "pages", String(id)), { recursive: true });
         await writeFile9(join11(ctx.dir, file2), json, "utf8");
         await writeFile9(join11(ctx.dir, "pages", String(id), `block-${path}.orig.json`), json, "utf8");
         saved.push({ path, file: file2, text: block2.text });
@@ -31194,7 +31289,7 @@ function cmdGet(ctx) {
         };
       }
       const file = join11("pages", String(id), `block-${path}.html`);
-      await mkdir8(join11(ctx.dir, "pages", String(id)), { recursive: true });
+      await mkdir9(join11(ctx.dir, "pages", String(id)), { recursive: true });
       await writeFile9(join11(ctx.dir, file), block2.html, "utf8");
       await writeFile9(join11(ctx.dir, "pages", String(id), `block-${path}.orig.html`), block2.html, "utf8");
       saved.push({ path, file, text: block2.text });
@@ -31646,7 +31741,7 @@ async function cmdPush2() {
       resolvedBody.set(id, file.body);
       continue;
     }
-    const res = await resolveBodyAssets(file.body, wpAssetUploader(client2, [dirname5(file.path), dir]));
+    const res = await resolveBodyAssets(file.body, wpAssetUploader(client2, [dirname6(file.path), dir]));
     resolvedBody.set(id, res.md);
     if (res.uploaded) {
       await updateNoteBody(file.path, res.md);
@@ -31795,6 +31890,7 @@ async function main() {
     default:
       log("puffergo silo <init|plan|push|pull|health|status|migrate-config> [--dir <vault>] [--config <path>]");
       log("puffergo login <siteUrl>");
+      log("puffergo login status [--wait <seconds>]");
       log(PRODUCTS_USAGE);
       log(PAGES_USAGE);
       if (cmd && cmd !== "help" && cmd !== "--help") process.exitCode = 1;
@@ -31862,7 +31958,9 @@ async function pages() {
       return emit({ ok: false, code: "usage", message: PAGES_USAGE });
   }
 }
-var run2 = group === "products" ? products : group === "pages" ? pages : group === "login" ? async () => emit(await cmdLogin(dir, positional[0] ?? argv[1])) : group === "__login-wait" ? () => cmdLoginWait(argv[1], argv[2], argv[3]) : main;
+var run2 = group === "products" ? products : group === "pages" ? pages : group === "login" ? async () => emit(
+  positional[0] === "status" ? await cmdLoginStatus(flags.get("wait")) : await cmdLogin(dir, positional[0] ?? argv[1])
+) : group === "__login-wait" ? () => cmdLoginWait(argv[1], argv[2], argv[3]) : main;
 run2().catch((e) => {
   if (group === "products" || group === "pages" || group === "login") {
     emit({ ok: false, code: "error", message: e instanceof Error ? e.message : String(e) });

@@ -52,7 +52,7 @@ import {
   cmdImages,
 } from './lib/productsCmd';
 import { cmdEditLive } from './lib/siteCmd';
-import { cmdLogin, cmdLoginWait } from './lib/loginCmd';
+import { cmdLogin, cmdLoginStatus, cmdLoginWait } from './lib/loginCmd';
 import {
   cmdTypes,
   cmdFind,
@@ -372,6 +372,7 @@ async function main(): Promise<void> {
     default:
       log('puffergo silo <init|plan|push|pull|health|status|migrate-config> [--dir <vault>] [--config <path>]');
       log('puffergo login <siteUrl>');
+      log('puffergo login status [--wait <seconds>]');
       log(PRODUCTS_USAGE);
       log(PAGES_USAGE);
       if (cmd && cmd !== 'help' && cmd !== '--help') process.exitCode = 1;
@@ -454,7 +455,12 @@ const run =
     : group === 'pages'
       ? pages
       : group === 'login'
-        ? async () => emit(await cmdLogin(dir, positional[0] ?? argv[1]))
+        ? async () =>
+            emit(
+              positional[0] === 'status'
+                ? await cmdLoginStatus(flags.get('wait'))
+                : await cmdLogin(dir, positional[0] ?? argv[1]),
+            )
         : group === '__login-wait'
           ? () => cmdLoginWait(argv[1]!, argv[2]!, argv[3]!)
           : main;

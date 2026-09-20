@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planCategories, type RemoteTerm } from '../lib/categories';
+import { planCategories, CAT_ORDER_META, type RemoteTerm } from '../lib/categories';
 
 const tree = {
   categories: [
@@ -60,6 +60,50 @@ describe('planCategories', () => {
     expect(errors).toEqual([]);
     expect(warnings).toHaveLength(1);
     expect(ops).toHaveLength(4);
+  });
+
+  it('carries order through, and only updates when it differs from the site', () => {
+    const remote: RemoteTerm[] = [
+      { id: 1, name: 'A', slug: 'a', description: '', parent: 0, meta: { [CAT_ORDER_META]: 2 } },
+      { id: 2, name: 'B', slug: 'b', description: '', parent: 0, meta: { [CAT_ORDER_META]: 9 } },
+    ];
+    const { errors, ops } = planCategories(
+      {
+        categories: [
+          { name: 'A', slug: 'a', order: 2 },
+          { name: 'B', slug: 'b', order: 1 },
+          { name: 'C', slug: 'c', order: 3 },
+        ],
+      },
+      remote,
+    );
+    expect(errors).toEqual([]);
+    expect(ops).toEqual([
+      { op: 'keep', id: 1, slug: 'a' },
+      { op: 'update', id: 2, slug: 'b', name: 'B', description: undefined, order: 1, parentSlug: '' },
+      { op: 'create', slug: 'c', name: 'C', description: undefined, order: 3, parentSlug: '' },
+    ]);
+  });
+
+  it('rejects a non-positive order and warns about a duplicate among siblings', () => {
+    expect(planCategories({ categories: [{ name: 'A', slug: 'a', order: 0 }] }, []).errors).toHaveLength(1);
+    const { errors, warnings } = planCategories(
+      {
+        categories: [
+          { name: 'A', slug: 'a', order: 1 },
+          { name: 'B', slug: 'b', order: 1 },
+        ],
+      },
+      [],
+    );
+    expect(errors).toEqual([]);
+    expect(warnings).toHaveLength(1);
+  });
+
+  it('treats a term from an older plugin (no meta) as unordered', () => {
+    const remote: RemoteTerm[] = [{ id: 1, name: 'A', slug: 'a', description: '', parent: 0 }];
+    const { ops } = planCategories({ categories: [{ name: 'A', slug: 'a', order: 1 }] }, remote);
+    expect(ops.map(o => o.op)).toEqual(['update']);
   });
 
   it('needs the categories array', () => {

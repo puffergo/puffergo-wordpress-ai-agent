@@ -29,6 +29,7 @@ description: >-
 | 命令 | 作用 |
 |---|---|
 | `puffergo login <网站地址>` | 在浏览器里授权，只需一次 |
+| `puffergo login status` | 等客户在浏览器上点批准，点了就立刻返回，不用问客户 |
 | `puffergo pages types` | 网站能建哪些内容类型（页面、文章、案例…） |
 | `puffergo pages find [--type 类型] [--status publish] [--search 词] [--url 链接]` | 找网站上已有的页面、文章，拿到 id 和链接 |
 | `puffergo pages blocks <id或链接>` | 列出一个页面的区块：路径、类型、文字摘要 |
@@ -44,7 +45,15 @@ description: >-
 
 ## 准备
 
-`node -v` 低于 18 或没装，你自己装最新 LTS（macOS `brew install node` 或 nodejs.org 的 .pkg，Windows `winget install OpenJS.NodeJS.LTS`），系统弹窗要密码请客户自己输。然后运行 `pages types`；提示未登录就问网站地址，运行 `puffergo login <地址>`，请客户在浏览器里批准后再跑一次。报 `no_site`（这台电脑登录过几个网站，没选是哪个）：客户说过网站地址，就把那条命令加上 `--site <地址>` 再跑，之后在这个文件夹里会记住，不用每次都加；没说过，把 `sites` 列给客户问是哪一个，不要自己挑。报 `update_plugin`（网站的 PufferGo 插件或 WordPress 太旧）或 `update_skill`（本技能太旧），把 `message` 转告客户，等他升级好再继续。
+`node -v` 低于 18 或没装，你自己装最新 LTS（macOS `brew install node` 或 nodejs.org 的 .pkg，Windows `winget install OpenJS.NodeJS.LTS`），系统弹窗要密码请客户自己输。然后运行 `pages types`；提示未登录就问网站地址，按下面「授权」走一遍，再跑一次 `pages types`。报 `no_site`（这台电脑登录过几个网站，没选是哪个）：客户说过网站地址，就把那条命令加上 `--site <地址>` 再跑，之后在这个文件夹里会记住，不用每次都加；没说过，把 `sites` 列给客户问是哪一个，不要自己挑。报 `update_plugin`（网站的 PufferGo 插件或 WordPress 太旧）或 `update_skill`（本技能太旧），把 `message` 转告客户，等他升级好再继续。
+
+## 授权
+
+回调服务就在客户自己的电脑上，客户一点批准脚本立刻就知道，**所以不要问客户「点好了吗」**：
+
+1. `puffergo login <网站地址>` 会打开浏览器并立刻返回。告诉客户：已经打开 WordPress 授权页，请点「批准」（先登录网站后台）。
+2. 马上运行 `puffergo login status`，它会一直等到客户点完为止。
+3. 回来是 `approved`：先回一句「我看到你批准了，正在核对权限」，再运行 `pages types`，然后告诉客户网站是哪个、可以开始了。回来是 `waiting`（等太久了）：告诉客户你还在等那个页面，再运行一次 `login status`。回来是 `denied`：把 `message` 转告客户，重新 `login`。
 
 ## 做新页面
 

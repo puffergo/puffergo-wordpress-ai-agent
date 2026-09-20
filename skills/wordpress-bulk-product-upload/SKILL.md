@@ -28,6 +28,7 @@ description: >-
 | 命令 | 作用 |
 |---|---|
 | `puffergo login <网站地址>` | 在浏览器里授权，只需一次 |
+| `puffergo login status` | 等客户在浏览器上点批准，点了就立刻返回，不用问客户 |
 | `puffergo products schema` | 网站的交易字段、单位、产品分类、已存的样板 |
 | `puffergo products images <文件或文件夹>…` | 查客户给的图片：体积、尺寸、比例适合放哪 |
 | `puffergo products check [--only key,…]` | 校验 `products/*.json`，不写入 |
@@ -42,11 +43,19 @@ description: >-
 
 没有删除命令，客户要删产品请他在 WordPress 后台操作。
 
+## 授权
+
+回调服务就在客户自己的电脑上，客户一点批准脚本立刻就知道，**所以不要问客户「点好了吗」**：
+
+1. `puffergo login <网站地址>` 会打开浏览器并立刻返回。告诉客户：已经打开 WordPress 授权页，请点「批准」（先登录网站后台）。
+2. 马上运行 `puffergo login status`，它会一直等到客户点完为止。
+3. 回来是 `approved`：先回一句「我看到你批准了，正在核对权限」，再运行 `products schema`，然后告诉客户网站是哪个、可以开始了。回来是 `waiting`（等太久了）：告诉客户你还在等那个页面，再运行一次 `login status`。回来是 `denied`：把 `message` 转告客户，重新 `login`。
+
 ## 工作流
 
 **铁律：推送前一定先把整理好的内容给客户过目，客户确认后才推送。**要问客户的事攒在一起，在过目那一条消息里一次问完。
 
-1. **准备**：`node -v` 低于 18 或没装，你自己装最新 LTS（macOS `brew install node` 或 nodejs.org 的 .pkg，Windows `winget install OpenJS.NodeJS.LTS`），系统弹窗要密码请客户自己输。然后运行 `products schema`；提示未登录就问网站地址，运行 `puffergo login <地址>`，请客户在浏览器里批准后再跑一次 `schema`。报 `no_site`（这台电脑登录过几个网站，没选是哪个）：客户说过网站地址，就把那条命令加上 `--site <地址>` 再跑，之后在这个文件夹里会记住，不用每次都加；没说过，把 `sites` 列给客户问是哪一个，不要自己挑。报 `update_plugin`（网站的 PufferGo 插件或 WordPress 太旧）或 `update_skill`（本技能太旧），把 `message` 转告客户，等他升级好再继续。
+1. **准备**：`node -v` 低于 18 或没装，你自己装最新 LTS（macOS `brew install node` 或 nodejs.org 的 .pkg，Windows `winget install OpenJS.NodeJS.LTS`），系统弹窗要密码请客户自己输。然后运行 `products schema`；提示未登录就问网站地址，按下面「授权」走一遍，再跑一次 `schema`。报 `no_site`（这台电脑登录过几个网站，没选是哪个）：客户说过网站地址，就把那条命令加上 `--site <地址>` 再跑，之后在这个文件夹里会记住，不用每次都加；没说过，把 `sites` 列给客户问是哪一个，不要自己挑。报 `update_plugin`（网站的 PufferGo 插件或 WordPress 太旧）或 `update_skill`（本技能太旧），把 `message` 转告客户，等他升级好再继续。
 2. **收资料**：图片要有文件路径，拿不到就请客户把图片拖进来或告诉你文件夹。复制到 `images/`，改成规范文件名，马上运行 `products images images/`：超过 200KB 的、尺寸或比例放不进打算放的位置的，当场一条消息告诉客户，附上那个位置的 `cropUrl`（PufferGo 图片工具，能一次裁剪、改尺寸、压缩）。客户处理完发回新图就换上；不在乎的就照用原图，这只是提醒，不影响推送。网站不会自动压缩或裁剪图片，别这么说。客户发来别的网站上的产品链接（如阿里巴巴），读取页面上的资料和图片当作客户资料；读不到就请客户截图。
 3. **整理并校验**：写 `products/<key>.json`，运行 `products check`，`fix: "ai"` 的自己改，`fix: "user"` 的留到下一步问。
 4. **给客户过目**：一条消息里列出标题、简介、SEO（标题、描述、核心和长尾关键词）、分类、交易信息、参数表、详情每一块（是什么区块、排法、标题、用哪张图或哪个视频），以及要客户回答的：
@@ -72,16 +81,19 @@ description: >-
 ```json
 {
   "categories": [
-    { "name": "Micro AC Gear Motors", "slug": "micro-ac-gear-motors", "description": "…",
-      "children": [{ "name": "Variable Speed Motors", "slug": "micro-ac-variable-speed-motors" }] }
+    { "name": "Micro AC Gear Motors", "slug": "micro-ac-gear-motors", "description": "…", "order": 1,
+      "children": [{ "name": "Variable Speed Motors", "slug": "micro-ac-variable-speed-motors", "order": 1 }] }
   ]
 }
 ```
 
 - `name` 必填；`slug` 必填，小写英文、数字和连字符，全文件不重复；`description` 可选；`children` 是下一级。
-- 按 `slug` 对应网站上的分类：没有就新建，不会删除。已有的分类默认不改（结果里的 `leftAlone`），打开 `edit-live` 后才更新名称、描述和上级。
+- 按 `slug` 对应网站上的分类：没有就新建，不会删除。已有的分类默认不改（结果里的 `leftAlone`），打开 `edit-live` 后才更新名称、描述、上级和排序。
 - 建议客户不超过三级。
-- 分类排序不在这里设。客户问起，请他在 WordPress 后台的产品分类里给每个分类填 Order（数字小的在前），并在产品设置里把分类排序改成手动。
+- `order` 可选：同一级里从 1 开始的正整数，数字小的排在前，不写就排在最后。客户说了先后顺序（「这个放第一个」「按这个顺序排」）就写上。
+  - 网站的分类排法不是「手动」时，`order` 写进去了但前台看不出来，`check` / `push` 会给这条警告，把它转告客户：请他到后台「产品设置 → 分类排序」改成手动。
+  - 报 `update_plugin` 是网站插件太旧，还不支持从这里设排序，请客户升级插件，或自己去后台分类里填 Order。
+- 客户要看分类，就按树状列出来（上级在前，下级缩进），带上 `order`；分类数据在 `products schema` 的 `categories` 里，`categoryOrder.orderby` 是网站当前的排法。
 
 ## 产品文件
 
