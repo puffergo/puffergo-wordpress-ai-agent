@@ -21,6 +21,9 @@ import {
   TITLE_MAX,
   DESC_MIN,
   DESC_MAX,
+  seoWidth,
+  widthRange,
+  applySeoLimits,
   CORE_KEYWORDS_MAX,
   LONGTAIL_KEYWORDS_MAX,
   FOCUS_KEYWORDS_MAX,
@@ -76,6 +79,7 @@ const isBlank = (s: string | undefined | null): boolean => !s || !s.trim();
  * Analyze a workspace and return every health issue, ranked 🔴→🟡→🟢. Deterministic and side-effect free.
  */
 export function healthCheck(ws: SiloWorkspace): HealthIssue[] {
+  applySeoLimits(ws.seoLimits); // the site's limits from the last import, else the defaults stay
   const issues: HealthIssue[] = [];
   const graph = linkGraph(ws);
   const overlay = keywordOverlay(ws);
@@ -162,8 +166,8 @@ export function healthCheck(ws: SiloWorkspace): HealthIssue[] {
     }
 
     // 🟡 标题/描述超长被截断
-    const overTitle = c.seo.title.length > TITLE_MAX;
-    const overDesc = c.seo.description.length > DESC_MAX;
+    const overTitle = seoWidth(c.seo.title) > TITLE_MAX;
+    const overDesc = seoWidth(c.seo.description) > DESC_MAX;
     if (overTitle || overDesc) {
       const which = overTitle && overDesc ? '标题和描述都' : overTitle ? '标题' : '描述';
       issues.push({
@@ -171,14 +175,14 @@ export function healthCheck(ws: SiloWorkspace): HealthIssue[] {
         code: 'meta-truncated',
         severity: 'warning',
         title: `${which}超长：${label}`,
-        detail: `${which}超过展示上限，结尾会在搜索结果里被截断。精简到 标题≤${TITLE_MAX} / 描述≤${DESC_MAX} 字符。`,
+        detail: `${which}超过展示上限，结尾会在搜索结果里被截断。精简到 标题≤${TITLE_MAX} / 描述≤${DESC_MAX}（按宽度算，中文每字算 2）。`,
         nodeIds: [c.id],
       });
     }
 
     // 🟡 标题/描述过短（有内容但没写足，浪费展示位与相关性）
-    const shortTitle = !isBlank(c.seo.title) && !overTitle && c.seo.title.trim().length < TITLE_MIN;
-    const shortDesc = !isBlank(c.seo.description) && !overDesc && c.seo.description.trim().length < DESC_MIN;
+    const shortTitle = !isBlank(c.seo.title) && !overTitle && seoWidth(c.seo.title) < TITLE_MIN;
+    const shortDesc = !isBlank(c.seo.description) && !overDesc && seoWidth(c.seo.description) < DESC_MIN;
     if (shortTitle || shortDesc) {
       const which = shortTitle && shortDesc ? '标题和描述都' : shortTitle ? '标题' : '描述';
       issues.push({
@@ -186,7 +190,7 @@ export function healthCheck(ws: SiloWorkspace): HealthIssue[] {
         code: 'meta-too-short',
         severity: 'warning',
         title: `${which}过短：${label}`,
-        detail: `${which}太短，浪费了 SERP 展示位与相关性。写到 标题 ${TITLE_MIN}–${TITLE_MAX} / 描述 ${DESC_MIN}–${DESC_MAX} 字符之间。`,
+        detail: `${which}太短，浪费了 SERP 展示位与相关性。写到 标题 ${widthRange(TITLE_MIN, TITLE_MAX)} / 描述 ${widthRange(DESC_MIN, DESC_MAX)}。`,
         nodeIds: [c.id],
       });
     }

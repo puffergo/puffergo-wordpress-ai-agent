@@ -20,6 +20,7 @@ import {
   deleteKeyword,
 } from './mutations';
 import type { SiloWorkspace } from './types';
+import { membershipWs } from './membership.fixture';
 
 const baseWs = (): SiloWorkspace => emptyWorkspace({ name: 'Test Site', url: 'https://example.com' });
 
@@ -124,6 +125,30 @@ describe('moveContent', () => {
     const ws = { ...baseWs(), contents: [c] };
     const next = moveContent(ws, 'missing', 'n2');
     expect(next.contents).toEqual(ws.contents);
+  });
+});
+
+describe('moveContent keeps the WP category record in step', () => {
+  const pushed = (termIds: number[]) => ({ ...createContent('A', 'x'), id: 'x', termIds });
+
+  it("swaps the old place's category for the new one's, keeping its other categories", () => {
+    const ws = { ...membershipWs(), contents: [pushed([10, 99])] };
+    expect(moveContent(ws, 'x', 'B').contents[0].termIds).toEqual([99, 20]);
+  });
+
+  it('leaves termIds alone when moving within the same category (into a virtual folder)', () => {
+    const ws = { ...membershipWs(), contents: [pushed([10])] };
+    expect(moveContent(ws, 'x', 'F').contents[0].termIds).toEqual([10]);
+  });
+
+  it('drops the old category when the new place has no WP term yet (push creates and adds it)', () => {
+    const ws = { ...membershipWs(), contents: [pushed([10])] };
+    expect(moveContent(ws, 'x', 'C').contents[0].termIds).toEqual([]);
+  });
+
+  it('never invents termIds for content that was never pushed', () => {
+    const ws = { ...membershipWs(), contents: [{ ...createContent('A', 'n'), id: 'n' }] };
+    expect(moveContent(ws, 'n', 'B').contents[0].termIds).toBeUndefined();
   });
 });
 

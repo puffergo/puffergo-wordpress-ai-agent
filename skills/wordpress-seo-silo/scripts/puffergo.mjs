@@ -5029,9 +5029,9 @@ var require_URL = __commonJS({
       },
       // See: http://tools.ietf.org/html/rfc3986#section-5.2
       // and https://url.spec.whatwg.org/#constructors
-      resolve: function(relative2) {
+      resolve: function(relative3) {
         var base = this;
-        var r = new URL2(relative2);
+        var r = new URL2(relative3);
         var t = new URL2();
         if (r.scheme !== void 0) {
           t.scheme = r.scheme;
@@ -17310,14 +17310,14 @@ var require_turndown_cjs = __commonJS({
         } else if (node.nodeType === 1) {
           replacement = replacementForNode.call(self, node);
         }
-        return join10(output, replacement);
+        return join12(output, replacement);
       }, "");
     }
     function postProcess(output) {
       var self = this;
       this.rules.forEach(function(rule) {
         if (typeof rule.append === "function") {
-          output = join10(output, rule.append(self.options));
+          output = join12(output, rule.append(self.options));
         }
       });
       return output.replace(/^[\t\r\n]+/, "").replace(/[\t\r\n\s]+$/, "");
@@ -17329,7 +17329,7 @@ var require_turndown_cjs = __commonJS({
       if (whitespace.leading || whitespace.trailing) content = content.trim();
       return whitespace.leading + rule.replacement(content, node, this.options) + whitespace.trailing;
     }
-    function join10(output, replacement) {
+    function join12(output, replacement) {
       var s1 = trimTrailingNewlines(output);
       var s2 = trimLeadingNewlines(replacement);
       var nls = Math.max(output.length - s1.length, replacement.length - s2.length);
@@ -24701,7 +24701,7 @@ function isCallbackRequest(params) {
 }
 function runAuthorizeServer(siteUrl, onListening, opts = {}) {
   const { appName = "PufferGo", timeoutMs = 5 * 60 * 1e3, resultPage = DEFAULT_RESULT_PAGE } = opts;
-  return new Promise((resolve4, reject) => {
+  return new Promise((resolve7, reject) => {
     let settled = false;
     const server = http.createServer((req, res) => {
       const url = new URL(req.url ?? "/", "http://127.0.0.1");
@@ -24721,7 +24721,7 @@ function runAuthorizeServer(siteUrl, onListening, opts = {}) {
       settled = true;
       clearTimeout(timer);
       server.close();
-      resolve4(value);
+      resolve7(value);
     };
     server.on("error", (err) => {
       if (settled) return;
@@ -24749,7 +24749,7 @@ div{text-align:center}</style></head><body><div>${ok ? "\u2705 \u5DF2\u6388\u674
 });
 
 // src/index.ts
-import { readFile as readFile13 } from "node:fs/promises";
+import { readFile as readFile15 } from "node:fs/promises";
 
 // ../silo-core/lib/model/types.ts
 var SILO_WORKSPACE_VERSION = 3;
@@ -25150,12 +25150,30 @@ var DESC_MAX = 160;
 var CORE_KEYWORDS_MAX = 1;
 var LONGTAIL_KEYWORDS_MAX = 4;
 var FOCUS_KEYWORDS_MAX = CORE_KEYWORDS_MAX + LONGTAIL_KEYWORDS_MAX;
+function applySeoLimits(l) {
+  if (!l) return;
+  [TITLE_MIN, TITLE_MAX] = l.titleRecommended;
+  [DESC_MIN, DESC_MAX] = l.descriptionRecommended;
+  CORE_KEYWORDS_MAX = l.coreKeywordsMax;
+  LONGTAIL_KEYWORDS_MAX = l.longTailKeywordsMax;
+  FOCUS_KEYWORDS_MAX = CORE_KEYWORDS_MAX + LONGTAIL_KEYWORDS_MAX;
+}
+var WIDE = /[\u1100-\u115F\u2E80-\u303E\u3041-\u33FF\u3400-\u4DBF\u4E00-\u9FFF\uA000-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6]|[\u{20000}-\u{3FFFD}]/u;
+function seoWidth(text) {
+  let width = 0;
+  for (const ch of text.trim()) width += WIDE.test(ch) ? 2 : 1;
+  return width;
+}
+function widthRange(min, max) {
+  return `${min}\u2013${max}\uFF08\u4E2D\u6587\u7EA6 ${Math.floor(min / 2)}\u2013${Math.floor(max / 2)} \u5B57\uFF09`;
+}
 
 // ../silo-core/lib/model/health.ts
 var SEVERITY_ORDER = { critical: 0, warning: 1, info: 2 };
 var STALE_DRAFT_DAYS = 30;
 var isBlank = (s) => !s || !s.trim();
 function healthCheck(ws) {
+  applySeoLimits(ws.seoLimits);
   const issues = [];
   const graph = linkGraph(ws);
   const overlay = keywordOverlay(ws);
@@ -25229,8 +25247,8 @@ function healthCheck(ws) {
         nodeIds: [c.id]
       });
     }
-    const overTitle = c.seo.title.length > TITLE_MAX;
-    const overDesc = c.seo.description.length > DESC_MAX;
+    const overTitle = seoWidth(c.seo.title) > TITLE_MAX;
+    const overDesc = seoWidth(c.seo.description) > DESC_MAX;
     if (overTitle || overDesc) {
       const which = overTitle && overDesc ? "\u6807\u9898\u548C\u63CF\u8FF0\u90FD" : overTitle ? "\u6807\u9898" : "\u63CF\u8FF0";
       issues.push({
@@ -25238,12 +25256,12 @@ function healthCheck(ws) {
         code: "meta-truncated",
         severity: "warning",
         title: `${which}\u8D85\u957F\uFF1A${label}`,
-        detail: `${which}\u8D85\u8FC7\u5C55\u793A\u4E0A\u9650\uFF0C\u7ED3\u5C3E\u4F1A\u5728\u641C\u7D22\u7ED3\u679C\u91CC\u88AB\u622A\u65AD\u3002\u7CBE\u7B80\u5230 \u6807\u9898\u2264${TITLE_MAX} / \u63CF\u8FF0\u2264${DESC_MAX} \u5B57\u7B26\u3002`,
+        detail: `${which}\u8D85\u8FC7\u5C55\u793A\u4E0A\u9650\uFF0C\u7ED3\u5C3E\u4F1A\u5728\u641C\u7D22\u7ED3\u679C\u91CC\u88AB\u622A\u65AD\u3002\u7CBE\u7B80\u5230 \u6807\u9898\u2264${TITLE_MAX} / \u63CF\u8FF0\u2264${DESC_MAX}\uFF08\u6309\u5BBD\u5EA6\u7B97\uFF0C\u4E2D\u6587\u6BCF\u5B57\u7B97 2\uFF09\u3002`,
         nodeIds: [c.id]
       });
     }
-    const shortTitle = !isBlank(c.seo.title) && !overTitle && c.seo.title.trim().length < TITLE_MIN;
-    const shortDesc = !isBlank(c.seo.description) && !overDesc && c.seo.description.trim().length < DESC_MIN;
+    const shortTitle = !isBlank(c.seo.title) && !overTitle && seoWidth(c.seo.title) < TITLE_MIN;
+    const shortDesc = !isBlank(c.seo.description) && !overDesc && seoWidth(c.seo.description) < DESC_MIN;
     if (shortTitle || shortDesc) {
       const which = shortTitle && shortDesc ? "\u6807\u9898\u548C\u63CF\u8FF0\u90FD" : shortTitle ? "\u6807\u9898" : "\u63CF\u8FF0";
       issues.push({
@@ -25251,7 +25269,7 @@ function healthCheck(ws) {
         code: "meta-too-short",
         severity: "warning",
         title: `${which}\u8FC7\u77ED\uFF1A${label}`,
-        detail: `${which}\u592A\u77ED\uFF0C\u6D6A\u8D39\u4E86 SERP \u5C55\u793A\u4F4D\u4E0E\u76F8\u5173\u6027\u3002\u5199\u5230 \u6807\u9898 ${TITLE_MIN}\u2013${TITLE_MAX} / \u63CF\u8FF0 ${DESC_MIN}\u2013${DESC_MAX} \u5B57\u7B26\u4E4B\u95F4\u3002`,
+        detail: `${which}\u592A\u77ED\uFF0C\u6D6A\u8D39\u4E86 SERP \u5C55\u793A\u4F4D\u4E0E\u76F8\u5173\u6027\u3002\u5199\u5230 \u6807\u9898 ${widthRange(TITLE_MIN, TITLE_MAX)} / \u63CF\u8FF0 ${widthRange(DESC_MIN, DESC_MAX)}\u3002`,
         nodeIds: [c.id]
       });
     }
@@ -25397,6 +25415,17 @@ function healthCheck(ws) {
 
 // ../silo-core/lib/model/selectors.ts
 var isCategoryNode = (n) => !n.system && n.isCategory === true;
+var taxonomyForNode = (ws, nodeId) => {
+  const byId = new Map(ws.nodes.map((n) => [n.id, n]));
+  const guard = /* @__PURE__ */ new Set();
+  let cur = byId.get(nodeId) ?? null;
+  while (cur && !guard.has(cur.id)) {
+    guard.add(cur.id);
+    if (cur.taxonomyRestBase) return cur.taxonomyRestBase;
+    cur = cur.parentId ? byId.get(cur.parentId) ?? null : null;
+  }
+  return void 0;
+};
 var getNodePath = (ws, nodeId) => {
   const byId = new Map(ws.nodes.map((n) => [n.id, n]));
   const path = [];
@@ -25409,7 +25438,7 @@ var getNodePath = (ws, nodeId) => {
   }
   return path;
 };
-var focusKeywordString = (seo) => [...seo.coreKeywords.slice(0, CORE_KEYWORDS_MAX), ...seo.longTailKeywords.slice(0, LONGTAIL_KEYWORDS_MAX)].map((s) => s.trim()).filter(Boolean).join(", ");
+var focusKeywords = (seo) => [...seo.coreKeywords.slice(0, CORE_KEYWORDS_MAX), ...seo.longTailKeywords.slice(0, LONGTAIL_KEYWORDS_MAX)].map((s) => s.trim()).filter(Boolean);
 var getPendingContents = (ws) => ws.contents.filter((c) => c.wpPostId === null);
 var getDirtyContents = (ws) => ws.contents.filter((c) => c.dirtyAt != null);
 
@@ -25458,8 +25487,21 @@ var WpHttpError = class extends Error {
     this.name = "WpHttpError";
   }
 };
+var AUTH_ERROR_CODES = /* @__PURE__ */ new Set([
+  "incorrect_password",
+  "invalid_username",
+  "rest_cookie_invalid_nonce",
+  "rest_not_logged_in",
+  "rest_forbidden"
+]);
+function isAuthError(e) {
+  if (!(e instanceof WpHttpError)) return false;
+  if (e.status === 401) return true;
+  return e.status === 403 && AUTH_ERROR_CODES.has(e.code);
+}
 
 // ../silo-core/lib/wp/client.ts
+var decodeTermName = (s) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/&amp;/g, "&");
 var DEFAULT_POST_TYPE_ROUTE = {
   post: "posts",
   page: "pages"
@@ -25603,15 +25645,17 @@ var WpClient = class {
       return false;
     }
   }
-  /** Live WP `modified_gmt` (UTC) for a post — the conflict-detection signal (compared for inequality
-   *  against the value captured at last sync). Falls back to `modified` on the rare site that omits it. */
-  async fetchRemoteModifiedGmt(postType, id) {
+  /** Live WP `modified_gmt` (UTC) + `status` for a post — the pre-push signal used both for conflict
+   *  detection (modifiedGmt compared for inequality against the value captured at last sync) and for
+   *  warning before overwriting an already-published post. `modifiedGmt` falls back to `modified` on the
+   *  rare site that omits it. */
+  async fetchRemoteState(postType, id) {
     const route = this.routeFor(postType);
     const res = await this.call({
       method: "GET",
-      url: `/wp/v2/${route}/${id}?_fields=modified,modified_gmt`
+      url: `/wp/v2/${route}/${id}?_fields=modified,modified_gmt,status`
     });
-    return res.modified_gmt ?? res.modified ?? null;
+    return { modifiedGmt: res.modified_gmt ?? res.modified ?? null, status: res.status };
   }
   /** Fetch ONE content item's importer fields (for single-item refresh from the cloud). Returns null
    *  when the post is gone (404). Normalizes the per-type taxonomy field into `termIds` like the list. */
@@ -25661,6 +25705,14 @@ var WpClient = class {
     });
     return { id: res.id, modifiedGmt: res.modified_gmt ?? res.modified, status: res.status, link: res.link };
   }
+  /** A post's stored body (`content.raw`, block markup included), '' when it has none. */
+  async fetchRawContent(postType, id) {
+    const res = await this.call({
+      method: "GET",
+      url: `/wp/v2/${this.routeFor(postType)}/${id}?context=edit&_fields=content`
+    });
+    return res.content?.raw ?? "";
+  }
   /**
    * Fetch a single post's RENDERED body HTML on demand — for PREVIEW only. The extension never stores
    * bodies; this pulls the current WP content when the user opens a preview, to be held in memory and
@@ -25700,23 +25752,61 @@ var WpClient = class {
     }
   }
   /**
-   * Write Rank Math SEO meta the ONLY way that actually persists on a standard Rank Math site:
-   * POST /rankmath/v1/updateMeta with { objectID, objectType, meta:{...} }. Verified against
-   * a local test site. `objectType` is 'post' for a post/page/CPT entry (it names the WP object, not the
-   * post_type) and 'term' for a taxonomy term's archive page. No-op when there is nothing to write.
+   * Write a post's (or a term archive's) SEO title, description and focus keywords. Blank fields are left
+   * out; nothing is sent when all are blank. `objectType` is 'post' for any post/page/CPT entry and 'term'
+   * for a taxonomy term's archive page.
+   *
+   * Goes through the PufferGo plugin (`POST /puffergo/v1/seo-meta`), which writes whichever SEO plugin the
+   * site runs (Rank Math, Yoast). A site without the PufferGo plugin falls back to Rank Math's own
+   * `POST /rankmath/v1/updateMeta` — the only route that persists Rank Math meta there.
    */
-  async updateRankMathMeta(objectId, seo, objectType = "post") {
+  async writeSeo(objectId, seo, objectType = "post") {
+    const title = seo.title.trim();
+    const description = seo.description.trim();
+    const keywords = focusKeywords(seo);
+    if (!title && !description && !keywords.length) return;
+    const res = await this.net.request({
+      method: "POST",
+      url: `${this.base}/puffergo/v1/seo-meta`,
+      headers: { "Content-Type": "application/json", Authorization: this.authHeader },
+      body: {
+        objectType,
+        id: objectId,
+        ...title ? { title } : {},
+        ...description ? { description } : {},
+        ...keywords.length ? { keywords } : {}
+      }
+    });
+    const body = res.json;
+    if (res.status === 404 && body?.code === "rest_no_route") {
+      await this.writeRankMathMeta(objectId, { title, description, keywords: keywords.join(", ") }, objectType);
+      return;
+    }
+    if (res.status < 200 || res.status >= 300) {
+      throw new WpHttpError(res.status, body?.code ?? "wp_error", body?.message ?? `HTTP ${res.status}`, body);
+    }
+  }
+  /** Rank Math's own route, for sites without the PufferGo plugin. */
+  async writeRankMathMeta(objectId, seo, objectType) {
     const meta = {};
-    if (seo.title.trim()) meta.rank_math_title = seo.title.trim();
-    if (seo.description.trim()) meta.rank_math_description = seo.description.trim();
-    const fk = focusKeywordString(seo);
-    if (fk) meta.rank_math_focus_keyword = fk;
-    if (Object.keys(meta).length === 0) return;
+    if (seo.title) meta.rank_math_title = seo.title;
+    if (seo.description) meta.rank_math_description = seo.description;
+    if (seo.keywords) meta.rank_math_focus_keyword = seo.keywords;
     await this.call({
       method: "POST",
       url: "/rankmath/v1/updateMeta",
       body: { objectID: objectId, objectType, meta }
     });
+  }
+  /** The SEO limits the site's PufferGo plugin publishes, or null without the plugin. */
+  async fetchSeoLimits() {
+    const res = await this.net.request({
+      method: "GET",
+      url: `${this.base}/puffergo/v1/seo-limits`,
+      headers: { "Content-Type": "application/json", Authorization: this.authHeader }
+    });
+    const body = res.json;
+    return res.status >= 200 && res.status < 300 && body?.limits ? body.limits : null;
   }
   /**
    * Pull existing content of one abstract type from WordPress, one page at a time. Returns the raw
@@ -25791,26 +25881,27 @@ var WpClient = class {
    * list suitable for assignment. `taxRestBase` is the taxonomy's REST base ('categories',
    * 'product_cat', 'puffergo_product_cat', …), so this works for post categories AND any CPT taxonomy.
    */
-  async ensureTermPath(taxRestBase, terms) {
-    let parent = 0;
+  async ensureTermPath(taxRestBase, terms, startParent = 0) {
+    let parent = startParent;
     let leafId = 0;
     for (const term of terms) {
       const name = term.trim();
       if (!name) continue;
       const existing = await this.call({
         method: "GET",
-        url: `/wp/v2/${taxRestBase}?per_page=100&parent=${parent}&search=${encodeURIComponent(name)}`
+        url: `/wp/v2/${taxRestBase}?per_page=100&parent=${parent}&search=${encodeURIComponent(name)}&_fields=id,name`
       });
-      const match = existing.find(Boolean);
+      const want = name.toLowerCase();
+      const match = existing.find((t) => decodeTermName(t.name).trim().toLowerCase() === want);
       if (match) {
         leafId = match.id;
       } else {
-        const created = await this.call({
+        const created2 = await this.call({
           method: "POST",
           url: `/wp/v2/${taxRestBase}`,
           body: { name, parent }
         });
-        leafId = created.id;
+        leafId = created2.id;
       }
       parent = leafId;
     }
@@ -28210,36 +28301,45 @@ function describeSeoWriteFailure(e) {
   return `SEO \u5B57\u6BB5\u5199\u5165\u5931\u8D25\uFF1A${e instanceof Error ? e.message : String(e)}`;
 }
 async function syncContent(client2, ws, item, opts = {}) {
-  const { force = false, syncCategories = true, content, seoBestEffort = false } = opts;
+  const { force = false, syncCategories = true, seoBestEffort = false } = opts;
   try {
     if (item.wpPostId && !force) {
-      const remote = await client2.fetchRemoteModifiedGmt(item.postType, item.wpPostId);
-      if (remote && item.lastModifiedRemote && remote !== item.lastModifiedRemote) {
-        return { ok: false, conflict: true, remoteModified: remote };
+      const remote = await client2.fetchRemoteState(item.postType, item.wpPostId);
+      if (remote.modifiedGmt && item.lastModifiedRemote && remote.modifiedGmt !== item.lastModifiedRemote) {
+        return { ok: false, conflict: true, reason: "modified", remoteModified: remote.modifiedGmt };
+      }
+      if (remote.status === "publish") {
+        return { ok: false, conflict: true, reason: "published" };
       }
     }
-    const taxonomyRestBase = client2.taxRestBaseFor(item.postType);
+    const content = opts.resolveContent ? await opts.resolveContent(item) : opts.content;
+    if (content && item.wpPostId && /<!--\s*wp:/.test(await client2.fetchRawContent(item.postType, item.wpPostId))) {
+      return {
+        ok: false,
+        conflict: false,
+        error: "\u8FD9\u7BC7\u5728 WordPress \u91CC\u662F\u7528\u533A\u5757\u505A\u7684\uFF0C\u63A8\u9001\u6B63\u6587\u4F1A\u628A\u533A\u5757\u53D8\u6210\u7EAF HTML\uFF0C\u5DF2\u8DF3\u8FC7\u3002\u8BF7\u5728 WordPress \u7F16\u8F91\u5668\u91CC\u6539\uFF0C\u6216\u6E05\u7A7A\u8FD9\u7BC7\u7B14\u8BB0\u7684\u6B63\u6587\u53EA\u63A8\u9001 SEO \u548C\u5206\u7C7B\u3002"
+      };
+    }
+    const taxonomyRestBase = client2.taxRestBaseFor(item.postType) ?? taxonomyForNode(ws, item.siloNodeId);
     let termIds;
     if (syncCategories && taxonomyRestBase) {
-      if (item.termIds && item.termIds.length) {
-        termIds = item.termIds;
-      } else {
-        const terms = getNodePath(ws, item.siloNodeId).filter(isCategoryNode).map((n) => n.term);
-        if (terms.length) termIds = await client2.ensureTermPath(taxonomyRestBase, terms);
-      }
+      const home = await resolvePlacementTerm(client2, ws, item.siloNodeId, taxonomyRestBase);
+      const known = item.termIds ?? [];
+      const merged = home != null && !known.includes(home) ? [...known, home] : known;
+      if (merged.length) termIds = merged;
     }
     const pushed = await client2.upsertPost(item, { termIds, taxonomyRestBase, content });
     let seoWarning;
     if (seoBestEffort) {
       try {
-        await client2.updateRankMathMeta(pushed.id, item.seo);
+        await client2.writeSeo(pushed.id, item.seo);
       } catch (e) {
         seoWarning = describeSeoWriteFailure(e);
       }
     } else {
-      await client2.updateRankMathMeta(pushed.id, item.seo);
+      await client2.writeSeo(pushed.id, item.seo);
     }
-    const finalModified = await client2.fetchRemoteModifiedGmt(item.postType, pushed.id) ?? pushed.modifiedGmt;
+    const finalModified = (await client2.fetchRemoteState(item.postType, pushed.id)).modifiedGmt ?? pushed.modifiedGmt;
     return {
       ok: true,
       ...seoWarning ? { seoWarning } : {},
@@ -28257,8 +28357,27 @@ async function syncContent(client2, ws, item, opts = {}) {
       }
     };
   } catch (e) {
-    return { ok: false, conflict: false, error: e instanceof Error ? e.message : String(e) };
+    return {
+      ok: false,
+      conflict: false,
+      error: e instanceof Error ? e.message : String(e),
+      ...isAuthError(e) ? { authError: true } : {}
+    };
   }
+}
+async function resolvePlacementTerm(client2, ws, nodeId, tax) {
+  const path = getNodePath(ws, nodeId).filter(isCategoryNode);
+  if (!path.length) return void 0;
+  let known = -1;
+  for (let i = path.length - 1; i >= 0 && known < 0; i--) if (path[i].wpCategoryId != null) known = i;
+  if (known === path.length - 1) return path[known].wpCategoryId;
+  const parent = known >= 0 ? path[known].wpCategoryId : 0;
+  const ids = await client2.ensureTermPath(
+    tax,
+    path.slice(known + 1).map((n) => n.term),
+    parent
+  );
+  return ids[0];
 }
 
 // ../silo-core/lib/sync/import-content.ts
@@ -28292,17 +28411,22 @@ async function importFromWp(client2, ws, postTypes, opts = {}) {
     const pt = postTypes[i];
     opts.onProgress?.(i, postTypes.length, `\u62C9\u53D6 ${pt}`);
     const posts = await client2.listAllContentType(pt);
-    posts.forEach((post) => raw.push({ postType: pt, post }));
+    posts.forEach((post) => {
+      if (!opts.onlyIds || opts.onlyIds.includes(post.id)) raw.push({ postType: pt, post });
+    });
   }
   opts.onProgress?.(postTypes.length, postTypes.length, "\u8BFB\u53D6 SEO");
   const allIds = raw.map((r) => r.post.id);
   let seoProvider = null;
+  let seoLimits;
   const seoById = /* @__PURE__ */ new Map();
   try {
     const seo = await client2.fetchSeoMeta(allIds);
     if (seo) {
       seoProvider = seo.provider;
       seo.items.forEach((it) => seoById.set(it.id, it));
+      seoLimits = seo.limits ?? void 0;
+      applySeoLimits(seoLimits);
     }
   } catch {
     seoProvider = null;
@@ -28315,7 +28439,9 @@ async function importFromWp(client2, ws, postTypes, opts = {}) {
   const typeRootId = /* @__PURE__ */ new Map();
   const termNodeIdByType = /* @__PURE__ */ new Map();
   const uncategorizedId = /* @__PURE__ */ new Map();
+  const usedTypes = new Set(raw.map((r) => r.postType));
   for (const pt of postTypes) {
+    if (opts.onlyIds && !usedTypes.has(pt)) continue;
     const tax = client2.taxRestBaseFor(pt);
     let root = findTypeRoot(pt);
     if (!root) {
@@ -28328,7 +28454,19 @@ async function importFromWp(client2, ws, postTypes, opts = {}) {
     }
     typeRootId.set(pt, root.id);
     if (!tax) continue;
-    const terms = await client2.listAllTerms(tax);
+    let terms = await client2.listAllTerms(tax);
+    if (opts.onlyIds) {
+      const keep = new Set(raw.filter((r) => r.postType === pt).flatMap((r) => r.post.termIds ?? []));
+      for (let grew = true; grew; ) {
+        grew = false;
+        for (const t of terms)
+          if (keep.has(t.id) && t.parent && !keep.has(t.parent)) {
+            keep.add(t.parent);
+            grew = true;
+          }
+      }
+      terms = terms.filter((t) => keep.has(t.id));
+    }
     const nodeIdByTerm = /* @__PURE__ */ new Map();
     const placeTerm = (termId, name, parentId, archiveUrl) => {
       let node = findTermNode(tax, termId);
@@ -28572,7 +28710,7 @@ async function importFromWp(client2, ws, postTypes, opts = {}) {
   const mergedWs = { ...ws, nodes: keptNodes, contents, edges, brokenLinks };
   const keywords = reconcileKeywords(mergedWs);
   return {
-    ws: { ...mergedWs, keywords },
+    ws: { ...mergedWs, keywords, ...seoLimits ? { seoLimits } : {} },
     rootNodeIds: [...typeRootId.values()].filter((id) => keptIds.has(id)),
     reports,
     imported: imported.length,
@@ -28582,7 +28720,7 @@ async function importFromWp(client2, ws, postTypes, opts = {}) {
 }
 
 // src/index.ts
-import { dirname as dirname4 } from "node:path";
+import { dirname as dirname5 } from "node:path";
 
 // src/adapters/fileStore.ts
 import { readFile, writeFile, mkdir } from "node:fs/promises";
@@ -28917,9 +29055,60 @@ async function scanVault(dir2) {
   return out;
 }
 
+// src/lib/siloSync.ts
+import { createHash } from "node:crypto";
+import { existsSync as existsSync5 } from "node:fs";
+import { mkdir as mkdir4, readFile as readFile5, writeFile as writeFile4 } from "node:fs/promises";
+import { basename as basename3, join as join4, resolve as resolve2 } from "node:path";
+var syncedPath = (dir2) => join4(dir2, ".silo", "synced.json");
+async function readSynced(dir2) {
+  const p = syncedPath(dir2);
+  return existsSync5(p) ? JSON.parse(await readFile5(p, "utf8")) : {};
+}
+async function writeSynced(dir2, synced) {
+  await mkdir4(join4(dir2, ".silo"), { recursive: true });
+  await writeFile4(syncedPath(dir2), JSON.stringify(synced, null, 2) + "\n", "utf8");
+}
+function noteHash(note) {
+  return createHash("sha256").update(`${note.fm}
+---
+${note.body}`).digest("hex");
+}
+function isEdited(id, scan, synced) {
+  const note = scan.get(id);
+  if (!note) return false;
+  return synced[id] ? noteHash(note) !== synced[id] : !!note.body.trim();
+}
+function changedIds(ws, scan, synced) {
+  return ws.contents.filter((c) => c.wpPostId == null || isEdited(c.id, scan, synced)).map((c) => c.id);
+}
+function matchTargets(targets, ws, scan, dir2) {
+  const ids = [];
+  const unknown = [];
+  for (const t of targets) {
+    const name = t.replace(/\.md$/i, "");
+    const c = ws.contents.find((c2) => {
+      const note = scan.get(c2.id);
+      return c2.id === t || c2.slug === t || String(c2.wpPostId) === t || c2.wpLink && c2.wpLink.replace(/\/$/, "") === t.replace(/\/$/, "") || note && (resolve2(dir2, t) === note.path || basename3(note.path, ".md") === name);
+    });
+    if (c) ids.push(c.id);
+    else unknown.push(t);
+  }
+  return { ids, unknown };
+}
+function recordSynced(synced, before, after, syncedIds) {
+  const out = { ...synced };
+  const done = new Set(syncedIds);
+  for (const [id, note] of after) {
+    const was = before.get(id);
+    if (done.has(id) || was && synced[id] && noteHash(was) === synced[id]) out[id] = noteHash(note);
+  }
+  return out;
+}
+
 // src/lib/productsCmd.ts
-import { resolve as resolve3, join as join8, relative } from "node:path";
-import { readFile as readFile11, readdir as readdir3, stat as stat2 } from "node:fs/promises";
+import { resolve as resolve5, join as join9, relative } from "node:path";
+import { readFile as readFile12, readdir as readdir3, stat as stat2 } from "node:fs/promises";
 
 // src/lib/imageSniff.ts
 var MAX_BYTES = 10 * 1024 * 1024;
@@ -29007,6 +29196,7 @@ function sniffImage(buf) {
 }
 
 // src/lib/agentClient.ts
+var PRODUCT_TYPE = "puffergo_product";
 var AgentHttpError = class extends Error {
   constructor(status, body) {
     super(`HTTP ${status}`);
@@ -29017,7 +29207,7 @@ var AgentHttpError = class extends Error {
 var AgentClient = class {
   constructor(cfg) {
     this.cfg = cfg;
-    this.base = `${cfg.siteUrl.replace(/\/+$/, "")}/wp-json/puffergo/v1`;
+    this.base = `${cfg.siteUrl.replace(/\/+$/, "")}/wp-json/wp-abilities/v1/abilities/puffergo`;
     this.authHeader = `Basic ${Buffer.from(`${cfg.username}:${cfg.appPassword}`).toString("base64")}`;
   }
   base;
@@ -29044,29 +29234,72 @@ var AgentClient = class {
     if (!res.ok) throw new AgentHttpError(res.status, json);
     return json;
   }
-  schema() {
-    return this.call("GET", "/agent/products/schema");
-  }
-  listProducts(params = {}) {
+  /** Readonly abilities run over GET. Core reads the raw `input` query param (no JSON decoding), so each
+   *  field goes as `input[field]=value`; empty fields are left out. */
+  read(ability, input = {}) {
     const q = new URLSearchParams();
-    if (params.search) q.set("search", params.search);
-    if (params.key) q.set("key", params.key);
-    if (params.url) q.set("url", params.url);
-    if (params.page) q.set("page", String(params.page));
+    for (const [k, v] of Object.entries(input)) {
+      if (v !== void 0 && v !== "") q.set(`input[${k}]`, String(v));
+    }
     const qs = q.toString();
-    return this.call("GET", `/agent/products${qs ? `?${qs}` : ""}`);
+    return this.call("GET", `/${ability}/run${qs ? `?${qs}` : ""}`);
+  }
+  write(ability, input) {
+    return this.call("POST", `/${ability}/run`, { input });
+  }
+  schema() {
+    return this.read("get-product-schema");
+  }
+  /** Products are found through the generic find-posts ability, limited to the product type. */
+  listProducts(params = {}) {
+    return this.findPosts({ ...params, type: PRODUCT_TYPE });
+  }
+  postTypes() {
+    return this.read("list-post-types");
+  }
+  findPosts(params = {}) {
+    return this.read("find-posts", params);
+  }
+  getBlocks(id, path) {
+    return this.read("get-blocks", { id, path });
+  }
+  /** With `inPage`, the one section is previewed in place of that block on the post's own page. */
+  /** With inPage.data (a component's data) in place of sections, that component block is previewed in its page. */
+  previewBlocks(sections, title, inPage) {
+    return this.write("preview-blocks", {
+      ...sections.length ? { sections } : {},
+      ...title ? { title } : {},
+      ...inPage ?? {}
+    });
+  }
+  createPost(input) {
+    return this.write("create-post", input);
+  }
+  publishPost(input) {
+    return this.write("publish-post", input);
+  }
+  updateSeo(input) {
+    return this.write("update-seo", input);
+  }
+  /** A static block takes its new html; a component block its new data. */
+  replaceBlock(input) {
+    return this.write("replace-block", input);
   }
   getProduct(id) {
-    return this.call("GET", `/agent/products/${id}`);
+    return this.read("get-product", { id });
   }
   validate(products2) {
-    return this.call("POST", "/agent/products/validate", { products: products2 });
+    return this.write("validate-products", { products: products2 });
   }
   upsert(products2) {
-    return this.call("POST", "/agent/products/upsert", { products: products2 });
+    return this.write("upsert-products", { products: products2 });
+  }
+  /** The product's page as upserting this file would make it, without writing it. */
+  previewProduct(product) {
+    return this.write("preview-product", { product });
   }
   mediaLookup(sha256) {
-    return this.call("GET", `/agent/media?sha256=${sha256}`);
+    return this.read("find-media", { sha256 });
   }
   /** Product category terms via WordPress's own `/wp/v2/puffergo_product_cat` route; `lang` filters under Polylang. */
   async listCategoryTerms(lang = "") {
@@ -29113,17 +29346,17 @@ var AgentClient = class {
 };
 
 // src/lib/site.ts
-import { readFile as readFile5, writeFile as writeFile4, mkdir as mkdir4 } from "node:fs/promises";
-import { existsSync as existsSync5 } from "node:fs";
-import { join as join4 } from "node:path";
+import { readFile as readFile6, writeFile as writeFile5, mkdir as mkdir5 } from "node:fs/promises";
+import { existsSync as existsSync6 } from "node:fs";
+import { join as join5 } from "node:path";
 function configPath(dir2) {
-  return join4(dir2, ".puffergo", "config.json");
+  return join5(dir2, ".puffergo", "config.json");
 }
 async function readWorkdirConfig(dir2) {
   const path = configPath(dir2);
-  if (!existsSync5(path)) return null;
+  if (!existsSync6(path)) return null;
   try {
-    const raw = JSON.parse(await readFile5(path, "utf8"));
+    const raw = JSON.parse(await readFile6(path, "utf8"));
     if (typeof raw.siteUrl !== "string") return null;
     return raw.editLive ? { siteUrl: raw.siteUrl, editLive: raw.editLive } : { siteUrl: raw.siteUrl };
   } catch {
@@ -29134,8 +29367,8 @@ async function writeWorkdirConfig(dir2, cfg) {
   const prev = await readWorkdirConfig(dir2);
   if (!("editLive" in cfg) && prev?.editLive && prev.siteUrl === cfg.siteUrl) cfg = { ...cfg, editLive: prev.editLive };
   const path = configPath(dir2);
-  await mkdir4(join4(dir2, ".puffergo"), { recursive: true });
-  await writeFile4(path, JSON.stringify(cfg, null, 2), "utf8");
+  await mkdir5(join5(dir2, ".puffergo"), { recursive: true });
+  await writeFile5(path, JSON.stringify(cfg, null, 2), "utf8");
 }
 var NoSiteError = class extends Error {
   constructor(sites) {
@@ -29160,6 +29393,7 @@ async function resolveSite(dir2, siteFlag) {
   if (siteUrl) {
     const cred2 = await resolveCredential(dir2, siteUrl);
     if (!cred2) throw new NotLoggedInError(siteUrl);
+    if (siteFlag) await writeWorkdirConfig(dir2, { siteUrl: cred2.config.siteUrl });
     return cred2;
   }
   const cred = await resolveCredential(dir2, void 0);
@@ -29172,19 +29406,237 @@ async function editLiveAllowed(dir2, siteUrl) {
   return !!cfg?.editLive?.on && cfg.siteUrl === siteUrl;
 }
 
+// src/lib/siteSchema.ts
+var SUPPORTED_SCHEMA_VERSION = 5;
+var MIN_SCHEMA_VERSION = 5;
+var SchemaVersionError = class extends Error {
+  constructor(siteVersion) {
+    super(
+      `The site's PufferGo plugin uses product-file version ${siteVersion}; this Skill understands up to ${SUPPORTED_SCHEMA_VERSION}. Update the Skill (download the latest wordpress-bulk-product-upload) and try again.`
+    );
+    this.siteVersion = siteVersion;
+  }
+};
+var PluginOutdatedError = class extends Error {
+  constructor() {
+    super(
+      "This site's PufferGo plugin (or WordPress) is too old for this Skill. In wp-admin, update the PufferGo plugin to the latest version and WordPress to 6.9 or newer, then try again."
+    );
+  }
+};
+var ABILITIES_MISSING = /* @__PURE__ */ new Set(["rest_no_route", "rest_ability_not_found"]);
+var cache = /* @__PURE__ */ new WeakMap();
+function loadSiteSchema(c) {
+  if (!cache.has(c)) {
+    cache.set(
+      c,
+      c.schema().catch((e) => {
+        const code = e instanceof AgentHttpError ? e.body?.code : void 0;
+        throw code && ABILITIES_MISSING.has(code) ? new PluginOutdatedError() : e;
+      }).then((raw) => {
+        if (raw.schemaVersion > SUPPORTED_SCHEMA_VERSION) throw new SchemaVersionError(raw.schemaVersion);
+        if (!(raw.schemaVersion >= MIN_SCHEMA_VERSION)) throw new PluginOutdatedError();
+        return raw;
+      })
+    );
+  }
+  return cache.get(c);
+}
+function optionalFactPaths(schema) {
+  return [...schema.tradeFields.map((f) => f.path), "specs"];
+}
+function getPath(obj, path) {
+  return path.split(".").reduce((o, k) => o && typeof o === "object" ? o[k] : void 0, obj);
+}
+function setPath(obj, path, value) {
+  const keys = path.split(".");
+  let o = obj;
+  for (const k of keys.slice(0, -1)) {
+    if (!o[k] || typeof o[k] !== "object") o[k] = {};
+    o = o[k];
+  }
+  o[keys[keys.length - 1]] = value;
+}
+function isEmptyValue(v) {
+  if (v == null) return true;
+  if (typeof v === "string") return v.trim() === "";
+  if (Array.isArray(v)) return v.length === 0;
+  if (typeof v === "object") return Object.keys(v).length === 0;
+  return false;
+}
+
+// src/lib/siteCmd.ts
+async function client(ctx) {
+  const cred = await resolveSite(ctx.dir, ctx.flags.get("site"));
+  const c = new AgentClient(cred.config);
+  await loadSiteSchema(c);
+  return c;
+}
+function siteErrorOutput(e) {
+  if (e instanceof NoSiteError) return { ok: false, code: "no_site", sites: e.sites };
+  if (e instanceof NotLoggedInError) return { ok: false, code: "not_logged_in" };
+  if (e instanceof SchemaVersionError) return { ok: false, code: "update_skill", fix: "user", message: e.message };
+  if (e instanceof PluginOutdatedError) return { ok: false, code: "update_plugin", fix: "user", message: e.message };
+  return null;
+}
+function abilityError(e) {
+  const body = e.body ?? {};
+  return {
+    ok: false,
+    code: body.code ?? `http_${e.status}`,
+    message: body.message ?? `HTTP ${e.status}`,
+    ...body.data?.errors ? { errors: body.data.errors } : {},
+    fix: body.data?.fix ?? (e.status === 400 ? "ai" : void 0)
+  };
+}
+var UsageError = class extends Error {
+};
+var CodedError = class extends Error {
+  constructor(code, message, fix) {
+    super(message);
+    this.code = code;
+    this.fix = fix;
+  }
+};
+async function runWith(connect2, ctx, body) {
+  try {
+    return await body(await connect2(ctx));
+  } catch (e) {
+    return errorOutput(e);
+  }
+}
+function errorOutput(e) {
+  const siteErr = siteErrorOutput(e);
+  if (siteErr) return siteErr;
+  if (e instanceof UsageError) return { ok: false, code: "usage", message: e.message };
+  if (e instanceof CodedError) return { ok: false, code: e.code, fix: e.fix ?? "ai", message: e.message };
+  if (e instanceof AgentHttpError) return abilityError(e);
+  return { ok: false, code: "error", message: e instanceof Error ? e.message : String(e) };
+}
+function isLive(status) {
+  return status === "publish" || status === "future";
+}
+var PUBLISH_INTENT = /发布|上线|公开|publish|go live|make (it|them|.+) live|put (it|them|.+) live/i;
+function customerSaid(ctx) {
+  return ctx.flags.get("customer-said")?.trim() || void 0;
+}
+function publishRefusal(ctx, kind) {
+  if (PUBLISH_INTENT.test(customerSaid(ctx) ?? "")) return null;
+  return {
+    ok: false,
+    code: "needs_publish_request",
+    fix: "user",
+    message: `Publishing makes this ${kind} public. Only publish when the customer explicitly asked to publish (\u53D1\u5E03/\u4E0A\u7EBF/publish) \u2014 "\u6539"/"\u63A8"/"\u4E0A\u4F20"/"\u66F4\u65B0" do not. Ask the customer; if they say to publish, pass their exact words with --customer-said.`
+  };
+}
+function conflictOutput(e, reread) {
+  const conflict = e instanceof AgentHttpError && e.body?.code === "conflict";
+  if (!conflict) return null;
+  return {
+    ok: false,
+    code: "conflict",
+    fix: "ai",
+    message: `It changed on the site since you read it (maybe edited in wp-admin). Run \`${reread}\` again and redo the change on the fresh version.`
+  };
+}
+function liveLockedMessage(kind, group2) {
+  const show = kind === "page" ? "Show the customer the preview (for SEO, the current and new values)" : "Show the customer the change";
+  return `This ${kind} is published, so it was left unchanged. ${show}; once they agree, run the same command again with --customer-said "<their exact words>". To change many live ${group2} in a row, use \`${group2} edit-live on --customer-said "\u2026"\` and \`edit-live off\` when done.`;
+}
+async function cmdEditLive(ctx) {
+  const sub = ctx.positional[0];
+  try {
+    const cred = await resolveSite(ctx.dir, ctx.flags.get("site"));
+    const siteUrl = cred.config.siteUrl;
+    const cfg = await readWorkdirConfig(ctx.dir) ?? { siteUrl };
+    if (cfg.siteUrl !== siteUrl)
+      return { ok: false, code: "other_site", message: `This work folder is for ${cfg.siteUrl}.` };
+    if (sub === "on") {
+      const said = (ctx.flags.get("customer-said") ?? "").trim();
+      if (!said)
+        return {
+          ok: false,
+          code: "needs_customer_request",
+          fix: "user",
+          message: "Turn this on only when the customer asks to change published products, pages or posts, or existing categories. Pass their exact words with --customer-said."
+        };
+      await writeWorkdirConfig(ctx.dir, {
+        siteUrl,
+        editLive: { on: true, customerSaid: said, at: (/* @__PURE__ */ new Date()).toISOString() }
+      });
+      return {
+        ok: true,
+        editLive: true,
+        note: "products push and pages replace now change live pages directly. Turn it off with `edit-live off` when done."
+      };
+    }
+    if (sub === "off") {
+      await writeWorkdirConfig(ctx.dir, { siteUrl, editLive: void 0 });
+      return { ok: true, editLive: false };
+    }
+    if (sub === void 0) return { ok: true, editLive: await editLiveAllowed(ctx.dir, siteUrl) };
+    return {
+      ok: false,
+      code: "usage",
+      message: 'usage: puffergo <products|pages> edit-live [on --customer-said "\u2026" | off]'
+    };
+  } catch (e) {
+    const siteErr = siteErrorOutput(e);
+    if (siteErr) return siteErr;
+    return { ok: false, code: "error", message: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 // src/lib/productFiles.ts
-import { readFile as readFile6, writeFile as writeFile5, readdir as readdir2, mkdir as mkdir5 } from "node:fs/promises";
-import { existsSync as existsSync6 } from "node:fs";
-import { join as join5 } from "node:path";
+import { readFile as readFile8, writeFile as writeFile7, readdir as readdir2, mkdir as mkdir7 } from "node:fs/promises";
+import { existsSync as existsSync8 } from "node:fs";
+
+// src/lib/workdirState.ts
+import { existsSync as existsSync7 } from "node:fs";
+import { mkdir as mkdir6, readFile as readFile7, writeFile as writeFile6 } from "node:fs/promises";
+import { join as join6 } from "node:path";
+function siteState(fileName) {
+  const path = (dir2) => join6(dir2, ".puffergo", fileName);
+  const readAll = async (dir2) => {
+    if (!existsSync7(path(dir2))) return {};
+    try {
+      return JSON.parse(await readFile7(path(dir2), "utf8"));
+    } catch {
+      return {};
+    }
+  };
+  const writeAll = async (dir2, all) => {
+    await mkdir6(join6(dir2, ".puffergo"), { recursive: true });
+    await writeFile6(path(dir2), JSON.stringify(all, null, 2) + "\n", "utf8");
+  };
+  return {
+    async read(dir2, siteUrl) {
+      return (await readAll(dir2))[siteUrl] ?? {};
+    },
+    async write(dir2, siteUrl, value) {
+      const all = await readAll(dir2);
+      all[siteUrl] = value;
+      await writeAll(dir2, all);
+    },
+    async remember(dir2, siteUrl, key, entry) {
+      const all = await readAll(dir2);
+      all[siteUrl] = { ...all[siteUrl] ?? {}, [key]: entry };
+      await writeAll(dir2, all);
+    }
+  };
+}
+
+// src/lib/productFiles.ts
+import { join as join7 } from "node:path";
 function productsDir(dir2) {
-  return join5(dir2, "products");
+  return join7(dir2, "products");
 }
 function productFilePath(dir2, key) {
-  return join5(productsDir(dir2), `${key}.json`);
+  return join7(productsDir(dir2), `${key}.json`);
 }
 async function loadProducts(dir2, only) {
   const dirPath = productsDir(dir2);
-  if (!existsSync6(dirPath)) return [];
+  if (!existsSync8(dirPath)) return [];
   let files;
   if (only && only.length) {
     files = only.map((k) => `${k}.json`);
@@ -29193,9 +29645,9 @@ async function loadProducts(dir2, only) {
   }
   const out = [];
   for (const f of files) {
-    const path = join5(dirPath, f);
-    if (!existsSync6(path)) continue;
-    const raw = await readFile6(path, "utf8");
+    const path = join7(dirPath, f);
+    if (!existsSync8(path)) continue;
+    const raw = await readFile8(path, "utf8");
     const fileKey = f.replace(/\.json$/, "");
     try {
       out.push({ fileKey, path, product: JSON.parse(raw) });
@@ -29206,35 +29658,46 @@ async function loadProducts(dir2, only) {
   return out;
 }
 async function writeProduct(dir2, key, product) {
-  await mkdir5(productsDir(dir2), { recursive: true });
-  await writeFile5(productFilePath(dir2, key), JSON.stringify(product, null, 2) + "\n", "utf8");
+  await mkdir7(productsDir(dir2), { recursive: true });
+  await writeFile7(productFilePath(dir2, key), JSON.stringify(product, null, 2) + "\n", "utf8");
 }
-function uploadsCachePath(dir2) {
-  return join5(dir2, ".puffergo", "uploads.json");
-}
-async function readCacheFile(dir2) {
-  const path = uploadsCachePath(dir2);
-  if (!existsSync6(path)) return {};
-  try {
-    return JSON.parse(await readFile6(path, "utf8"));
-  } catch {
-    return {};
-  }
-}
+var uploadsState = siteState("uploads.json");
 async function readUploadsCache(dir2, siteUrl) {
-  return (await readCacheFile(dir2))[siteUrl] ?? {};
+  return uploadsState.read(dir2, siteUrl);
 }
 async function writeUploadsCache(dir2, siteUrl, cache2) {
-  const all = await readCacheFile(dir2);
-  all[siteUrl] = cache2;
-  await mkdir5(join5(dir2, ".puffergo"), { recursive: true });
-  await writeFile5(uploadsCachePath(dir2), JSON.stringify(all, null, 2), "utf8");
+  return uploadsState.write(dir2, siteUrl, cache2);
 }
 
 // src/lib/localCheck.ts
-import { stat, readFile as readFile7 } from "node:fs/promises";
-import { existsSync as existsSync7 } from "node:fs";
-import { resolve as resolve2 } from "node:path";
+import { stat, readFile as readFile9 } from "node:fs/promises";
+import { existsSync as existsSync9 } from "node:fs";
+import { resolve as resolve3 } from "node:path";
+
+// src/lib/detailBlocks.ts
+function detailBlocks(product, ident) {
+  return (product.detail?.blocks ?? []).map((block2, i) => ({ path: `${ident}.detail.blocks[${i}]`, block: block2 }));
+}
+function htmlText(html2) {
+  return html2.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
+function blockSignature(blocks) {
+  return blocks.map((b) => {
+    if (b.type === "config") return `config:${b.component}`;
+    return b.type === "static" ? "static" : "native";
+  });
+}
+function detailWarnings(product, ident) {
+  if (product.id || detailBlocks(product, ident).some((b) => b.block.type === "config")) return [];
+  return [
+    {
+      path: `${ident}.detail`,
+      code: "no_detail_component",
+      message: "The detail has no component. Suggest the customer one (see the Skill), unless they want it this way.",
+      fix: "user"
+    }
+  ];
+}
 
 // src/lib/imageRefs.ts
 function identOf(product) {
@@ -29255,30 +29718,66 @@ function walkImageRefs(product) {
       }
     });
   });
-  (product.detail?.sections ?? []).forEach((section, i) => {
-    const sectionPath = `${ident}.detail.sections[${i}]`;
-    if (section.image) {
-      out.push({
-        path: `${sectionPath}.image`,
-        place: section.layout,
-        ref: section.image,
-        set: (next) => {
-          section.image = next;
-        }
-      });
-    }
-    (section.images ?? []).forEach((ref, j) => {
-      out.push({
-        path: `${sectionPath}.images[${j}]`,
-        place: "gallery",
-        ref,
-        set: (next) => {
-          section.images[j] = { ...next, title: ref.title, text: ref.text };
-        }
-      });
+  for (const { path, block: block2 } of detailBlocks(product, ident)) {
+    if (block2.type !== "image" || !block2.image) continue;
+    out.push({
+      path: `${path}.image`,
+      place: "detailImage",
+      ref: block2.image,
+      set: (next) => {
+        block2.image = next;
+      }
     });
-  });
+  }
   return out;
+}
+
+// src/lib/configData.ts
+var TEXT_TYPES = /* @__PURE__ */ new Set(["text", "textarea", "richtext"]);
+var IMAGE_FILE = /\.(jpe?g|png|webp|gif|avif)$/i;
+var isUrl = (v) => /^(https?:)?\/\//i.test(v);
+var isLocalImage = (v) => IMAGE_FILE.test(v) && !isUrl(v);
+function configLeaves(data, schema, path = "data") {
+  const out = [];
+  const walk = (obj, fields, at) => {
+    for (const [key, value] of Object.entries(obj)) {
+      const field = fields?.[key];
+      if (typeof value === "string") {
+        out.push({ path: `${at}.${key}`, value, field, row: obj, set: (next) => obj[key] = next });
+      } else if (Array.isArray(value)) {
+        value.forEach((row, i) => {
+          if (row && typeof row === "object")
+            walk(row, field?.itemSchema, `${at}.${key}[${i}]`);
+        });
+      } else if (value && typeof value === "object") {
+        walk(value, field?.itemSchema, `${at}.${key}`);
+      }
+    }
+  };
+  if (data && typeof data === "object" && !Array.isArray(data)) walk(data, schema, path);
+  return out;
+}
+function configTexts(data, schema, path) {
+  return configLeaves(data, schema, path).filter(
+    (l) => l.field ? TEXT_TYPES.has(l.field.type ?? "") : !isUrl(l.value) && !isLocalImage(l.value)
+  );
+}
+function configImages(data, schema, path) {
+  return configLeaves(data, schema, path).filter((l) => l.field ? l.field.type === "image" : isLocalImage(l.value));
+}
+function slotClass(leaf) {
+  return leaf.field?.slotWhen?.find(
+    (rule) => Object.entries(rule.when ?? {}).every(([k, allowed]) => allowed.includes(String(leaf.row[k] ?? "")))
+  )?.slotClass;
+}
+function walkConfigImages(product, ident, components) {
+  return detailBlocks(product, ident).flatMap(({ path, block: block2 }) => {
+    if (block2.type !== "config") return [];
+    return configImages(block2.data, components?.[block2.component]?.schema, `${path}.data`).map((leaf) => ({
+      ...leaf,
+      place: `${block2.component}|${slotClass(leaf) ?? ""}`
+    }));
+  });
 }
 
 // src/lib/claims.ts
@@ -29352,48 +29851,47 @@ var CLAIMS = [
   "discounts"
 ];
 var CLAIM_RE = new RegExp(`\\b(${CLAIMS.join("|")})\\b`, "gi");
+function given(p) {
+  const specs = (p.specs ?? []).flatMap((s) => [s?.key, s?.value]);
+  const trade = Object.values(p.trade ?? {});
+  return [...specs, ...trade].filter((v) => typeof v === "string").join(" ");
+}
 function texts(p) {
   const id = identOf(p);
   const out = [
     [`${id}.title`, p.title],
     [`${id}.excerpt`, p.excerpt],
-    [`${id}.detail.title`, p.detail?.title],
-    [`${id}.detail.subtitle`, p.detail?.subtitle],
-    [`${id}.detail.intro`, p.detail?.intro]
+    [`${id}.seo.title`, p.seo?.title],
+    [`${id}.seo.description`, p.seo?.description]
   ];
-  (p.detail?.sections ?? []).forEach((s, i) => {
-    out.push([`${id}.detail.sections[${i}].heading`, s.heading], [`${id}.detail.sections[${i}].body`, s.body]);
-    (s.images ?? []).forEach((img, j) => {
-      out.push([`${id}.detail.sections[${i}].images[${j}].title`, img.title]);
-      out.push([`${id}.detail.sections[${i}].images[${j}].text`, img.text]);
-    });
-  });
-  return out;
-}
-function claimWarnings(p) {
-  const out = [];
-  for (const [path, text] of texts(p)) {
-    const found = [...new Set((text ?? "").match(CLAIM_RE)?.map((w) => w.toLowerCase()) ?? [])];
-    if (!found.length) continue;
-    out.push({
-      path,
-      code: "unsupported_claim",
-      message: `Uses ${found.map((w) => `"${w}"`).join(", ")}. Delete the claim unless the customer said it in their own words; keep only the facts they gave.`,
-      fix: "ai"
-    });
+  for (const { path, block: block2 } of detailBlocks(p, id)) {
+    if (block2.type === "static") out.push([`${path}.html`, htmlText(block2.html)]);
+    if (block2.type === "config")
+      for (const t of configTexts(block2.data, void 0, `${path}.data`)) out.push([t.path, t.value]);
   }
   return out;
+}
+function claimWarning(path, text, before = "") {
+  const had = new Set(before.match(CLAIM_RE)?.map((w) => w.toLowerCase()) ?? []);
+  const found = [...new Set((text ?? "").match(CLAIM_RE)?.map((w) => w.toLowerCase()) ?? [])].filter((w) => !had.has(w));
+  if (!found.length) return null;
+  return {
+    path,
+    code: "unsupported_claim",
+    message: `Uses ${found.map((w) => `"${w}"`).join(", ")}. Delete the claim unless the customer said it in their own words; keep only the facts they gave.`,
+    fix: "ai"
+  };
+}
+function claimWarnings(p) {
+  const facts = given(p);
+  return texts(p).map(([path, text]) => claimWarning(path, text, facts)).filter((w) => w !== null);
 }
 
 // src/lib/imageAdvice.ts
 var RATIO_TOLERANCE = 0.05;
 var TOO_LARGE_FACTOR = 1.5;
 var PLACE_LABELS = {
-  productGallery: "product gallery",
-  split: "image + text section",
-  full: "wide banner section",
-  image: "full-width image section",
-  gallery: "image row section"
+  productGallery: "product gallery"
 };
 function ratioValue(ratio) {
   const m = /^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/.exec(ratio);
@@ -29424,13 +29922,18 @@ function suggestion(spec, maxBytes) {
 }
 
 // src/lib/localCheck.ts
-async function localCheckProduct(product, baseDir, images) {
+async function localCheckProduct(product, baseDir, images, components) {
   const errors = [];
   const warnings = [];
-  for (const { path, ref, place } of walkImageRefs(product)) {
-    if (!ref.file) continue;
-    const abs = resolve2(baseDir, ref.file);
-    if (!existsSync7(abs)) {
+  const ident = identOf(product);
+  const locals = [
+    ...walkImageRefs(product).flatMap(({ path, ref, place }) => ref.file ? [{ path, place, file: ref.file }] : []),
+    ...walkConfigImages(product, ident, components).filter((l) => isLocalImage(l.value)).map(({ path, place, value }) => ({ path, place, file: value }))
+  ];
+  for (const { path, place, file } of locals) {
+    const ref = { file };
+    const abs = resolve3(baseDir, ref.file);
+    if (!existsSync9(abs)) {
       errors.push({ path, code: "not_found", message: `File not found: ${ref.file}`, fix: "ai" });
       continue;
     }
@@ -29444,7 +29947,7 @@ async function localCheckProduct(product, baseDir, images) {
       });
       continue;
     }
-    const bytes = await readFile7(abs);
+    const bytes = await readFile9(abs);
     const { format, width, height } = sniffImage(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength));
     if (!format) {
       errors.push({
@@ -29462,7 +29965,7 @@ async function localCheckProduct(product, baseDir, images) {
         warnings.push({
           path,
           code: "image_advice",
-          message: `${ref.file} in the ${PLACE_LABELS[place] ?? place}: ${problems.join("; ")}. ${suggestion(spec, images.maxBytes)}`,
+          message: `${ref.file} in the ${PLACE_LABELS[place] ?? `${components?.[place.split("|")[0]]?.name ?? place.split("|")[0]} component`}: ${problems.join("; ")}. ${suggestion(spec, images.maxBytes)}`,
           fix: "user"
         });
       }
@@ -29478,117 +29981,44 @@ async function localCheckProduct(product, baseDir, images) {
       }
     }
   }
-  warnings.push(...claimWarnings(product));
+  warnings.push(...claimWarnings(product), ...detailWarnings(product, ident));
   return { errors, warnings };
 }
 
 // src/lib/uploadImage.ts
-import { createHash } from "node:crypto";
-import { readFile as readFile8 } from "node:fs/promises";
-import { basename as basename3 } from "node:path";
+import { createHash as createHash2 } from "node:crypto";
+import { readFile as readFile10 } from "node:fs/promises";
+import { basename as basename4 } from "node:path";
 function sha256Hex(bytes) {
-  return createHash("sha256").update(bytes).digest("hex");
+  return createHash2("sha256").update(bytes).digest("hex");
 }
 async function resolveUpload(client2, cache2, absPath) {
-  const bytes = await readFile8(absPath);
+  const bytes = await readFile10(absPath);
   const sha256 = sha256Hex(bytes);
   const cached = cache2[sha256];
-  if (cached) return { mediaId: cached.mediaId, sha256, reused: true };
+  if (cached) return { mediaId: cached.mediaId, url: cached.url, sha256, reused: true };
   const lookup = await client2.mediaLookup(sha256);
   if (lookup.found && lookup.mediaId) {
     cache2[sha256] = { mediaId: lookup.mediaId, url: lookup.url ?? "" };
-    return { mediaId: lookup.mediaId, sha256, reused: true };
+    return { mediaId: lookup.mediaId, url: lookup.url ?? "", sha256, reused: true };
   }
-  const filename = basename3(absPath);
+  const filename = basename4(absPath);
   const format = sniffImage(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)).format ?? "jpeg";
   const mime = `image/${format}`;
   const { id, url } = await client2.uploadMedia(new Uint8Array(bytes), filename, mime);
   cache2[sha256] = { mediaId: id, url };
-  return { mediaId: id, sha256, reused: false };
+  return { mediaId: id, url, sha256, reused: false };
 }
 
 // src/lib/samples.ts
-import { readFile as readFile9, writeFile as writeFile6, mkdir as mkdir6 } from "node:fs/promises";
-import { existsSync as existsSync8 } from "node:fs";
-import { join as join6 } from "node:path";
-
-// src/lib/siteSchema.ts
-var SUPPORTED_SCHEMA_VERSION = 2;
-var LEGACY_TRADE_FIELDS = [
-  { path: "price", kind: "unitValue", unitType: "currency", label: "Price" },
-  { path: "moq", kind: "unitValue", unitType: "quantity", label: "Min. Order" },
-  { path: "leadTime", kind: "unitValue", unitType: "time", label: "Lead Time" }
-];
-var SchemaVersionError = class extends Error {
-  constructor(siteVersion) {
-    super(
-      `The site's PufferGo plugin uses product-file version ${siteVersion}; this Skill understands up to ${SUPPORTED_SCHEMA_VERSION}. Update the Skill (download the latest wordpress-bulk-product-upload) and try again.`
-    );
-    this.siteVersion = siteVersion;
-  }
-};
-var cache = /* @__PURE__ */ new WeakMap();
-function loadSiteSchema(c) {
-  if (!cache.has(c)) {
-    cache.set(
-      c,
-      c.schema().then((raw) => {
-        const schemaVersion = typeof raw.schemaVersion === "number" ? raw.schemaVersion : 1;
-        if (schemaVersion > SUPPORTED_SCHEMA_VERSION) throw new SchemaVersionError(schemaVersion);
-        const tradeFields = Array.isArray(raw.tradeFields) ? raw.tradeFields : LEGACY_TRADE_FIELDS;
-        return { ...raw, schemaVersion, tradeFields };
-      })
-    );
-  }
-  return cache.get(c);
-}
-function optionalFactPaths(schema) {
-  return [...schema.tradeFields.map((f) => f.path), "specs"];
-}
-function getPath(obj, path) {
-  return path.split(".").reduce((o, k) => o && typeof o === "object" ? o[k] : void 0, obj);
-}
-function setPath(obj, path, value) {
-  const keys = path.split(".");
-  let o = obj;
-  for (const k of keys.slice(0, -1)) {
-    if (!o[k] || typeof o[k] !== "object") o[k] = {};
-    o = o[k];
-  }
-  o[keys[keys.length - 1]] = value;
-}
-function isEmptyValue(v) {
-  if (v == null) return true;
-  if (typeof v === "string") return v.trim() === "";
-  if (Array.isArray(v)) return v.length === 0;
-  if (typeof v === "object") return Object.keys(v).length === 0;
-  return false;
-}
-
-// src/lib/samples.ts
-var samplesPath = (dir2) => join6(dir2, ".puffergo", "samples.json");
-async function readAll(dir2) {
-  if (!existsSync8(samplesPath(dir2))) return {};
-  try {
-    return JSON.parse(await readFile9(samplesPath(dir2), "utf8"));
-  } catch {
-    return {};
-  }
-}
+var samplesState = siteState("samples.json");
 async function readSamples(dir2, siteUrl, kind) {
-  return (await readAll(dir2))[siteUrl]?.[kind] ?? {};
+  return (await samplesState.read(dir2, siteUrl))[kind] ?? {};
 }
 async function writeSamples(dir2, siteUrl, kind, samples) {
-  const all = await readAll(dir2);
-  all[siteUrl] = { ...all[siteUrl], [kind]: samples };
-  await mkdir6(join6(dir2, ".puffergo"), { recursive: true });
-  await writeFile6(samplesPath(dir2), JSON.stringify(all, null, 2) + "\n", "utf8");
+  await samplesState.remember(dir2, siteUrl, kind, samples);
 }
-var TargetError = class extends Error {
-  constructor(code, message) {
-    super(message);
-    this.code = code;
-  }
+var TargetError = class extends CodedError {
 };
 async function resolveProductId(c, target) {
   if (/^\d+$/.test(target)) return Number(target);
@@ -29619,8 +30049,8 @@ function maskUnitValue(v) {
 }
 function sampleReference(remote, schema) {
   const p = JSON.parse(JSON.stringify(remote));
-  for (const k of ["id", "key", "baseModified", "status"]) delete p[k];
-  if (p.detail) delete p.detail.unmanagedHtml;
+  for (const k of ["id", "key", "baseModified", "status", "link", "editUrl"])
+    delete p[k];
   for (const { ref } of walkImageRefs(p)) {
     for (const k of Object.keys(ref)) delete ref[k];
     ref.file = "<customer photo>";
@@ -29635,32 +30065,72 @@ function sampleReference(remote, schema) {
   const shape = (t) => t?.trim() ? TEXT : t;
   p.title = shape(p.title);
   p.excerpt = shape(p.excerpt);
-  if (p.detail) {
-    for (const k of ["title", "subtitle", "intro"]) p.detail[k] = shape(p.detail[k]);
-    for (const s of p.detail.sections ?? []) {
-      s.heading = shape(s.heading);
-      s.body = shape(s.body);
-      for (const img of s.images ?? []) {
-        img.title = shape(img.title);
-        img.text = shape(img.text);
-      }
-    }
+  if (p.seo) {
+    p.seo = {
+      title: shape(p.seo.title),
+      description: shape(p.seo.description),
+      focusKeyword: shape(p.seo.focusKeyword),
+      keywords: (p.seo.keywords ?? []).map(() => TEXT)
+    };
+  }
+  for (const { block: block2 } of detailBlocks(p, "")) {
+    if (block2.type !== "config") continue;
+    const fields = schema.blocks?.components?.[block2.component]?.schema;
+    for (const t of configTexts(block2.data, fields)) t.set(shape(t.value));
+    for (const img of configImages(block2.data, fields)) if (img.value) img.set("<customer photo>");
+  }
+  if (p.detail?.blocks) {
+    p.detail.blocks = p.detail.blocks.map(
+      (b) => b.type === "static" ? { type: "static", html: TEXT } : b.type === "native" ? { type: "native", raw: "", name: b.name } : b
+    );
   }
   out.notUsed = optionalFactPaths(schema).filter((path) => isEmptyValue(getPath(remote, path)));
   return out;
 }
 
+// src/lib/htmlImages.ts
+import { existsSync as existsSync10 } from "node:fs";
+import { isAbsolute, resolve as resolve4 } from "node:path";
+var LOCAL_REF = /(\bsrc\s*=\s*["']|url\(\s*["']?)(?!https?:|\/\/|data:|\/|#)([^"')\s]+)/gi;
+function localImageRefs(html2) {
+  return [...new Set([...html2.matchAll(LOCAL_REF)].map((m) => m[2]))];
+}
+var MissingImageError = class extends Error {
+  constructor(ref) {
+    super(`The image "${ref}" isn't there.`);
+    this.ref = ref;
+  }
+};
+async function uploadHtmlImages(c, cache2, html2, baseDir) {
+  const urls = /* @__PURE__ */ new Map();
+  const uploaded = [];
+  let reused = 0;
+  for (const ref of localImageRefs(html2)) {
+    const abs = isAbsolute(ref) ? ref : resolve4(baseDir, decodeURI(ref));
+    if (!existsSync10(abs)) throw new MissingImageError(ref);
+    const up = await resolveUpload(c, cache2, abs);
+    if (up.reused) reused++;
+    else uploaded.push(abs);
+    urls.set(ref, up.url);
+  }
+  return {
+    html: html2.replace(LOCAL_REF, (all, pre, ref) => urls.has(ref) ? pre + urls.get(ref) : all),
+    uploaded,
+    reused
+  };
+}
+
 // src/lib/categories.ts
-import { readFile as readFile10 } from "node:fs/promises";
-import { existsSync as existsSync9 } from "node:fs";
-import { join as join7 } from "node:path";
+import { readFile as readFile11 } from "node:fs/promises";
+import { existsSync as existsSync11 } from "node:fs";
+import { join as join8 } from "node:path";
 var CATEGORIES_FILE = "categories.json";
 var MAX_SUGGESTED_DEPTH = 3;
 var SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 async function readCategoriesFile(dir2) {
-  const path = join7(dir2, CATEGORIES_FILE);
-  if (!existsSync9(path)) return null;
-  return JSON.parse(await readFile10(path, "utf8"));
+  const path = join8(dir2, CATEGORIES_FILE);
+  if (!existsSync11(path)) return null;
+  return JSON.parse(await readFile11(path, "utf8"));
 }
 function planCategories(file, remote) {
   const errors = [];
@@ -29710,19 +30180,6 @@ function planCategories(file, remote) {
 }
 
 // src/lib/productsCmd.ts
-async function client(ctx) {
-  const siteFlag = ctx.flags.get("site");
-  const cred = await resolveSite(ctx.dir, siteFlag);
-  const c = new AgentClient(cred.config);
-  await loadSiteSchema(c);
-  return c;
-}
-function siteErrorOutput(e) {
-  if (e instanceof NoSiteError) return { ok: false, code: "no_site", sites: e.sites };
-  if (e instanceof NotLoggedInError) return { ok: false, code: "not_logged_in" };
-  if (e instanceof SchemaVersionError) return { ok: false, code: "update_skill", fix: "user", message: e.message };
-  return null;
-}
 async function cmdSchema(ctx) {
   try {
     const c = await client(ctx);
@@ -29734,9 +30191,7 @@ async function cmdSchema(ctx) {
       samples: Object.entries(samples).map(([name, t]) => ({ name, id: t.id, title: t.title }))
     };
   } catch (e) {
-    const siteErr = siteErrorOutput(e);
-    if (siteErr) return siteErr;
-    return { ok: false, code: "error", message: e instanceof Error ? e.message : String(e) };
+    return errorOutput(e);
   }
 }
 async function cmdListProducts(ctx) {
@@ -29748,9 +30203,7 @@ async function cmdListProducts(ctx) {
     });
     return { ok: true, ...res };
   } catch (e) {
-    const siteErr = siteErrorOutput(e);
-    if (siteErr) return siteErr;
-    return { ok: false, code: "error", message: e instanceof Error ? e.message : String(e) };
+    return errorOutput(e);
   }
 }
 function stripFileRefsForValidate(product) {
@@ -29762,7 +30215,11 @@ function stripFileRefsForValidate(product) {
       Object.keys(ref).forEach((k) => delete ref[k]);
     }
   }
-  if (clone.detail) delete clone.detail.unmanagedHtml;
+  for (const leaf of walkConfigImages(clone, identOf(clone))) {
+    if (!isLocalImage(leaf.value)) continue;
+    strippedPaths.add(leaf.path);
+    leaf.set("");
+  }
   delete clone.sample;
   return { clone, strippedPaths };
 }
@@ -29833,7 +30290,13 @@ async function checkOne(c, loaded, baseDir, tpl) {
       warnings: []
     };
   }
-  const local = await localCheckProduct(product, baseDir, (await loadSiteSchema(c)).images);
+  const site = await loadSiteSchema(c);
+  const local = await localCheckProduct(
+    product,
+    baseDir,
+    site.images,
+    site.blocks?.components
+  );
   const { clone, strippedPaths } = stripFileRefsForValidate(product);
   let serverErrors = [];
   let serverWarnings = [];
@@ -29857,6 +30320,25 @@ async function checkOne(c, loaded, baseDir, tpl) {
     warnings: sampled.warnings
   };
 }
+async function duplicateIdErrors(dir2) {
+  const byId = /* @__PURE__ */ new Map();
+  for (const { fileKey, product } of await loadProducts(dir2)) {
+    if (typeof product.id === "number") byId.set(product.id, [...byId.get(product.id) ?? [], fileKey]);
+  }
+  const out = /* @__PURE__ */ new Map();
+  for (const [id, keys] of byId) {
+    if (keys.length < 2) continue;
+    for (const key of keys) {
+      out.set(key, {
+        path: `${key}.id`,
+        code: "duplicate_id",
+        message: `Files ${keys.map((k) => `products/${k}.json`).join(", ")} are all product ${id}. Merge them into one file and delete the others.`,
+        fix: "ai"
+      });
+    }
+  }
+  return out;
+}
 async function cmdCheck(ctx) {
   const only = ctx.flags.get("only")?.split(",").filter(Boolean);
   const loaded = await loadProducts(ctx.dir, only);
@@ -29865,20 +30347,17 @@ async function cmdCheck(ctx) {
     const c = await client(ctx);
     const tpl = await SampleCtx.load(c, ctx.dir);
     const results = [];
-    for (const item of loaded) results.push(await checkOne(c, item, ctx.dir, tpl));
+    const dups = await duplicateIdErrors(ctx.dir);
+    for (const item of loaded) {
+      const r = await checkOne(c, item, ctx.dir, tpl);
+      const dup = dups.get(item.fileKey);
+      results.push(dup ? { ...r, errors: [dup, ...r.errors] } : r);
+    }
     const ok = results.every((r) => r.errors.length === 0);
     return { ok, results };
   } catch (e) {
-    const siteErr = siteErrorOutput(e);
-    if (siteErr) return siteErr;
-    throw e;
+    return errorOutput(e);
   }
-}
-function sectionSignature(sections) {
-  return (sections ?? []).map((s) => ({
-    layout: s.layout,
-    images: s.layout === "gallery" ? (s.images ?? []).length : s.image ? 1 : 0
-  }));
 }
 function readbackMismatches(local, remote) {
   const mismatches = [];
@@ -29890,6 +30369,10 @@ function readbackMismatches(local, remote) {
     mismatches.push(`status: expected ${local.status}, got ${remote.status}`);
   if (local.excerpt !== void 0 && (local.excerpt || "") !== (remote.excerpt ?? "")) {
     mismatches.push(`excerpt mismatch`);
+  }
+  if (local.seo !== void 0) {
+    const remoteSeo = remote.seo ?? {};
+    for (const [k, v] of Object.entries(local.seo)) if (!eq(v, remoteSeo[k])) mismatches.push(`seo.${k} mismatch`);
   }
   if (local.price !== void 0 && !eq(local.price, remote.price)) mismatches.push("price mismatch");
   if (local.moq !== void 0 && !eq(local.moq, remote.moq)) mismatches.push("moq mismatch");
@@ -29910,14 +30393,15 @@ function readbackMismatches(local, remote) {
   if (local.gallery !== void 0 && localGalleryCount !== remoteGalleryCount) {
     mismatches.push(`gallery count: expected ${localGalleryCount}, got ${remoteGalleryCount}`);
   }
-  if (local.detail?.sections !== void 0) {
-    const remoteDetail = remote.detail;
-    const localSig = sectionSignature(local.detail.sections);
-    const remoteSig = sectionSignature(remoteDetail?.sections);
-    if (!eq(localSig, remoteSig)) {
-      mismatches.push(
-        `detail.sections signature mismatch: expected ${JSON.stringify(localSig)}, got ${JSON.stringify(remoteSig)}`
-      );
+  if (local.detail !== void 0) {
+    const localBlocks = detailBlocks(local, "").map((w) => w.block);
+    const remoteBlocks = remote.detail?.blocks ?? [];
+    const remoteSig = blockSignature(
+      local.detail.blocks ? remoteBlocks : remoteBlocks.filter((b) => b.type === "config")
+    );
+    const localSig = blockSignature(localBlocks);
+    if (!(local.detail.blocks ? eq(localSig, remoteSig) : remoteSig.includes(localSig[0]))) {
+      mismatches.push(`detail blocks mismatch: expected ${JSON.stringify(localSig)}, got ${JSON.stringify(remoteSig)}`);
     }
   }
   void expectedStatus;
@@ -29925,43 +30409,23 @@ function readbackMismatches(local, remote) {
 }
 function toWirePayload(product) {
   const clone = JSON.parse(JSON.stringify(product));
-  if (clone.detail) delete clone.detail.unmanagedHtml;
   delete clone.sample;
   for (const { ref } of walkImageRefs(clone)) {
     delete ref.file;
   }
   return clone;
 }
-async function pushOne(c, loaded, ctx, cache2, allowPublish, tpl, editLive) {
-  const { product, path } = loaded;
-  if (!editLive && await isLive(c, product)) {
-    return {
-      key: product.key ?? null,
-      id: product.id ?? null,
-      ok: false,
-      uploaded: 0,
-      reused: 0,
-      errors: [
-        {
-          path: identOf(product),
-          code: "live_locked",
-          fix: "user",
-          message: 'This product is published, so it was left unchanged. If the customer wants to change the live page, they can edit it in wp-admin, or tell you to turn on editing live content (`products edit-live on --customer-said "\u2026"`).'
-        }
-      ],
-      warnings: []
-    };
-  }
+async function prepareWire(c, loaded, ctx, cache2, tpl, allowPublish) {
+  const { product } = loaded;
   const checkOutcome = await checkOne(c, loaded, ctx.dir, tpl);
   if (checkOutcome.errors.length) {
     return {
-      key: product.key ?? null,
-      id: product.id ?? null,
-      ok: false,
+      wire: product,
       uploaded: 0,
       reused: 0,
       errors: checkOutcome.errors,
-      warnings: checkOutcome.warnings
+      warnings: checkOutcome.warnings,
+      statusWarnings: []
     };
   }
   let uploaded = 0;
@@ -29981,7 +30445,7 @@ async function pushOne(c, loaded, ctx, cache2, allowPublish, tpl, editLive) {
   for (const { ref, path: refPath } of walkImageRefs(wire)) {
     if (!ref.file) continue;
     try {
-      const abs = resolve3(ctx.dir, ref.file);
+      const abs = resolve5(ctx.dir, ref.file);
       const res = await resolveUpload(c, cache2, abs);
       if (res.reused) reused++;
       else uploaded++;
@@ -29997,15 +30461,78 @@ async function pushOne(c, loaded, ctx, cache2, allowPublish, tpl, editLive) {
       });
     }
   }
-  if (uploadErrors.length) {
+  for (const leaf of walkConfigImages(wire, identOf(product))) {
+    if (!isLocalImage(leaf.value)) continue;
+    try {
+      const res = await resolveUpload(c, cache2, resolve5(ctx.dir, leaf.value));
+      if (res.reused) reused++;
+      else uploaded++;
+      leaf.set(res.url);
+    } catch (e) {
+      uploadErrors.push({
+        path: leaf.path,
+        code: "error",
+        message: e instanceof Error ? e.message : String(e),
+        fix: "ai"
+      });
+    }
+  }
+  for (const { path: blockPath, block: block2 } of detailBlocks(wire, identOf(product))) {
+    if (block2.type !== "static") continue;
+    try {
+      const up = await uploadHtmlImages(c, cache2, block2.html, ctx.dir);
+      block2.html = up.html;
+      uploaded += up.uploaded.length;
+      reused += up.reused;
+    } catch (e) {
+      uploadErrors.push({
+        path: `${blockPath}.html`,
+        code: e instanceof MissingImageError ? "not_found" : "error",
+        message: e instanceof MissingImageError ? `${e.message} Image paths in static HTML are relative to the working folder.` : String(e instanceof Error ? e.message : e),
+        fix: "ai"
+      });
+    }
+  }
+  return {
+    wire,
+    uploaded,
+    reused,
+    errors: uploadErrors,
+    warnings: checkOutcome.warnings,
+    statusWarnings
+  };
+}
+async function pushOne(c, loaded, ctx, cache2, allowPublish, tpl, editLive) {
+  const { product } = loaded;
+  if (!editLive && await isLive2(c, product)) {
+    return {
+      key: product.key ?? null,
+      id: product.id ?? null,
+      ok: false,
+      uploaded: 0,
+      reused: 0,
+      errors: [
+        {
+          path: identOf(product),
+          code: "live_locked",
+          fix: "ai",
+          message: liveLockedMessage("product", "products")
+        }
+      ],
+      warnings: []
+    };
+  }
+  const prep = await prepareWire(c, loaded, ctx, cache2, tpl, allowPublish);
+  const { wire, uploaded, reused } = prep;
+  if (prep.errors.length) {
     return {
       key: product.key ?? null,
       id: product.id ?? null,
       ok: false,
       uploaded,
       reused,
-      errors: uploadErrors,
-      warnings: checkOutcome.warnings
+      errors: prep.errors,
+      warnings: prep.warnings
     };
   }
   const payload = toWirePayload(wire);
@@ -30023,7 +30550,7 @@ async function pushOne(c, loaded, ctx, cache2, allowPublish, tpl, editLive) {
       errors: [
         { path: identOf(product), code: "error", message: e instanceof Error ? e.message : String(e), fix: "ai" }
       ],
-      warnings: checkOutcome.warnings
+      warnings: prep.warnings
     };
   }
   if (!upsertRes.ok || !upsertRes.id) {
@@ -30034,14 +30561,13 @@ async function pushOne(c, loaded, ctx, cache2, allowPublish, tpl, editLive) {
       uploaded,
       reused,
       errors: upsertRes.errors,
-      warnings: checkOutcome.warnings
+      warnings: prep.warnings
     };
   }
   product.id = upsertRes.id;
   if (upsertRes.key) product.key = upsertRes.key;
   product.baseModified = upsertRes.modifiedGmt;
   await writeProduct(ctx.dir, loaded.fileKey, product);
-  void path;
   let readbackErrors = [];
   try {
     const remote = await c.getProduct(upsertRes.id);
@@ -30074,14 +30600,13 @@ async function pushOne(c, loaded, ctx, cache2, allowPublish, tpl, editLive) {
     uploaded,
     reused,
     errors: readbackErrors,
-    warnings: [...checkOutcome.warnings, ...statusWarnings]
+    warnings: [...prep.warnings, ...prep.statusWarnings]
   };
 }
-async function isLive(c, product) {
-  const live = (s) => s === "publish" || s === "future";
+async function isLive2(c, product) {
   if (product.id) {
     try {
-      return live((await c.getProduct(product.id)).status);
+      return isLive((await c.getProduct(product.id)).status);
     } catch (e) {
       if (e instanceof AgentHttpError && e.status === 404) return false;
       throw e;
@@ -30089,28 +30614,106 @@ async function isLive(c, product) {
   }
   if (!product.key) return false;
   const found = await c.listProducts({ key: product.key });
-  return live(found.items[0]?.status);
+  return isLive(found.items[0]?.status);
 }
 async function cmdPush(ctx, allowPublish = false) {
   const only = ctx.flags.get("only")?.split(",").filter(Boolean);
+  const said = allowPublish ? void 0 : customerSaid(ctx);
+  if (said && !only?.length)
+    return {
+      ok: false,
+      code: "usage",
+      fix: "ai",
+      message: "With --customer-said, name the live products the customer agreed to change: --only k1,k2."
+    };
   const loaded = await loadProducts(ctx.dir, only);
   if (!loaded.length) return { ok: true, results: [] };
   try {
     const c = await client(ctx);
     const cache2 = await readUploadsCache(ctx.dir, c.siteUrl);
     const tpl = await SampleCtx.load(c, ctx.dir);
-    const editLive = await editLiveAllowed(ctx.dir, c.siteUrl);
+    const editLive = !!said || await editLiveAllowed(ctx.dir, c.siteUrl);
     const results = [];
+    const dups = await duplicateIdErrors(ctx.dir);
     for (const item of loaded) {
+      const dup = dups.get(item.fileKey);
+      if (dup) {
+        results.push({
+          key: item.product.key ?? null,
+          id: item.product.id ?? null,
+          ok: false,
+          uploaded: 0,
+          reused: 0,
+          errors: [dup],
+          warnings: []
+        });
+        continue;
+      }
       results.push(await pushOne(c, item, ctx, cache2, allowPublish, tpl, editLive));
       await writeUploadsCache(ctx.dir, c.siteUrl, cache2);
     }
     const ok = results.every((r) => r.ok);
     return { ok, results };
   } catch (e) {
-    const siteErr = siteErrorOutput(e);
-    if (siteErr) return siteErr;
-    throw e;
+    return errorOutput(e);
+  }
+}
+async function cmdPreview(ctx) {
+  const keys = ctx.positional;
+  if (!keys.length) return { ok: false, code: "usage", fix: "ai", message: "usage: puffergo products preview <key\u2026>" };
+  const loaded = await loadProducts(ctx.dir, keys);
+  const missing = keys.filter((k) => !loaded.some((l) => l.fileKey === k));
+  if (missing.length)
+    return { ok: false, code: "not_found", message: `No local file products/<key>.json for: ${missing.join(", ")}.` };
+  try {
+    const c = await client(ctx);
+    const cache2 = await readUploadsCache(ctx.dir, c.siteUrl);
+    const tpl = await SampleCtx.load(c, ctx.dir);
+    const results = [];
+    for (const item of loaded) {
+      results.push(await previewOne(c, item, ctx, cache2, tpl));
+      await writeUploadsCache(ctx.dir, c.siteUrl, cache2);
+    }
+    return { ok: results.every((r) => r.ok), results };
+  } catch (e) {
+    return errorOutput(e);
+  }
+}
+async function previewOne(c, loaded, ctx, cache2, tpl) {
+  const { product } = loaded;
+  const failed = (errors, warnings = []) => ({
+    key: product.key ?? null,
+    id: product.id ?? null,
+    ok: false,
+    errors,
+    warnings
+  });
+  const prep = await prepareWire(c, loaded, ctx, cache2, tpl, false);
+  if (prep.errors.length) return failed(prep.errors, prep.warnings);
+  try {
+    const res = await c.previewProduct(toWirePayload(prep.wire));
+    if (!res.ok) return failed(res.errors ?? [], res.warnings ?? prep.warnings);
+    return {
+      key: product.key ?? null,
+      id: res.id ?? product.id ?? null,
+      ok: true,
+      previewUrl: res.previewUrl,
+      notShown: res.notShown ?? [],
+      errors: [],
+      warnings: res.warnings ?? prep.warnings
+    };
+  } catch (e) {
+    if (!(e instanceof AgentHttpError)) throw e;
+    const body = e.body ?? {};
+    if (body.code && ABILITIES_MISSING.has(body.code)) throw new PluginOutdatedError();
+    return failed([
+      {
+        path: identOf(product),
+        code: body.code ?? `http_${e.status}`,
+        message: body.message ?? `HTTP ${e.status}`,
+        fix: "ai"
+      }
+    ]);
   }
 }
 function deriveKeyFromTitle(title, existingKeys) {
@@ -30129,35 +30732,26 @@ async function cmdPull(ctx) {
   try {
     const c = await client(ctx);
     const id = await resolveProductId(c, target);
-    const remote = await c.getProduct(id);
+    const { link: link2, editUrl, ...remote } = await c.getProduct(id);
     const existing = await loadProducts(ctx.dir);
-    let key = remote.key;
+    let key = remote.key ?? existing.find((p) => p.product.id === id)?.fileKey;
     if (!key) key = deriveKeyFromTitle(remote.title, new Set(existing.map((p) => p.fileKey)));
     const sample = existing.find((p) => p.fileKey === key)?.product.sample;
     const product = { ...remote, key, ...sample ? { sample } : {} };
     await writeProduct(ctx.dir, key, product);
-    if (product.detail?.unmanagedHtml) {
-      process.stderr.write(
-        `\u6CE8\u610F\uFF1A\u8BE5\u4EA7\u54C1\u6B63\u6587\u91CC\u6709\u975E content-alternating \u7684\u5185\u5BB9\uFF08detail.unmanagedHtml\uFF09\uFF0C\u53EA\u8BFB\uFF0C\u63A8\u9001\u65F6\u4F1A\u539F\u6837\u4FDD\u7559\u3001\u4E0D\u4F1A\u88AB\u8FD9\u4EFD\u6587\u4EF6\u8986\u76D6\u3002
-`
-      );
-    }
     return {
       ok: true,
       key,
       id,
       path: `products/${key}.json`,
+      link: link2,
+      editUrl,
       hint: "pull is for editing THIS product. If the customer wants new products to look like it, run `products sample set <type name> <this link or id>` instead."
     };
   } catch (e) {
-    const siteErr = siteErrorOutput(e);
-    if (siteErr) return siteErr;
-    if (e instanceof TargetError) return { ok: false, code: e.code, message: e.message };
-    if (e instanceof AgentHttpError) return { ok: false, code: "error", status: e.status, body: e.body };
-    return { ok: false, code: "error", message: e instanceof Error ? e.message : String(e) };
+    return errorOutput(e);
   }
 }
-var PUBLISH_INTENT = /发布|上线|公开|publish|go live|make (it|them|.+) live|put (it|them|.+) live/i;
 async function cmdPublish(ctx) {
   const keys = ctx.positional;
   if (!keys.length) {
@@ -30167,15 +30761,8 @@ async function cmdPublish(ctx) {
       message: `usage: puffergo products publish <key\u2026> --customer-said "<the customer's exact words>"`
     };
   }
-  const said = ctx.flags.get("customer-said") ?? "";
-  if (!PUBLISH_INTENT.test(said)) {
-    return {
-      ok: false,
-      code: "needs_publish_request",
-      fix: "user",
-      message: 'Publishing makes the product public. Only publish when the customer explicitly asked to publish (\u53D1\u5E03/\u4E0A\u7EBF/publish) these products \u2014 "push"/"\u63A8"/"\u4E0A\u4F20"/"\u66F4\u65B0" mean draft only. Ask the customer; if they say to publish, pass their exact words with --customer-said.'
-    };
-  }
+  const refused = publishRefusal(ctx, "product");
+  if (refused) return refused;
   const loaded = await loadProducts(ctx.dir, keys);
   const missing = keys.filter((k) => !loaded.some((l) => l.fileKey === k));
   if (missing.length) {
@@ -30240,12 +30827,9 @@ async function cmdSample(ctx) {
         return { ok: false, code: "usage", message: usage };
     }
   } catch (e) {
-    const siteErr = siteErrorOutput(e);
-    if (siteErr) return siteErr;
-    if (e instanceof TargetError) return { ok: false, code: e.code, message: e.message };
     if (e instanceof AgentHttpError && e.status === 404)
       return { ok: false, code: "not_found", message: "That product no longer exists on the site." };
-    return { ok: false, code: "error", message: e instanceof Error ? e.message : String(e) };
+    return errorOutput(e);
   }
 }
 async function cmdCategories(ctx) {
@@ -30287,51 +30871,9 @@ async function cmdCategories(ctx) {
     }
     return out;
   } catch (e) {
-    const siteErr = siteErrorOutput(e);
-    if (siteErr) return siteErr;
     if (e instanceof SyntaxError)
       return { ok: false, code: "invalid_json", message: `${CATEGORIES_FILE}: ${e.message}` };
-    if (e instanceof AgentHttpError) return { ok: false, code: "http_error", status: e.status, body: e.body };
-    return { ok: false, code: "error", message: e instanceof Error ? e.message : String(e) };
-  }
-}
-async function cmdEditLive(ctx) {
-  const sub = ctx.positional[0];
-  try {
-    const cred = await resolveSite(ctx.dir, ctx.flags.get("site"));
-    const siteUrl = cred.config.siteUrl;
-    const cfg = await readWorkdirConfig(ctx.dir) ?? { siteUrl };
-    if (cfg.siteUrl !== siteUrl)
-      return { ok: false, code: "other_site", message: `This work folder is for ${cfg.siteUrl}.` };
-    if (sub === "on") {
-      const said = (ctx.flags.get("customer-said") ?? "").trim();
-      if (!said)
-        return {
-          ok: false,
-          code: "needs_customer_request",
-          fix: "user",
-          message: "Turn this on only when the customer asks to change published products or existing categories. Pass their exact words with --customer-said."
-        };
-      await writeWorkdirConfig(ctx.dir, {
-        siteUrl,
-        editLive: { on: true, customerSaid: said, at: (/* @__PURE__ */ new Date()).toISOString() }
-      });
-      return {
-        ok: true,
-        editLive: true,
-        note: "push now changes live pages directly. Turn it off with `products edit-live off` when done."
-      };
-    }
-    if (sub === "off") {
-      await writeWorkdirConfig(ctx.dir, { siteUrl, editLive: void 0 });
-      return { ok: true, editLive: false };
-    }
-    if (sub === void 0) return { ok: true, editLive: await editLiveAllowed(ctx.dir, siteUrl) };
-    return { ok: false, code: "usage", message: 'usage: puffergo products edit-live [on --customer-said "\u2026" | off]' };
-  } catch (e) {
-    const siteErr = siteErrorOutput(e);
-    if (siteErr) return siteErr;
-    return { ok: false, code: "error", message: e instanceof Error ? e.message : String(e) };
+    return errorOutput(e);
   }
 }
 async function cmdImages(ctx) {
@@ -30343,14 +30885,14 @@ async function cmdImages(ctx) {
     if (!spec) return { ok: false, code: "update_plugin", message: "The site plugin is too old to give image specs." };
     const files = [];
     for (const p of ctx.positional) {
-      const abs = resolve3(ctx.dir, p);
+      const abs = resolve5(ctx.dir, p);
       const st = await stat2(abs);
-      if (st.isDirectory()) files.push(...(await readdir3(abs)).filter((n) => !n.startsWith(".")).map((n) => join8(abs, n)));
+      if (st.isDirectory()) files.push(...(await readdir3(abs)).filter((n) => !n.startsWith(".")).map((n) => join9(abs, n)));
       else files.push(abs);
     }
     const images = [];
     for (const abs of files) {
-      const bytes = await readFile11(abs);
+      const bytes = await readFile12(abs);
       const { format, width, height } = sniffImage(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength));
       if (!format || width == null || height == null) continue;
       const info = { bytes: bytes.length, width, height };
@@ -30371,18 +30913,16 @@ async function cmdImages(ctx) {
       images
     };
   } catch (e) {
-    const siteErr = siteErrorOutput(e);
-    if (siteErr) return siteErr;
-    return { ok: false, code: "error", message: e instanceof Error ? e.message : String(e) };
+    return errorOutput(e);
   }
 }
 
 // src/lib/loginCmd.ts
 import { spawn } from "node:child_process";
-import { existsSync as existsSync10 } from "node:fs";
-import { readFile as readFile12, rm as rm2, writeFile as writeFile7, mkdtemp } from "node:fs/promises";
+import { existsSync as existsSync12 } from "node:fs";
+import { readFile as readFile13, rm as rm2, writeFile as writeFile8, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join as join9 } from "node:path";
+import { join as join10 } from "node:path";
 var WAIT_MS = 10 * 60 * 1e3;
 var RESULT_PAGE = (ok) => `<!doctype html><html><head><meta charset="utf-8"><title>PufferGo</title>
 <style>html{font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#1f2430;
@@ -30411,8 +30951,8 @@ async function cmdLogin(dir2, siteArg) {
   } catch {
     return { ok: false, code: "error", message: `Not a valid site URL: ${siteArg}` };
   }
-  const handshakeDir = await mkdtemp(join9(tmpdir(), "puffergo-login-"));
-  const handshake = join9(handshakeDir, "authorize-url");
+  const handshakeDir = await mkdtemp(join10(tmpdir(), "puffergo-login-"));
+  const handshake = join10(handshakeDir, "authorize-url");
   const child = spawn(
     process.execPath,
     [...process.execArgv, process.argv[1], "__login-wait", siteUrl, handshake, dir2],
@@ -30422,7 +30962,7 @@ async function cmdLogin(dir2, siteArg) {
   let authorizeUrl = "";
   for (let i = 0; i < 100 && !authorizeUrl; i++) {
     await new Promise((r) => setTimeout(r, 100));
-    if (existsSync10(handshake)) authorizeUrl = (await readFile12(handshake, "utf8")).trim();
+    if (existsSync12(handshake)) authorizeUrl = (await readFile13(handshake, "utf8")).trim();
   }
   await rm2(handshakeDir, { recursive: true, force: true });
   if (!authorizeUrl) return { ok: false, code: "error", message: "Could not start the local authorization listener." };
@@ -30443,7 +30983,7 @@ async function cmdLoginWait(siteUrl, handshake, dir2) {
   const creds = await runAuthorizeServer2(
     siteUrl,
     (authorizeUrl) => {
-      void writeFile7(handshake, authorizeUrl, "utf8");
+      void writeFile8(handshake, authorizeUrl, "utf8");
     },
     { appName: "PufferGo AI", timeoutMs: WAIT_MS, resultPage: RESULT_PAGE }
   );
@@ -30453,10 +30993,544 @@ async function cmdLoginWait(siteUrl, handshake, dir2) {
   }
 }
 
+// src/lib/pagesCmd.ts
+import { existsSync as existsSync13 } from "node:fs";
+import { mkdir as mkdir8, readFile as readFile14, readdir as readdir4, stat as stat3, writeFile as writeFile9 } from "node:fs/promises";
+import { dirname as dirname4, join as join11, relative as relative2, resolve as resolve6 } from "node:path";
+var editable = (b) => b.kind === "static" || b.kind === "config";
+async function componentInput(c, ctx, file) {
+  const name = relative2(ctx.dir, file);
+  const read = async (f) => existsSync13(f) ? JSON.parse(await readFile14(f, "utf8")) : null;
+  let cf;
+  try {
+    cf = await read(file);
+  } catch {
+    throw new FileError("format", `${name} is not valid JSON.`);
+  }
+  if (!cf || !cf.data || typeof cf.data !== "object" || Array.isArray(cf.data))
+    throw new FileError(
+      "format",
+      `${name} must keep the shape \`get\` saved: {"component", "guide", "schema", "data": {\u2026}}.`
+    );
+  const cache2 = await readUploadsCache(ctx.dir, c.siteUrl);
+  const uploaded = [];
+  try {
+    for (const { value, set } of configImages(cf.data, cf.schema)) {
+      if (!isLocalImage(value)) continue;
+      const abs = [resolve6(dirname4(file), value), resolve6(ctx.dir, value)].find((p) => existsSync13(p));
+      if (!abs)
+        throw new FileError(
+          "image_not_found",
+          `${name} uses the image "${value}", which isn't there. Paths are relative to the .json file or the workdir.`
+        );
+      const up = await resolveUpload(c, cache2, abs);
+      if (!up.reused) uploaded.push(value);
+      set(up.url);
+    }
+  } finally {
+    await writeUploadsCache(ctx.dir, c.siteUrl, cache2);
+  }
+  const orig = await read(file.replace(/\.json$/i, ".orig.json")).catch(() => null);
+  const was = new Map(configTexts(orig?.data, cf.schema).map((t) => [t.path, t.value]));
+  const warnings = configTexts(cf.data, cf.schema).map((t) => claimWarning(`${name}:${t.path}`, t.value, was.get(t.path) ?? "")).filter(Boolean);
+  return { data: cf.data, uploaded, warnings };
+}
+var run = (ctx, body) => runWith(client, ctx, body);
+var FileError = class extends CodedError {
+};
+var bases = siteState("post-bases.json");
+var created = siteState("created.json");
+async function baseOf(dir2, siteUrl, id) {
+  return (await bases.read(dir2, siteUrl))[id];
+}
+async function rememberBase(dir2, siteUrl, post) {
+  await bases.remember(dir2, siteUrl, post.id, post.baseModified);
+}
+async function sectionFiles(dir2, args) {
+  if (!args.length) throw new UsageError("Give the section .html files, or a folder of them.");
+  const out = [];
+  for (const a of args) {
+    const p = resolve6(dir2, a);
+    if (!existsSync13(p)) throw new FileError("file_not_found", `Not found: ${a}`);
+    if ((await stat3(p)).isDirectory()) {
+      const names = (await readdir4(p)).filter((n) => n.toLowerCase().endsWith(".html") && !n.endsWith(".orig.html")).sort();
+      if (!names.length) throw new FileError("file_not_found", `No .html files in ${a}`);
+      out.push(...names.map((n) => join11(p, n)));
+    } else out.push(p);
+  }
+  return out;
+}
+async function withUploadedImages(c, ctx, files) {
+  const cache2 = await readUploadsCache(ctx.dir, c.siteUrl);
+  const uploaded = [];
+  const sections = [];
+  try {
+    for (const file of files) {
+      try {
+        const up = await uploadHtmlImages(c, cache2, await readFile14(file, "utf8"), dirname4(file));
+        uploaded.push(...up.uploaded.map((abs) => relative2(ctx.dir, abs)));
+        sections.push(up.html);
+      } catch (e) {
+        if (!(e instanceof MissingImageError)) throw e;
+        throw new FileError(
+          "image_not_found",
+          `${relative2(ctx.dir, file)} uses the image "${e.ref}", which isn't there. Paths are relative to the .html file.`
+        );
+      }
+    }
+  } finally {
+    await writeUploadsCache(ctx.dir, c.siteUrl, cache2);
+  }
+  return { sections, uploaded };
+}
+async function sectionWarnings(dir2, files, sections) {
+  const text = (html2) => html2.replace(/<[^>]*>/g, " ");
+  const out = [];
+  for (const [i, html2] of sections.entries()) {
+    const orig = files[i].replace(/\.html$/i, ".orig.html");
+    const before = existsSync13(orig) ? text(await readFile14(orig, "utf8")) : "";
+    const w = claimWarning(relative2(dir2, files[i]), text(html2), before);
+    if (w) out.push(w);
+  }
+  return out;
+}
+function withFileNames(out, files, dir2) {
+  if (!Array.isArray(out.errors)) return out;
+  return {
+    ...out,
+    errors: out.errors.map(
+      (e) => e.section ? { file: relative2(dir2, files[e.section - 1] ?? ""), ...e } : e
+    )
+  };
+}
+async function resolvePostId(c, target) {
+  if (!target) throw new UsageError("Give the page/post id or a link to it.");
+  if (/^\d+$/.test(target)) return Number(target);
+  if (!/^https?:\/\//i.test(target)) throw new UsageError(`Not an id or a link: ${target}`);
+  const host = (u) => new URL(u).host.replace(/^www\./, "").toLowerCase();
+  if (host(target) !== host(c.siteUrl)) {
+    throw new FileError("other_site", `This link is on ${new URL(target).host}, not the connected site ${c.siteUrl}.`);
+  }
+  const found = await c.findPosts({ url: target });
+  if (!found.items[0]) throw new FileError("not_found", `No page or post found at ${target}`);
+  return found.items[0].id;
+}
+function cmdTypes(ctx) {
+  return run(ctx, async (c) => ({ ok: true, ...await c.postTypes() }));
+}
+function cmdFind(ctx) {
+  return run(ctx, async (c) => ({
+    ok: true,
+    ...await c.findPosts({
+      type: ctx.flags.get("type"),
+      status: ctx.flags.get("status"),
+      search: ctx.flags.get("search"),
+      url: ctx.flags.get("url"),
+      page: Number(ctx.flags.get("page")) || void 0
+    })
+  }));
+}
+function cmdBlocks(ctx) {
+  return run(ctx, async (c) => {
+    const id = await resolvePostId(c, ctx.positional[0]);
+    const post = await c.getBlocks(id);
+    await rememberBase(ctx.dir, c.siteUrl, post);
+    return notBlockContent(post) ?? { ok: true, ...post };
+  });
+}
+function notBlockContent(post) {
+  if (!post.editor) return void 0;
+  return {
+    ok: false,
+    code: "not_block_content",
+    fix: "user",
+    editor: post.editor,
+    message: post.editorNote ?? `This ${post.type} was made with the ${post.editor}; its content can't be changed here.`,
+    editUrl: post.editUrl
+  };
+}
+var BLOCK_PATH = /^[1-9]\d*(\.[1-9]\d*)*$/;
+function flatten(blocks) {
+  return blocks.flatMap((b) => [b, ...flatten(b.innerBlocks ?? [])]);
+}
+function cmdGet(ctx) {
+  return run(ctx, async (c) => {
+    const id = await resolvePostId(c, ctx.positional[0]);
+    const want = ctx.positional[1];
+    if (want && !BLOCK_PATH.test(want)) throw new UsageError("usage: puffergo pages get <id|link> [block path]");
+    let all = [];
+    if (!want) {
+      const post = await c.getBlocks(id);
+      const other = notBlockContent(post);
+      if (other) return other;
+      all = flatten(post.blocks);
+    }
+    const paths = want ? [want] : all.filter(editable).map((b) => b.path);
+    const saved = [];
+    let base;
+    for (const path of paths) {
+      const res = await c.getBlocks(id, path);
+      base = res;
+      const { block: block2 } = res;
+      if (block2.kind === "config" && block2.data) {
+        const { component, guide, schema, data } = block2;
+        const json = JSON.stringify({ component, guide, schema, data }, null, 2) + "\n";
+        const file2 = join11("pages", String(id), `block-${path}.json`);
+        await mkdir8(join11(ctx.dir, "pages", String(id)), { recursive: true });
+        await writeFile9(join11(ctx.dir, file2), json, "utf8");
+        await writeFile9(join11(ctx.dir, "pages", String(id), `block-${path}.orig.json`), json, "utf8");
+        saved.push({ path, file: file2, text: block2.text });
+        continue;
+      }
+      if (block2.kind !== "static") {
+        if (!want) continue;
+        await rememberBase(ctx.dir, c.siteUrl, res);
+        return {
+          ok: false,
+          code: "not_static",
+          fix: "user",
+          message: block2.kind === "config" ? "This component has no data to edit here; the customer edits it in the WordPress editor." : "Only PufferGo Tailwind blocks can be edited here.",
+          block: { path: block2.path, name: block2.name, text: block2.text }
+        };
+      }
+      const file = join11("pages", String(id), `block-${path}.html`);
+      await mkdir8(join11(ctx.dir, "pages", String(id)), { recursive: true });
+      await writeFile9(join11(ctx.dir, file), block2.html, "utf8");
+      await writeFile9(join11(ctx.dir, "pages", String(id), `block-${path}.orig.html`), block2.html, "utf8");
+      saved.push({ path, file, text: block2.text });
+    }
+    if (!base)
+      return {
+        ok: false,
+        code: "no_static_blocks",
+        fix: "user",
+        message: "This page has no PufferGo Tailwind blocks or components to edit here."
+      };
+    await rememberBase(ctx.dir, c.siteUrl, base);
+    const head = { ok: true, id, title: base.title, status: base.status };
+    if (want) {
+      return {
+        ...head,
+        path: want,
+        file: saved[0].file,
+        original: saved[0].file.replace(/\.(html|json)$/, ".orig.$1"),
+        text: saved[0].text
+      };
+    }
+    const savedPaths = new Set(saved.map((s) => s.path));
+    const notSaved = all.filter((b) => !savedPaths.has(b.path) && !b.innerBlocks).map((b) => ({ path: b.path, kind: b.kind, name: b.name, text: b.text }));
+    return { ...head, saved, notSaved };
+  });
+}
+var IN_PAGE_NOTE = "Opened in the browser: the whole page, with this block changed; the live page is unchanged. The customer must be logged in to wp-admin to see it; the link works for 7 days, until the block is previewed again or replaced.";
+function cmdPreview2(ctx) {
+  return run(ctx, async (c) => {
+    const [target, path, fileArg, ...rest] = ctx.positional;
+    const inPage = !!fileArg && !rest.length && BLOCK_PATH.test(path ?? "");
+    if (inPage && fileArg.toLowerCase().endsWith(".json")) {
+      const file = resolve6(ctx.dir, fileArg);
+      const { data, uploaded: uploaded2, warnings } = await componentInput(c, ctx, file);
+      try {
+        const res = await c.previewBlocks([], void 0, {
+          id: await resolvePostId(c, target),
+          path,
+          data
+        });
+        openBrowser(res.previewUrl);
+        return {
+          ok: true,
+          previewUrl: res.previewUrl,
+          sections: [relative2(ctx.dir, file)],
+          uploaded: uploaded2,
+          warnings,
+          note: IN_PAGE_NOTE
+        };
+      } catch (e) {
+        if (e instanceof AgentHttpError) return withFileNames(abilityError(e), [file], ctx.dir);
+        throw e;
+      }
+    }
+    const files = await sectionFiles(ctx.dir, inPage ? [fileArg] : ctx.positional);
+    const at = inPage ? { id: await resolvePostId(c, target), path } : void 0;
+    const { sections, uploaded } = await withUploadedImages(c, ctx, files);
+    try {
+      const res = await c.previewBlocks(
+        sections,
+        ctx.flags.get("title"),
+        at
+      );
+      openBrowser(res.previewUrl);
+      return {
+        ok: true,
+        previewUrl: res.previewUrl,
+        sections: files.map((f) => relative2(ctx.dir, f)),
+        uploaded,
+        warnings: await sectionWarnings(ctx.dir, files, sections),
+        note: at ? IN_PAGE_NOTE : "Opened in the browser. The customer must be logged in to wp-admin to see it; the link works for 7 days."
+      };
+    } catch (e) {
+      if (e instanceof AgentHttpError) return withFileNames(abilityError(e), files, ctx.dir);
+      throw e;
+    }
+  });
+}
+function cmdCreate(ctx) {
+  return run(ctx, async (c) => {
+    const type = ctx.flags.get("type");
+    const title = ctx.flags.get("title");
+    if (!type || !title) {
+      throw new UsageError(
+        'usage: puffergo pages create --type <type> --title "<title>" [--excerpt "\u2026"] <files|folder\u2026>'
+      );
+    }
+    const seo = seoFlags(ctx);
+    const missing = ["slug", "seoTitle", "seoDescription", "focusKeyword"].filter((k) => !seo[k]).map(flagName);
+    if (missing.length) {
+      return {
+        ok: false,
+        code: "seo_missing",
+        fix: "ai",
+        message: `Give ${missing.join(", ")}: every new page gets its address (slug), the SEO title and description search results and shared links show, and the core keyword it should rank for (long-tail ones with --keywords "a, b"). Ask the customer, or agree them with the customer, then run create again.`
+      };
+    }
+    const files = await sectionFiles(ctx.dir, ctx.positional);
+    const key = files.map((f) => relative2(ctx.dir, f)).join("|");
+    const earlier = (await created.read(ctx.dir, c.siteUrl))[key];
+    if (earlier && ctx.flags.get("new") !== "true") {
+      return {
+        ok: false,
+        code: "already_created",
+        fix: "ai",
+        id: earlier,
+        message: `These files were already made into post ${earlier}. To change it, edit its blocks (\`pages blocks ${earlier}\`, then get / replace). Only if the customer wants one more separate copy, run create again with --new.`
+      };
+    }
+    const { sections, uploaded } = await withUploadedImages(c, ctx, files);
+    const featured = await featuredImage(c, ctx);
+    if (featured?.uploaded) uploaded.push(featured.uploaded);
+    try {
+      const excerpt = ctx.flags.get("excerpt");
+      const post = await c.createPost({
+        type,
+        title,
+        sections,
+        ...excerpt ? { excerpt } : {},
+        ...seoInput(seo),
+        ...featured ? { featuredImage: featured.id } : {}
+      });
+      await rememberBase(ctx.dir, c.siteUrl, post);
+      await created.remember(ctx.dir, c.siteUrl, key, post.id);
+      return {
+        ok: true,
+        id: post.id,
+        type: post.type,
+        status: post.status,
+        blocks: post.blocks,
+        previewUrl: post.link,
+        editUrl: post.editUrl,
+        seo: post.seo,
+        uploaded,
+        warnings: [...await sectionWarnings(ctx.dir, files, sections), ...seoWarnings(seo)]
+      };
+    } catch (e) {
+      if (e instanceof AgentHttpError) return withFileNames(abilityError(e), files, ctx.dir);
+      throw e;
+    }
+  });
+}
+function cmdReplace(ctx) {
+  return run(ctx, async (c) => {
+    const [target, path, fileArg] = ctx.positional;
+    if (!target || !path || !fileArg)
+      throw new UsageError("usage: puffergo pages replace <id|link> <block path> <file>");
+    const id = await resolvePostId(c, target);
+    const base = await baseOf(ctx.dir, c.siteUrl, id);
+    if (!base) {
+      return {
+        ok: false,
+        code: "get_first",
+        fix: "ai",
+        message: `Read the post first (\`puffergo pages get ${id} ${path}\`), then edit the file it saves.`
+      };
+    }
+    const post = await c.getBlocks(id);
+    if (isLive(post.status) && !customerSaid(ctx) && !await editLiveAllowed(ctx.dir, c.siteUrl)) {
+      return {
+        ok: false,
+        code: "live_locked",
+        fix: "ai",
+        message: liveLockedMessage("page", "pages")
+      };
+    }
+    const component = fileArg.toLowerCase().endsWith(".json");
+    const files = component ? [resolve6(ctx.dir, fileArg)] : await sectionFiles(ctx.dir, [fileArg]);
+    const { input, uploaded, warnings } = component ? await componentInput(c, ctx, files[0]).then((r) => ({ ...r, input: { data: r.data } })) : await withUploadedImages(c, ctx, files).then(async (r) => ({
+      input: { html: r.sections[0] },
+      uploaded: r.uploaded,
+      warnings: await sectionWarnings(ctx.dir, files, r.sections)
+    }));
+    try {
+      const updated = await c.replaceBlock({
+        id,
+        path,
+        ...input,
+        baseModified: base
+      });
+      await rememberBase(ctx.dir, c.siteUrl, updated);
+      return {
+        ok: true,
+        id,
+        path,
+        status: updated.status,
+        previewUrl: updated.link,
+        editUrl: updated.editUrl,
+        uploaded,
+        warnings,
+        revision: updated.revision,
+        ...isLive(updated.status) ? { note: "This changed the live page." } : {}
+      };
+    } catch (e) {
+      const conflict = conflictOutput(e, `puffergo pages get ${id} ${path}`);
+      if (conflict) return conflict;
+      if (e instanceof AgentHttpError) return withFileNames(abilityError(e), files, ctx.dir);
+      throw e;
+    }
+  });
+}
+var FLAG = {
+  slug: "slug",
+  seoTitle: "seo-title",
+  seoDescription: "seo-description",
+  focusKeyword: "focus-keyword",
+  keywords: "keywords"
+};
+function seoInput(seo) {
+  const { keywords, ...rest } = seo;
+  return keywords === void 0 ? rest : {
+    ...rest,
+    keywords: keywords.split(",").map((k) => k.trim()).filter(Boolean)
+  };
+}
+function flagName(k) {
+  return `--${FLAG[k]}`;
+}
+function seoFlags(ctx) {
+  const out = {};
+  for (const k of Object.keys(FLAG)) {
+    const v = ctx.flags.get(FLAG[k]);
+    if (v && v !== "true") out[k] = v;
+  }
+  return out;
+}
+function seoWarnings(seo, before = {}) {
+  return ["seoTitle", "seoDescription"].map((k) => claimWarning(flagName(k), seo[k], before[k] ?? "")).filter((w) => w !== null);
+}
+async function featuredImage(c, ctx) {
+  const arg = ctx.flags.get("featured-image");
+  if (!arg) return null;
+  const abs = resolve6(ctx.dir, arg);
+  if (!existsSync13(abs)) throw new FileError("image_not_found", `The featured image "${arg}" isn't there.`);
+  const cache2 = await readUploadsCache(ctx.dir, c.siteUrl);
+  try {
+    const up = await resolveUpload(c, cache2, abs);
+    return { id: up.mediaId, ...up.reused ? {} : { uploaded: relative2(ctx.dir, abs) } };
+  } finally {
+    await writeUploadsCache(ctx.dir, c.siteUrl, cache2);
+  }
+}
+function cmdPublish2(ctx) {
+  return run(ctx, async (c) => {
+    const id = await resolvePostId(c, ctx.positional[0]);
+    const refused = publishRefusal(ctx, "page");
+    if (refused) return refused;
+    const base = await baseOf(ctx.dir, c.siteUrl, id);
+    if (!base) {
+      return {
+        ok: false,
+        code: "get_first",
+        fix: "ai",
+        message: `Read it first (\`puffergo pages get ${id}\`) and show the customer what goes live, then publish.`
+      };
+    }
+    try {
+      const post = await c.publishPost({ id, baseModified: base });
+      await rememberBase(ctx.dir, c.siteUrl, post);
+      return { ok: true, id, status: post.status, link: post.link, editUrl: post.editUrl };
+    } catch (e) {
+      return conflictOutput(e, `puffergo pages get ${id}`) ?? errorOutput(e);
+    }
+  });
+}
+function cmdSeo(ctx) {
+  return run(ctx, async (c) => {
+    const id = await resolvePostId(c, ctx.positional[0]);
+    const seo = seoFlags(ctx);
+    const wantsImage = !!ctx.flags.get("featured-image");
+    if (!Object.keys(seo).length && !wantsImage) {
+      const post2 = await c.getBlocks(id);
+      await rememberBase(ctx.dir, c.siteUrl, post2);
+      return { ok: true, id, title: post2.title, status: post2.status, link: post2.link, seo: post2.seo };
+    }
+    const base = await baseOf(ctx.dir, c.siteUrl, id);
+    if (!base) {
+      return {
+        ok: false,
+        code: "get_first",
+        fix: "ai",
+        message: `Read the post's SEO first (\`puffergo pages seo ${id}\`), then change it.`
+      };
+    }
+    const post = await c.getBlocks(id);
+    if (isLive(post.status) && seo.slug && seo.slug !== post.seo.slug) {
+      return {
+        ok: false,
+        code: "slug_locked",
+        fix: "user",
+        message: "This page is published, so its address (slug) is not changed here, even when the customer agrees. If the customer really wants a new address, they change it in wp-admin and add a redirect from the old one. The SEO title, description and featured image can still be changed."
+      };
+    }
+    if (isLive(post.status) && !customerSaid(ctx) && !await editLiveAllowed(ctx.dir, c.siteUrl)) {
+      return {
+        ok: false,
+        code: "live_locked",
+        fix: "ai",
+        message: liveLockedMessage("page", "pages")
+      };
+    }
+    const featured = await featuredImage(c, ctx);
+    try {
+      const updated = await c.updateSeo({
+        id,
+        baseModified: base,
+        ...seoInput(seo),
+        ...featured ? { featuredImage: featured.id } : {}
+      });
+      await rememberBase(ctx.dir, c.siteUrl, updated);
+      const before = {
+        seoTitle: post.seo.seoTitle ?? void 0,
+        seoDescription: post.seo.seoDescription ?? void 0
+      };
+      return {
+        ok: true,
+        id,
+        status: updated.status,
+        link: updated.link,
+        editUrl: updated.editUrl,
+        seo: updated.seo,
+        before: post.seo,
+        ...featured?.uploaded ? { uploaded: [featured.uploaded] } : {},
+        warnings: seoWarnings(seo, before)
+      };
+    } catch (e) {
+      return conflictOutput(e, `puffergo pages seo ${id}`) ?? errorOutput(e);
+    }
+  });
+}
+
 // src/index.ts
 var rawArgv = process.argv.slice(2);
-var group = ["products", "login", "__login-wait"].includes(rawArgv[0] ?? "") ? rawArgv[0] : "silo";
-var argv = rawArgv[0] === "silo" ? rawArgv.slice(1) : group === "products" ? rawArgv.slice(1) : rawArgv;
+var group = ["products", "pages", "login", "__login-wait"].includes(rawArgv[0] ?? "") ? rawArgv[0] : "silo";
+var argv = rawArgv[0] === "silo" || group === "products" || group === "pages" ? rawArgv.slice(1) : rawArgv;
 var cmd = argv[0];
 var flags = /* @__PURE__ */ new Map();
 var positional = [];
@@ -30482,6 +31556,7 @@ var die = (s) => {
 async function loadWs() {
   const ws = await readWorkspace(dir);
   if (!ws) die(`\u672A\u627E\u5230\u5DE5\u4F5C\u533A\uFF08\u5148\u8FD0\u884C silo init\uFF09\uFF1A${dir}`);
+  applySeoLimits(ws.seoLimits);
   return ws;
 }
 var SEV_ORDER = ["critical", "warning", "info"];
@@ -30513,7 +31588,7 @@ async function cmdPlan() {
   if (!file) die("\u7528\u6CD5\uFF1Asilo plan <plan.json>");
   let raw;
   try {
-    raw = await readFile13(file, "utf8");
+    raw = await readFile15(file, "utf8");
   } catch {
     die(`\u672A\u627E\u5230 plan \u6587\u4EF6\uFF1A${file}`);
   }
@@ -30541,16 +31616,37 @@ async function cmdPush2() {
   const edited = applyFrontmatterEdits(ws, bodies);
   ws = edited.ws;
   if (edited.changed) log(`\u21A9 \u5DF2\u4ECE ${edited.changed} \u7BC7\u7B14\u8BB0\u7684 frontmatter \u8BFB\u56DE\u7F16\u8F91`);
+  const synced = await readSynced(dir);
+  let targets;
+  if (positional.length) {
+    const m = matchTargets(positional, ws, bodies, dir);
+    if (m.unknown.length) die(`\u627E\u4E0D\u5230\u8FD9\u4E9B\u7B14\u8BB0\uFF1A${m.unknown.join("\u3001")}\uFF08\u5199\u7B14\u8BB0\u6587\u4EF6\u540D\u3001slug \u6216 WordPress \u6587\u7AE0 id\uFF09`);
+    const changed = new Set(changedIds(ws, bodies, synced));
+    const same = m.ids.filter((id) => !force && !changed.has(id));
+    if (same.length)
+      log(
+        `\xB7 \u6CA1\u6709\u6539\u52A8\uFF0C\u8DF3\u8FC7\uFF1A${same.map((id) => ws.contents.find((c) => c.id === id)?.title ?? id).join("\u3001")}\uFF08\u4E00\u5B9A\u8981\u91CD\u63A8\u5C31\u52A0 --force\uFF09`
+      );
+    targets = m.ids.filter((id) => !same.includes(id));
+    if (!targets.length) return log("\u6CA1\u6709\u8981\u63A8\u9001\u7684\u6539\u52A8\u3002");
+  } else {
+    targets = changedIds(ws, bodies, synced);
+    const skipped = ws.contents.length - targets.length;
+    if (skipped) log(`\xB7 \u8DF3\u8FC7 ${skipped} \u7BC7\u4E0A\u6B21\u540C\u6B65\u540E\u6CA1\u6539\u8FC7\u7684\uFF1B\u8981\u63A8\u9001\u6307\u5B9A\u7684\u7B14\u8BB0\uFF0C\u628A\u6587\u4EF6\u540D\u5199\u5728\u547D\u4EE4\u540E\u9762`);
+    if (!targets.length) return log("\u6CA1\u6709\u8981\u63A8\u9001\u7684\u6539\u52A8\u3002");
+  }
+  const pushing = new Set(targets);
   const { client: client2, legacyWarning } = await connect(dir, { configPath: configPath2 });
   if (legacyWarning) log(`\u26A0 ${legacyWarning}`);
   const resolvedBody = /* @__PURE__ */ new Map();
   let uploaded = 0;
   for (const [id, file] of bodies) {
+    if (!pushing.has(id)) continue;
     if (!file.body.trim()) {
       resolvedBody.set(id, file.body);
       continue;
     }
-    const res = await resolveBodyAssets(file.body, wpAssetUploader(client2, [dirname4(file.path), dir]));
+    const res = await resolveBodyAssets(file.body, wpAssetUploader(client2, [dirname5(file.path), dir]));
     resolvedBody.set(id, res.md);
     if (res.uploaded) {
       await updateNoteBody(file.path, res.md);
@@ -30564,12 +31660,15 @@ async function cmdPush2() {
   let conflict = 0;
   let failed = 0;
   const needsRelink = /* @__PURE__ */ new Set();
+  const pushedIds = [];
   for (const item of ws.contents) {
+    if (!pushing.has(item.id)) continue;
     const { html: html2, unresolved } = markdownToWpHtml(bodyOf(item.id), buildLinkResolver(ws, noteNames));
     const res = await syncContent(client2, ws, item, { force, content: html2 || void 0 });
     if (res.ok) {
       ws = updateContent(ws, item.id, res.patch);
       ok++;
+      pushedIds.push(item.id);
       if (unresolved.length) needsRelink.add(item.id);
       log(`  \u2713 ${item.title}${html2 ? "\uFF08\u542B\u6B63\u6587\uFF09" : "\uFF08\u4EC5\u7ED3\u6784/SEO\uFF09"} \u2192 #${res.patch.wpPostId}`);
     } else if ("conflict" in res && res.conflict) {
@@ -30596,7 +31695,9 @@ async function cmdPush2() {
     if (relinked) log(`  \u21BB \u4E8C\u6B21\u89E3\u6790\u5185\u94FE\u540E\u91CD\u63A8 ${relinked} \u7BC7`);
   }
   await writeWorkspace(dir, ws);
+  const before = await scanVault(dir);
   await scaffoldVault(dir, ws);
+  await writeSynced(dir, recordSynced(synced, before, await scanVault(dir), pushedIds));
   log(`
 \u5B8C\u6210\uFF1A\u6210\u529F ${ok}\uFF0C\u51B2\u7A81 ${conflict}\uFF0C\u5931\u8D25 ${failed}`);
 }
@@ -30607,14 +31708,51 @@ async function cmdPull2() {
   const types = (flags.get("types")?.split(",") ?? conn.contentTypes?.map((t) => t.type) ?? ["post", "page"]).filter(
     Boolean
   );
-  log(`\u62C9\u53D6\u7C7B\u578B\uFF1A${types.join(", ")}`);
-  const res = await importFromWp(client2, ws, types);
-  await writeWorkspace(dir, res.ws);
-  const files = await scaffoldVault(dir, res.ws);
+  let onlyIds;
+  if (positional.length) {
+    const before2 = await scanVault(dir);
+    onlyIds = positional.map((t) => {
+      if (/^\d+$/.test(t)) return Number(t);
+      const id = ws.contents.find((c) => c.id === matchTargets([t], ws, before2, dir).ids[0])?.wpPostId;
+      return id ?? die(`\u627E\u4E0D\u5230\uFF1A${t}\uFF08\u5199 WordPress \u6587\u7AE0 id\uFF0C\u7F16\u8F91\u9875\u5730\u5740\u91CC post= \u540E\u9762\u7684\u6570\u5B57\uFF09`);
+    });
+  }
+  log(`\u62C9\u53D6\u7C7B\u578B\uFF1A${types.join(", ")}${onlyIds ? `\uFF0C\u53EA\u62C9 ${onlyIds.join(", ")}` : ""}`);
+  const synced = await readSynced(dir);
+  const res = await importFromWp(client2, ws, types, {
+    onlyIds,
+    noteNames: noteNamesFromScan(await scanVault(dir))
+  });
+  if (onlyIds && res.imported < onlyIds.length)
+    log(`\u26A0 \u62C9\u5230 ${res.imported} \u7BC7\uFF0C\u5C11\u4E8E\u8981\u7684 ${onlyIds.length} \u7BC7\uFF08id \u4E0D\u5BF9\uFF0C\u6216\u7C7B\u578B\u4E0D\u5728 ${types.join(", ")} \u91CC\uFF09`);
+  ws = res.ws;
+  await writeWorkspace(dir, ws);
+  const before = await scanVault(dir);
+  const files = await scaffoldVault(dir, ws);
+  const scanned = await scanVault(dir);
+  const kept = [];
+  const pulled = [];
+  for (const [id, md] of res.bodies) {
+    const note = scanned.get(id);
+    if (!note) continue;
+    if (isEdited(id, before, synced)) {
+      kept.push(ws.contents.find((c) => c.id === id)?.title ?? id);
+      continue;
+    }
+    await updateNoteBody(note.path, `
+${md}
+`);
+    pulled.push(id);
+  }
+  await writeSynced(dir, recordSynced(synced, before, await scanVault(dir), pulled));
   log(
-    `\u2713 \u5DF2\u540C\u6B65\uFF1A\u5BFC\u5165/\u66F4\u65B0 ${res.ws.contents.length} \u7BC7\u5185\u5BB9\uFF0C${res.ws.nodes.length} \u4E2A\u8282\u70B9\uFF1B\u5199\u5165/\u5237\u65B0 ${files} \u4E2A md \u6587\u4EF6`
+    `\u2713 \u5DF2\u540C\u6B65\uFF1A\u5BFC\u5165/\u66F4\u65B0 ${res.imported} \u7BC7\u5185\u5BB9\uFF0C${ws.nodes.length} \u4E2A\u8282\u70B9\uFF1B\u5199\u5165/\u5237\u65B0 ${files} \u4E2A md \u6587\u4EF6\uFF0C\u6B63\u6587 ${pulled.length} \u7BC7`
   );
-  printHealth(healthCheck(res.ws));
+  if (kept.length) log(`\u26A0 \u8FD9\u4E9B\u7B14\u8BB0\u6709\u6CA1\u63A8\u9001\u7684\u6539\u52A8\uFF0C\u6B63\u6587\u6CA1\u8986\u76D6\uFF1A${kept.join("\u3001")}`);
+  const mine = new Set(
+    onlyIds ? ws.contents.filter((c) => onlyIds.includes(c.wpPostId ?? -1)).flatMap((c) => [c.id, c.siloNodeId]) : []
+  );
+  printHealth(healthCheck(ws).filter((i) => !onlyIds || i.nodeIds.some((id) => mine.has(id))));
 }
 async function cmdMigrateConfig() {
   const target = configPath2 ?? GLOBAL_CREDENTIALS;
@@ -30658,6 +31796,7 @@ async function main() {
       log("puffergo silo <init|plan|push|pull|health|status|migrate-config> [--dir <vault>] [--config <path>]");
       log("puffergo login <siteUrl>");
       log(PRODUCTS_USAGE);
+      log(PAGES_USAGE);
       if (cmd && cmd !== "help" && cmd !== "--help") process.exitCode = 1;
   }
 }
@@ -30665,7 +31804,7 @@ function emit(result) {
   process.stdout.write(JSON.stringify(result, null, 2) + "\n");
   if (!(result && typeof result === "object" && result.ok === true)) process.exitCode = 1;
 }
-var PRODUCTS_USAGE = 'puffergo products <schema|list [--search q]|check [--only k1,k2]|push [--only k1,k2]|pull <key|id|link>|publish <key\u2026> --customer-said "<customer words>"|sample <list|set <name> <key|id|link>|show <name>|remove <name>>|images <file|folder\u2026>|categories <check|push>|edit-live [on --customer-said "<customer words>"|off]> [--dir <workdir>] [--site <url>]';
+var PRODUCTS_USAGE = 'puffergo products <schema|list [--search q]|check [--only k1,k2]|preview <key\u2026>|push [--only k1,k2 [--customer-said "<customer words>"]]|pull <key|id|link>|publish <key\u2026> --customer-said "<customer words>"|sample <list|set <name> <key|id|link>|show <name>|remove <name>>|images <file|folder\u2026>|categories <check|push>|edit-live [on --customer-said "<customer words>"|off]> [--dir <workdir>] [--site <url>]';
 async function products() {
   const ctx = { dir, flags, positional };
   switch (cmd) {
@@ -30675,6 +31814,8 @@ async function products() {
       return emit(await cmdListProducts(ctx));
     case "check":
       return emit(await cmdCheck(ctx));
+    case "preview":
+      return emit(await cmdPreview(ctx));
     case "push":
       return emit(await cmdPush(ctx));
     case "pull":
@@ -30693,9 +31834,37 @@ async function products() {
       return emit({ ok: false, code: "usage", message: PRODUCTS_USAGE });
   }
 }
-var run = group === "products" ? products : group === "login" ? async () => emit(await cmdLogin(dir, positional[0] ?? argv[1])) : group === "__login-wait" ? () => cmdLoginWait(argv[1], argv[2], argv[3]) : main;
-run().catch((e) => {
-  if (group === "products" || group === "login") {
+var PAGES_USAGE = 'puffergo pages <types|find [--type t] [--status publish] [--search q] [--url link]|blocks <id|link>|get <id|link> [path]|preview <files|folder\u2026> [--title t]|preview <id|link> <path> <file>|create --type <type> --title "<title>" --slug <slug> --seo-title "\u2026" --seo-description "\u2026" --focus-keyword "\u2026" [--keywords "a, b"] [--featured-image <file>] [--excerpt "\u2026"] [--new] <files|folder\u2026>|replace <id|link> <path> <file> [--customer-said "<customer words>"]|seo <id|link> [--slug s] [--seo-title "\u2026"] [--seo-description "\u2026"] [--focus-keyword "\u2026"] [--keywords "a, b"] [--featured-image <file>] [--customer-said "<customer words>"]|publish <id|link> --customer-said "<customer words>"|edit-live [on --customer-said "<customer words>"|off]> [--dir <workdir>] [--site <url>]';
+async function pages() {
+  const ctx = { dir, flags, positional };
+  switch (cmd) {
+    case "types":
+      return emit(await cmdTypes(ctx));
+    case "find":
+      return emit(await cmdFind(ctx));
+    case "blocks":
+      return emit(await cmdBlocks(ctx));
+    case "get":
+      return emit(await cmdGet(ctx));
+    case "preview":
+      return emit(await cmdPreview2(ctx));
+    case "create":
+      return emit(await cmdCreate(ctx));
+    case "replace":
+      return emit(await cmdReplace(ctx));
+    case "seo":
+      return emit(await cmdSeo(ctx));
+    case "publish":
+      return emit(await cmdPublish2(ctx));
+    case "edit-live":
+      return emit(await cmdEditLive(ctx));
+    default:
+      return emit({ ok: false, code: "usage", message: PAGES_USAGE });
+  }
+}
+var run2 = group === "products" ? products : group === "pages" ? pages : group === "login" ? async () => emit(await cmdLogin(dir, positional[0] ?? argv[1])) : group === "__login-wait" ? () => cmdLoginWait(argv[1], argv[2], argv[3]) : main;
+run2().catch((e) => {
+  if (group === "products" || group === "pages" || group === "login") {
     emit({ ok: false, code: "error", message: e instanceof Error ? e.message : String(e) });
   } else die(e instanceof Error ? e.message : String(e));
 });

@@ -16,6 +16,7 @@ import type {
 } from './types';
 import { createContent, createNode, newId } from './factory';
 import { normalizeTerm } from './keywords';
+import { nearestCategoryNode } from './selectors';
 
 /** Add a keyword node (pillar at top level, or a child cluster). Returns the new ws + created node. */
 export const addNode = (
@@ -75,13 +76,22 @@ export const collectSubtreeNodeIds = (ws: SiloWorkspace, nodeId: string): Set<st
 };
 
 /**
- * Move a content item under a different keyword node (drag-and-drop re-parenting). Only its
- * `siloNodeId` changes — keywords, links (edges) and everything else stay put, per design. Keyword
- * alignment is re-derived from the new parent automatically. No-op if the node is unchanged.
+ * Move a content item under a different keyword node (drag-and-drop re-parenting). Its `siloNodeId`
+ * changes, and so does its WP category record `termIds`: the old place's category is swapped for the
+ * new one's (other categories of a multi-category post stay). Left alone, the stale `termIds` would keep
+ * showing it under the old category and push would re-send the old category — the move silently undone.
+ * Keywords, links (edges) and everything else stay put, per design.
  */
 export const moveContent = (ws: SiloWorkspace, contentId: string, newNodeId: string): SiloWorkspace => ({
   ...ws,
-  contents: ws.contents.map(c => (c.id === contentId ? { ...c, siloNodeId: newNodeId } : c)),
+  contents: ws.contents.map(c => {
+    if (c.id !== contentId) return c;
+    if (!c.termIds?.length) return { ...c, siloNodeId: newNodeId };
+    const from = nearestCategoryNode(ws, c.siloNodeId)?.wpCategoryId;
+    const to = nearestCategoryNode(ws, newNodeId)?.wpCategoryId;
+    const kept = c.termIds.filter(id => id !== from);
+    return { ...c, siloNodeId: newNodeId, termIds: to != null && !kept.includes(to) ? [...kept, to] : kept };
+  }),
 });
 
 /**

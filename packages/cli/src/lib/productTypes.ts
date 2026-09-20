@@ -8,24 +8,19 @@ export interface ImageRef {
   sha256?: string;
 }
 
-export interface DetailSection {
-  layout: 'split' | 'full' | 'image' | 'gallery' | 'text';
-  heading?: string;
-  body?: string;
-  image?: ImageRef;
-  imagePosition?: 'left' | 'right';
-  images?: Array<ImageRef & { title?: string; text?: string }>;
-  textWidth?: string;
-}
+/** One block of the detail, in page order (schema `blocks` lists the components and native types a site takes). */
+export type DetailBlock =
+  | { type: 'static'; html: string; scopeId?: string }
+  /** A config component: `data` is its configData, fields as the component's schema says (schema `blocks.components`). */
+  | { type: 'config'; component: string; data: Record<string, unknown> }
+  /** A block made in the editor (video, image, other plugins…), as read: keep, move or delete, never edit. */
+  | { type: 'native'; raw: string; name?: string; text?: string }
+  | { type: 'image'; image: ImageRef }
+  | { type: 'video'; url?: string; mediaId?: number };
 
+/** `blocks` is the whole detail. */
 export interface ProductDetail {
-  title?: string;
-  subtitle?: string;
-  intro?: string;
-  introWidth?: string;
-  sections?: DetailSection[];
-  /** Read-only: non-content-alternating markup found on GET; the CLI must not send it back. */
-  unmanagedHtml?: string;
+  blocks?: DetailBlock[];
 }
 
 export interface UnitValue {
@@ -54,6 +49,15 @@ export interface ProductFile {
   specs?: Array<{ key: string; value: string }>;
   gallery?: ImageRef[];
   detail?: ProductDetail;
+  /** SEO title / description and focus keywords (core + up to 5 long-tail); required on a new product. */
+  seo?: ProductSeo;
+}
+
+export interface ProductSeo {
+  title?: string;
+  description?: string;
+  focusKeyword?: string;
+  keywords?: string[];
 }
 
 export interface ValidationError {

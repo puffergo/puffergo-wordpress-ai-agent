@@ -1,4 +1,4 @@
-/** sha256 → `.puffergo/uploads.json` cache → GET /agent/media?sha256 → else upload to /wp/v2/media,
+/** sha256 → `.puffergo/uploads.json` cache → the puffergo/find-media ability → else upload to /wp/v2/media,
  *  per spec section 7's push flow. Returns the resolved mediaId + whether a fresh upload happened. */
 
 import { createHash } from 'node:crypto';
@@ -14,6 +14,7 @@ export function sha256Hex(bytes: Uint8Array): string {
 
 export interface ResolvedUpload {
   mediaId: number;
+  url: string;
   sha256: string;
   reused: boolean;
 }
@@ -24,12 +25,12 @@ export async function resolveUpload(client: AgentClient, cache: UploadCache, abs
   const sha256 = sha256Hex(bytes);
 
   const cached = cache[sha256];
-  if (cached) return { mediaId: cached.mediaId, sha256, reused: true };
+  if (cached) return { mediaId: cached.mediaId, url: cached.url, sha256, reused: true };
 
   const lookup = await client.mediaLookup<{ found: boolean; mediaId?: number; url?: string }>(sha256);
   if (lookup.found && lookup.mediaId) {
     cache[sha256] = { mediaId: lookup.mediaId, url: lookup.url ?? '' };
-    return { mediaId: lookup.mediaId, sha256, reused: true };
+    return { mediaId: lookup.mediaId, url: lookup.url ?? '', sha256, reused: true };
   }
 
   const filename = basename(absPath);
@@ -38,5 +39,5 @@ export async function resolveUpload(client: AgentClient, cache: UploadCache, abs
   const mime = `image/${format}`;
   const { id, url } = await client.uploadMedia(new Uint8Array(bytes), filename, mime);
   cache[sha256] = { mediaId: id, url };
-  return { mediaId: id, sha256, reused: false };
+  return { mediaId: id, url, sha256, reused: false };
 }

@@ -2,6 +2,7 @@
 
 import { readFile, writeFile, readdir, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { siteState } from './workdirState';
 import { join } from 'node:path';
 import type { ProductFile } from './productTypes';
 
@@ -57,31 +58,13 @@ export interface UploadCacheEntry {
   url: string;
 }
 export type UploadCache = Record<string, UploadCacheEntry>;
-/** On disk: `{ "<siteUrl>": { "<sha256>": {mediaId,url} } }` — per site, so switching a workdir to another
- *  site never reuses the first site's media ids. */
-type UploadCacheFile = Record<string, UploadCache>;
-
-function uploadsCachePath(dir: string): string {
-  return join(dir, '.puffergo', 'uploads.json');
-}
-
-async function readCacheFile(dir: string): Promise<UploadCacheFile> {
-  const path = uploadsCachePath(dir);
-  if (!existsSync(path)) return {};
-  try {
-    return JSON.parse(await readFile(path, 'utf8')) as UploadCacheFile;
-  } catch {
-    return {};
-  }
-}
+/** `{ "<sha256>": {mediaId,url} }` per site, so switching a workdir to another site never reuses its media ids. */
+const uploadsState = siteState<UploadCache>('uploads.json');
 
 export async function readUploadsCache(dir: string, siteUrl: string): Promise<UploadCache> {
-  return (await readCacheFile(dir))[siteUrl] ?? {};
+  return uploadsState.read(dir, siteUrl);
 }
 
 export async function writeUploadsCache(dir: string, siteUrl: string, cache: UploadCache): Promise<void> {
-  const all = await readCacheFile(dir);
-  all[siteUrl] = cache;
-  await mkdir(join(dir, '.puffergo'), { recursive: true });
-  await writeFile(uploadsCachePath(dir), JSON.stringify(all, null, 2), 'utf8');
+  return uploadsState.write(dir, siteUrl, cache);
 }

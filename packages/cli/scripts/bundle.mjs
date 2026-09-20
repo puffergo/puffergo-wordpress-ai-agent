@@ -1,6 +1,7 @@
-/** Bundles the CLI into one dependency-free ESM file (Node ≥18) and ships it inside both Skills. */
+/** Bundles the CLI into one dependency-free ESM file (Node ≥18) and ships it inside every Skill, with the shared
+ *  block references (skill-refs/blocks, written once) copied into the Skills that write blocks. */
 import { build } from 'esbuild';
-import { copyFileSync, mkdirSync } from 'node:fs';
+import { copyFileSync, cpSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -16,9 +17,14 @@ await build({
   banner: { js: "#!/usr/bin/env node\nimport{createRequire}from'module';const require=createRequire(import.meta.url);" },
   logLevel: 'warning',
 });
-for (const skill of ['wordpress-bulk-product-upload', 'wordpress-seo-silo']) {
+for (const skill of ['wordpress-bulk-product-upload', 'wordpress-page-builder', 'wordpress-seo-silo']) {
   const dest = join(pkg, '..', '..', 'skills', skill, 'scripts', 'puffergo.mjs');
   mkdirSync(dirname(dest), { recursive: true });
   copyFileSync(out, dest);
 }
-console.log(`bundled → ${out} (+ copied into skills/*/scripts)`);
+for (const skill of ['wordpress-bulk-product-upload', 'wordpress-page-builder']) {
+  const dest = join(pkg, '..', '..', 'skills', skill, 'references', 'blocks');
+  rmSync(dest, { recursive: true, force: true });
+  cpSync(join(pkg, 'skill-refs', 'blocks'), dest, { recursive: true });
+}
+console.log(`bundled → ${out} (+ copied into skills/*/scripts, block references into skills/*/references/blocks)`);

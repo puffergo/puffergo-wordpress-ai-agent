@@ -77,3 +77,12 @@ describe('importFromWp — body pull', () => {
     expect(again.bodies.get(source.id)).toContain('[[target-post|Target]]');
   });
 });
+
+describe('importFromWp — onlyIds', () => {
+  it('imports just the named posts and leaves the rest of the workspace alone', async () => {
+    const client = new WpClient(stubNetwork(), { siteUrl: SITE, username: 'a', appPassword: 'b' });
+    const res = await importFromWp(client, emptyWorkspace({ name: 's', url: SITE }), ['post'], { onlyIds: [10] });
+    expect(res.ws.contents.map(c => c.wpPostId)).toEqual([10]);
+    expect([...res.bodies.values()]).toEqual(['Plain target body.']);
+  });
+});

@@ -1,13 +1,17 @@
 /**
- * The site's product-file rules, read from `GET /agent/products/schema` — the plugin is the only place
- * that defines which trade fields exist (price/moq/leadTime can be switched off, custom text fields added
+ * The site's product-file rules, read from the `puffergo/get-product-schema` ability — the plugin is the only
+ * place that defines which trade fields exist (price/moq/leadTime can be switched off, custom text fields added
  * under `trade.<key>`). Nothing in the CLI or the Skill hard-codes that list; it all goes through here.
  */
 
-import type { AgentClient } from './agentClient';
+import { AgentHttpError, type AgentClient } from './agentClient';
+import type { Components } from './configData';
 
 /** The product-file shape this CLI understands. A newer plugin needs a newer Skill/CLI. */
-export const SUPPORTED_SCHEMA_VERSION = 2;
+export const SUPPORTED_SCHEMA_VERSION = 5;
+/** An older plugin would misread what this CLI sends (`seo` came in version 3; a component's data as its own
+ *  configData in 5). */
+export const MIN_SCHEMA_VERSION = 5;
 
 export interface TradeField {
   /** Where the value sits in a product file: `price`, `moq`, `leadTime`, or `trade.<key>`. */
@@ -20,15 +24,11 @@ export interface TradeField {
 export interface SiteSchema {
   schemaVersion: number;
   tradeFields: TradeField[];
+  /** What detail.blocks can hold: config components by templateId (with their guide and data fields), the one a
+   *  detail uses by default, native block types. */
+  blocks?: { components?: Components; default?: string; native?: string[] };
   [k: string]: unknown;
 }
-
-/** Plugins from before the field table (no schemaVersion) always had these three. */
-const LEGACY_TRADE_FIELDS: TradeField[] = [
-  { path: 'price', kind: 'unitValue', unitType: 'currency', label: 'Price' },
-  { path: 'moq', kind: 'unitValue', unitType: 'quantity', label: 'Min. Order' },
-  { path: 'leadTime', kind: 'unitValue', unitType: 'time', label: 'Lead Time' },
-];
 
 export class SchemaVersionError extends Error {
   constructor(readonly siteVersion: number) {
@@ -38,19 +38,36 @@ export class SchemaVersionError extends Error {
   }
 }
 
+/** The site has no `puffergo/*` abilities: WordPress older than 6.9, or a PufferGo plugin from before them. */
+export class PluginOutdatedError extends Error {
+  constructor() {
+    super(
+      "This site's PufferGo plugin (or WordPress) is too old for this Skill. In wp-admin, update the PufferGo plugin to the latest version and WordPress to 6.9 or newer, then try again.",
+    );
+  }
+}
+
+export const ABILITIES_MISSING = new Set(['rest_no_route', 'rest_ability_not_found']);
+
 const cache = new WeakMap<AgentClient, Promise<SiteSchema>>();
 
-/** Fetched once per client; throws SchemaVersionError when the site is newer than this CLI. */
+/** Fetched once per client; throws SchemaVersionError when the site is newer than this CLI and
+ *  PluginOutdatedError when it is older. */
 export function loadSiteSchema(c: AgentClient): Promise<SiteSchema> {
   if (!cache.has(c)) {
     cache.set(
       c,
-      c.schema<Record<string, unknown>>().then(raw => {
-        const schemaVersion = typeof raw.schemaVersion === 'number' ? raw.schemaVersion : 1;
-        if (schemaVersion > SUPPORTED_SCHEMA_VERSION) throw new SchemaVersionError(schemaVersion);
-        const tradeFields = Array.isArray(raw.tradeFields) ? (raw.tradeFields as TradeField[]) : LEGACY_TRADE_FIELDS;
-        return { ...raw, schemaVersion, tradeFields };
-      }),
+      c
+        .schema<SiteSchema>()
+        .catch(e => {
+          const code = e instanceof AgentHttpError ? (e.body as { code?: string } | undefined)?.code : undefined;
+          throw code && ABILITIES_MISSING.has(code) ? new PluginOutdatedError() : e;
+        })
+        .then(raw => {
+          if (raw.schemaVersion > SUPPORTED_SCHEMA_VERSION) throw new SchemaVersionError(raw.schemaVersion);
+          if (!(raw.schemaVersion >= MIN_SCHEMA_VERSION)) throw new PluginOutdatedError();
+          return raw;
+        }),
     );
   }
   return cache.get(c)!;

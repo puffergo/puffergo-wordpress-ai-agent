@@ -10,6 +10,8 @@
  * live in an explicit `edges` array rather than being implied purely by the tree.
  */
 
+import type { SeoLimits } from './seo-limits';
+
 /** A WordPress post type slug as it exists on the connected site — 'post', 'page', WooCommerce
  *  'product', PufferGo 'puffergo_product', or ANY other CPT. Deliberately a free string, NOT a fixed
  *  enum: the site's real types are discovered at connect (see ContentTypeInfo), so the Silo works with
@@ -245,6 +247,9 @@ export interface SiloWorkspace {
    *  because it needs a live HTTP probe, which the pure health analysis can't do. Absent on
    *  workspaces imported before this existed — treated as "not checked", never as "none broken". */
   brokenLinks?: BrokenLink[];
+  /** The site's SEO limits as its PufferGo plugin published them at the last import; absent = Silo's defaults.
+   *  Kept in the workspace so health checks in a later session (another CLI run, a reopened vault) use them. */
+  seoLimits?: SeoLimits;
 }
 
 /** One internal link found in content whose target does not exist. */

@@ -87,6 +87,37 @@ describe('healthCheck — missing / truncated SEO meta', () => {
     expect(issue).toBeDefined();
     expect(issue?.severity).toBe('warning');
   });
+
+  it('measures width: 25 Chinese characters (width 50) is a good title, 35 (width 70) is long', () => {
+    const node = createNode('n', 'pillar', null);
+    const seo = (title: string) => ({ ...emptySeo(), title, description: '说明'.repeat(35) });
+    const ok = createContent(node.id, 'A', 'post', { seo: seo('中'.repeat(25)) });
+    const long = createContent(node.id, 'B', 'post', { seo: seo('中'.repeat(35)) });
+    const issues = healthCheck({ ...baseWs(), nodes: [node], contents: [ok, long] });
+    expect(issues.filter(i => i.code === 'meta-truncated' || i.code === 'meta-too-short').map(i => i.nodeIds)).toEqual([
+      [long.id],
+    ]);
+  });
+
+  it("uses the site's limits kept in the workspace (from the last import)", () => {
+    const node = createNode('n', 'pillar', null);
+    const content = createContent(node.id, 'A', 'post', {
+      seo: { ...emptySeo(), title: 'x'.repeat(65), description: 'd'.repeat(130) },
+    });
+    const limits = {
+      titleRecommended: [30, 70] as [number, number],
+      descriptionRecommended: [120, 160] as [number, number],
+      coreKeywordsMax: 1,
+      longTailKeywordsMax: 5,
+    };
+    try {
+      expect(codesOf({ ...baseWs(), nodes: [node], contents: [content], seoLimits: limits })).not.toContain(
+        'meta-truncated',
+      );
+    } finally {
+      healthCheck({ ...baseWs(), seoLimits: { ...limits, titleRecommended: [30, 60], longTailKeywordsMax: 4 } });
+    }
+  });
 });
 
 describe('healthCheck — focus keyword not in title', () => {

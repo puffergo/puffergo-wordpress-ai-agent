@@ -55,3 +55,27 @@ export class WpHttpError extends Error {
     this.name = 'WpHttpError';
   }
 }
+
+/** WP error codes that mean "this request never authenticated" (as opposed to authenticated-but-
+ *  lacks-capability). Covers a revoked/deleted Application Password: WP silently drops the invalid
+ *  Basic-auth credentials and the request falls through as anonymous, so an edit endpoint's permission
+ *  check fails exactly like a logged-out visitor's would — surfacing as 401, or 403 with one of these
+ *  codes rather than a capability-specific one (e.g. `rest_cannot_edit_others`). */
+const AUTH_ERROR_CODES = new Set([
+  'incorrect_password',
+  'invalid_username',
+  'rest_cookie_invalid_nonce',
+  'rest_not_logged_in',
+  'rest_forbidden',
+]);
+
+/** True when an error looks like the connection's credentials are missing/invalid — a revoked or
+ *  deleted Application Password being the common cause — rather than a "logged in but not allowed"
+ *  capability error (e.g. wrong role, not the post's author). Single shared check so every call site
+ *  (push, batch push, connection status) reports the same "reconnect WordPress" diagnosis consistently
+ *  instead of re-deriving it from status/code locally. */
+export function isAuthError(e: unknown): boolean {
+  if (!(e instanceof WpHttpError)) return false;
+  if (e.status === 401) return true;
+  return e.status === 403 && AUTH_ERROR_CODES.has(e.code);
+}

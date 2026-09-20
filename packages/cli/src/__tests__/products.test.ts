@@ -5,11 +5,13 @@ import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
 import { sniffImage } from '../lib/imageSniff';
 import { walkImageRefs } from '../lib/imageRefs';
-import { readbackMismatches, stripFileRefsForValidate, PUBLISH_INTENT, cmdPublish } from '../lib/productsCmd';
+import { walkConfigImages, type Components } from '../lib/configData';
+import { readbackMismatches, stripFileRefsForValidate, cmdPublish } from '../lib/productsCmd';
+import { PUBLISH_INTENT } from '../lib/siteCmd';
 import { readUploadsCache, writeUploadsCache, loadProducts } from '../lib/productFiles';
 import { localCheckProduct } from '../lib/localCheck';
 import { normalizeSiteUrl } from '../lib/loginCmd';
-import type { ProductFile } from '../lib/productTypes';
+import type { DetailBlock, ProductFile } from '../lib/productTypes';
 
 // ---- tiny image builders -------------------------------------------------------------------------
 function png(w: number, h: number): Buffer {
@@ -98,7 +100,7 @@ describe('workdir files', () => {
       ['k-1.gallery[0]', 'not_found'],
       ['k-1.gallery[1]', 'format'],
     ]);
-    expect(r.warnings.map(e => e.path)).toEqual(['k-1.gallery[2]']);
+    expect(r.warnings.filter(e => e.code !== 'no_detail_component').map(e => e.path)).toEqual(['k-1.gallery[2]']);
   });
 
   it('upload cache is kept per site', async () => {
@@ -138,13 +140,16 @@ describe('site resolution', () => {
   };
   const cred = { username: 'u', appPassword: 'p' };
 
-  it('--site beats workdir config beats the only site', async () => {
+  it('--site beats workdir config beats the only site, and is remembered', async () => {
     await store({ 'http://a.test': cred, 'http://b.test': cred });
     const { resolveSite } = await import('../lib/site');
     await mkdir(join(dir, '.puffergo'));
     await writeFile(join(dir, '.puffergo', 'config.json'), JSON.stringify({ siteUrl: 'http://b.test' }));
-    expect((await resolveSite(dir, 'http://a.test')).config.siteUrl).toBe('http://a.test');
     expect((await resolveSite(dir, undefined)).config.siteUrl).toBe('http://b.test');
+    expect((await resolveSite(dir, 'http://a.test/')).config.siteUrl).toBe('http://a.test');
+    expect((await resolveSite(dir, undefined)).config.siteUrl).toBe('http://a.test');
+    await expect(resolveSite(dir, 'http://c.test')).rejects.toMatchObject({ code: 'not_logged_in' });
+    expect((await resolveSite(dir, undefined)).config.siteUrl).toBe('http://a.test');
   });
   it('several sites and no choice → no_site with the list; unknown site → not_logged_in', async () => {
     await store({ 'http://a.test': cred, 'http://b.test': cred });
@@ -177,41 +182,112 @@ describe('ref rewriting and read-back', () => {
     title: 'T',
     gallery: [{ file: 'a.jpg', alt: 'a' }, { mediaId: 5 }],
     detail: {
-      unmanagedHtml: '<p>x</p>',
-      sections: [
-        { layout: 'split', heading: 'h', image: { file: 'b.jpg' } },
+      blocks: [
         {
-          layout: 'gallery',
-          images: [
-            { file: 'c.jpg', title: 'C' },
-            { mediaId: 7, title: 'D' },
-          ],
+          type: 'config',
+          component: 'content-alternating',
+          data: {
+            sections: [
+              { layout: 'split', heading: 'h', image: 'b.jpg' },
+              {
+                layout: 'gallery',
+                images: [
+                  { image: 'c.jpg', title: 'C' },
+                  { image: 'https://site.test/d.jpg', title: 'D' },
+                ],
+              },
+            ],
+          },
         },
       ],
     },
   });
 
-  it('walks every image ref with the server path names', () => {
-    expect(walkImageRefs(product()).map(r => r.path)).toEqual([
-      'k-1.gallery[0]',
-      'k-1.gallery[1]',
-      'k-1.detail.sections[0].image',
-      'k-1.detail.sections[1].images[0]',
-      'k-1.detail.sections[1].images[1]',
+  it('walks every image with the server path names: refs, and the images in component data', () => {
+    expect(walkImageRefs(product()).map(r => r.path)).toEqual(['k-1.gallery[0]', 'k-1.gallery[1]']);
+    // No schema: a component's images are its local image paths.
+    expect(walkConfigImages(product(), 'k-1').map(r => r.path)).toEqual([
+      'k-1.detail.blocks[0].data.sections[0].image',
+      'k-1.detail.blocks[0].data.sections[1].images[0].image',
     ]);
   });
 
-  it('validate payload strips only file refs and unmanagedHtml, leaving the original untouched', () => {
+  it("with the component's schema: every image field, and the slot its siblings pick", () => {
+    const components: Components = {
+      'content-alternating': {
+        schema: {
+          sections: {
+            type: 'array',
+            itemSchema: {
+              layout: { type: 'select' },
+              image: {
+                type: 'image',
+                slotWhen: [
+                  { when: { layout: ['split'] }, slotClass: 's' },
+                  { when: { layout: ['full'] }, slotClass: 'f' },
+                ],
+              },
+              images: {
+                type: 'array',
+                itemSchema: { image: { type: 'image', slotWhen: [{ when: {}, slotClass: 'g' }] } },
+              },
+            },
+          },
+        },
+      },
+    };
+    expect(walkConfigImages(product(), 'k-1', components).map(r => [r.path, r.place])).toEqual([
+      ['k-1.detail.blocks[0].data.sections[0].image', 'content-alternating|s'],
+      ['k-1.detail.blocks[0].data.sections[1].images[0].image', 'content-alternating|g'],
+      ['k-1.detail.blocks[0].data.sections[1].images[1].image', 'content-alternating|g'],
+    ]);
+  });
+
+  it('validate payload strips only file refs, leaving the original untouched', () => {
     const p = product();
     const { clone, strippedPaths } = stripFileRefsForValidate(p);
     expect([...strippedPaths]).toEqual([
       'k-1.gallery[0]',
-      'k-1.detail.sections[0].image',
-      'k-1.detail.sections[1].images[0]',
+      'k-1.detail.blocks[0].data.sections[0].image',
+      'k-1.detail.blocks[0].data.sections[1].images[0].image',
     ]);
-    expect(clone.detail?.unmanagedHtml).toBeUndefined();
     expect(clone.gallery?.[1]).toEqual({ mediaId: 5 });
     expect(p.gallery?.[0].file).toBe('a.jpg');
+  });
+
+  it('walks image refs inside detail blocks: component sections and image blocks', () => {
+    const p: ProductFile = {
+      key: 'k-2',
+      title: 'T',
+      detail: {
+        blocks: [
+          { type: 'static', html: '<section></section>' },
+          {
+            type: 'config',
+            component: 'content-alternating',
+            data: { sections: [{ layout: 'image', image: 'a.jpg' }] },
+          },
+          { type: 'native', raw: '<!-- wp:video /-->' },
+          { type: 'image', image: { file: 'b.jpg', alt: 'b' } },
+          { type: 'video', url: 'https://youtu.be/x' },
+        ],
+      },
+    };
+    expect(walkImageRefs(p).map(r => [r.path, r.place])).toEqual([['k-2.detail.blocks[3].image', 'detailImage']]);
+    expect(walkConfigImages(p, 'k-2').map(r => r.path)).toEqual(['k-2.detail.blocks[1].data.sections[0].image']);
+  });
+
+  it('read-back compares detail blocks in order', () => {
+    const blocks: DetailBlock[] = [
+      { type: 'config', component: 'content-alternating', data: { sections: [{ layout: 'text', body: 'b' }] } },
+      { type: 'video', url: 'https://youtu.be/x' },
+    ];
+    const remoteBlocks = [blocks[0], { type: 'native', raw: '<!-- wp:embed /-->' }];
+    const local: ProductFile = { key: 'k', title: 'T', detail: { blocks } };
+    expect(readbackMismatches(local, { title: 'T', detail: { blocks: remoteBlocks } })).toEqual([]);
+    expect(readbackMismatches(local, { title: 'T', detail: { blocks: [...remoteBlocks].reverse() } })[0]).toMatch(
+      /detail blocks/,
+    );
   });
 
   it('read-back flags differences and ignores omitted fields', () => {
@@ -220,7 +296,7 @@ describe('ref rewriting and read-back', () => {
       title: 'T',
       status: 'draft',
       specs: [{ key: 'a', value: '1' }],
-      detail: { sections: [{ layout: 'text', body: 'b' }] },
+      detail: { blocks: [{ type: 'config', component: 'content-alternating', data: { sections: [] } }] },
     };
     const remote = {
       title: 'T',
@@ -228,12 +304,17 @@ describe('ref rewriting and read-back', () => {
       price: { type: 'contact' },
       specs: [{ key: 'a', value: '1' }],
       gallery: [],
-      detail: { sections: [{ layout: 'text', body: 'b' }] },
+      detail: { blocks: [{ type: 'config', component: 'content-alternating', data: { sections: [] } }] },
     };
     expect(readbackMismatches(local, remote)).toEqual([]);
     expect(readbackMismatches({ ...local, status: 'publish' }, remote)).toHaveLength(1);
-    expect(readbackMismatches(local, { ...remote, detail: { sections: [] } })[0]).toMatch(/sections/);
+    expect(readbackMismatches(local, { ...remote, detail: { blocks: [] } })[0]).toMatch(/detail blocks/);
     expect(readbackMismatches({ ...local, specs: [] }, remote)[0]).toMatch(/specs/);
+    const seo = { title: 'T', description: 'D', focusKeyword: 'k', keywords: ['a'] };
+    expect(readbackMismatches({ ...local, seo }, { ...remote, seo })).toEqual([]);
+    expect(readbackMismatches({ ...local, seo: { description: 'D2' } }, { ...remote, seo })).toEqual([
+      'seo.description mismatch',
+    ]);
   });
 });
 
@@ -260,9 +341,32 @@ describe('publish needs the customer asking for it', () => {
 
 // ---- samples -------------------------------------------------------------------------------------
 import { sampleReference, resolveProductId, TargetError } from '../lib/samples';
-import { optionalFactPaths, loadSiteSchema, SchemaVersionError, type TradeField } from '../lib/siteSchema';
+import {
+  optionalFactPaths,
+  loadSiteSchema,
+  PluginOutdatedError,
+  SchemaVersionError,
+  type TradeField,
+} from '../lib/siteSchema';
 
-const SCHEMA3: { tradeFields: TradeField[] } = {
+const SCHEMA3: { tradeFields: TradeField[]; blocks: { components: Components } } = {
+  blocks: {
+    components: {
+      'content-alternating': {
+        schema: {
+          sections: {
+            type: 'array',
+            itemSchema: {
+              layout: { type: 'select' },
+              heading: { type: 'text' },
+              body: { type: 'textarea' },
+              image: { type: 'image' },
+            },
+          },
+        },
+      },
+    },
+  },
   tradeFields: [
     { path: 'price', kind: 'unitValue', unitType: 'currency', label: 'Price' },
     { path: 'moq', kind: 'unitValue', unitType: 'quantity', label: 'Min. Order' },
@@ -270,7 +374,7 @@ const SCHEMA3: { tradeFields: TradeField[] } = {
   ],
 };
 import { SampleCtx, applySample } from '../lib/productsCmd';
-import type { AgentClient } from '../lib/agentClient';
+import { AgentHttpError, type AgentClient } from '../lib/agentClient';
 
 describe('sampleReference', () => {
   const remote: ProductFile = {
@@ -282,7 +386,25 @@ describe('sampleReference', () => {
     leadTime: { min: 10, max: 15, unit: 'days' },
     specs: [{ key: 'Power', value: '5.5 kW' }],
     gallery: [{ mediaId: 3, alt: 'front' }],
-    detail: { sections: [{ layout: 'split', heading: 'Quiet', body: 'Runs at 60 dB.', image: { mediaId: 4 } }] },
+    detail: {
+      blocks: [
+        {
+          type: 'config',
+          component: 'content-alternating',
+          data: {
+            sections: [{ layout: 'split', heading: 'Quiet', body: 'Runs at 60 dB.', image: 'https://s.test/q.jpg' }],
+          },
+        },
+        { type: 'static', html: '<section><p>PG-500 runs 5.5 kW</p></section>', scopeId: 'pg--a' },
+        { type: 'native', raw: '<!-- wp:embed {"url":"https://youtu.be/pg500"} /-->', name: 'core/embed', text: '' },
+      ],
+    },
+    seo: {
+      title: 'PG-500 Compressor',
+      description: 'Quiet 5.5 kW compressor.',
+      focusKeyword: 'air compressor',
+      keywords: ['quiet compressor'],
+    },
   };
   const ref = sampleReference(remote, SCHEMA3) as Record<string, any>;
 
@@ -291,15 +413,22 @@ describe('sampleReference', () => {
     expect(ref.leadTime).toEqual({ min: '<from customer>', max: '<from customer>', unit: 'days' });
     expect(ref.specs).toEqual([{ key: 'Power', value: '<from customer>' }]);
     expect(JSON.stringify(ref)).not.toContain('5.5');
-    expect(ref.detail.sections[0].body).toBe('<text from customer facts>');
+    expect(ref.detail.blocks[0].data.sections[0].body).toBe('<text from customer facts>');
     expect(ref.title).toBe('<text from customer facts>');
-    expect(ref.detail.sections[0].layout).toBe('split');
+    expect(ref.detail.blocks[0].data.sections[0].layout).toBe('split');
+    const T = '<text from customer facts>';
+    expect(ref.seo).toEqual({ title: T, description: T, focusKeyword: T, keywords: [T] });
   });
   it('lists the trade fields the site does not use, and drops identity/images', () => {
     expect(ref.notUsed).toEqual(['price']);
     expect(ref.id ?? ref.key ?? ref.status).toBeUndefined();
     expect(ref.gallery).toEqual([{ file: '<customer photo>' }]);
-    expect(ref.detail.sections[0].image).toEqual({ file: '<customer photo>' });
+    expect(ref.detail.blocks[0].data.sections[0].image).toBe('<customer photo>');
+    // Static HTML and editor blocks of the sample are its own content: only their kind is kept.
+    expect(ref.detail.blocks.slice(1)).toEqual([
+      { type: 'static', html: '<text from customer facts>' },
+      { type: 'native', raw: '', name: 'core/embed' },
+    ]);
   });
   it('keeps "price on request" as is', () => {
     expect((sampleReference({ title: 't', price: { type: 'contact' } }, SCHEMA3) as any).price).toEqual({
@@ -370,14 +499,47 @@ describe('claimWarnings', () => {
       title: 'GV-50 Gate Valve',
       excerpt: 'Durable, robust valve. Durable again.',
       detail: {
-        sections: [{ layout: 'text', heading: 'Body', body: 'WCB cast steel body rated PN16; ensures reliability.' }],
+        blocks: [
+          {
+            type: 'config',
+            component: 'any-component',
+            data: {
+              sections: [
+                { layout: 'text', heading: 'Body', body: 'WCB cast steel body rated PN16; ensures reliability.' },
+              ],
+            },
+          },
+        ],
       },
     });
-    expect(w.map(x => x.path)).toEqual(['v-1.excerpt', 'v-1.detail.sections[0].body']);
+    expect(w.map(x => x.path)).toEqual(['v-1.excerpt', 'v-1.detail.blocks[0].data.sections[0].body']);
     expect(w[0].message).toContain('"durable", "robust"');
     expect(w[1].message).toContain('"ensures", "reliability"');
     expect(claimWarnings({ title: 'Flanged ends bolt onto DN50 pipelines' })).toEqual([]);
+    const blocks = claimWarnings({
+      key: 'v-2',
+      title: 't',
+      detail: {
+        blocks: [
+          { type: 'static', html: '<section><p>Premium <b>cast</b> body</p></section>' },
+          { type: 'config', component: 'content-alternating', data: { intro: 'A world-class finish.' } },
+        ],
+      },
+    });
+    expect(blocks.map(x => x.path)).toEqual(['v-2.detail.blocks[0].html', 'v-2.detail.blocks[1].data.intro']);
     expect(claimWarnings({ title: 't', excerpt: 'Factory tested before shipping.' })[0].message).toContain('"tested"');
+  });
+
+  it('leaves alone a word the customer gave in the specs or a trade field', () => {
+    const p = { key: 'v-3', title: 't', excerpt: '5-year warranty; IP66 certified.' };
+    expect(claimWarnings(p)[0].message).toContain('"certified"');
+    expect(
+      claimWarnings({
+        ...p,
+        specs: [{ key: 'Warranty', value: '5 years' }],
+        trade: { note: 'IP66 certified by TUV' },
+      }),
+    ).toEqual([]);
   });
 });
 
@@ -402,11 +564,26 @@ describe('site schema drives trade fields', () => {
     expect(ref.notUsed).toEqual(['moq']);
     expect(optionalFactPaths(CUSTOM)).toEqual(['trade.payment_terms', 'moq', 'specs']);
   });
-  it('refuses a site newer than this CLI and falls back to the three built-ins on old plugins', async () => {
+  it('refuses a site newer than this CLI, and asks for a plugin update when the abilities are missing', async () => {
     const newer = { schema: async () => ({ schemaVersion: 99 }) } as unknown as AgentClient;
     await expect(loadSiteSchema(newer)).rejects.toBeInstanceOf(SchemaVersionError);
-    const old = { schema: async () => ({ layouts: [] }) } as unknown as AgentClient;
-    expect((await loadSiteSchema(old)).tradeFields.map(f => f.path)).toEqual(['price', 'moq', 'leadTime']);
+    // A plugin before `seo` (version 3) would silently drop it: update the plugin instead.
+    const before = { schema: async () => ({ schemaVersion: 2 }) } as unknown as AgentClient;
+    await expect(loadSiteSchema(before)).rejects.toBeInstanceOf(PluginOutdatedError);
+    for (const code of ['rest_no_route', 'rest_ability_not_found']) {
+      const old = {
+        schema: async () => {
+          throw new AgentHttpError(404, { code });
+        },
+      } as unknown as AgentClient;
+      await expect(loadSiteSchema(old)).rejects.toBeInstanceOf(PluginOutdatedError);
+    }
+    const down = {
+      schema: async () => {
+        throw new AgentHttpError(500, { code: 'internal_server_error' });
+      },
+    } as unknown as AgentClient;
+    await expect(loadSiteSchema(down)).rejects.toBeInstanceOf(AgentHttpError);
   });
   it('read-back compares custom trade values', () => {
     expect(
@@ -416,5 +593,20 @@ describe('site schema drives trade fields', () => {
       'trade mismatch',
     ]);
     expect(readbackMismatches({ title: 't', trade: { port: '' } }, { title: 't', trade: {} })).toEqual([]);
+  });
+});
+
+describe('detail warnings', () => {
+  it('suggests a component for a new product only, never blocks', async () => {
+    const { detailWarnings } = await import('../lib/detailBlocks');
+    const plain = { key: 'a', title: 'A', detail: { blocks: [{ type: 'static' as const, html: '<p>x</p>' }] } };
+    expect(detailWarnings(plain, 'a')).toMatchObject([{ code: 'no_detail_component', fix: 'user' }]);
+    expect(detailWarnings({ ...plain, id: 7 }, 'a')).toEqual([]);
+    const withComponent = {
+      key: 'a',
+      title: 'A',
+      detail: { blocks: [{ type: 'config' as const, component: 'content-alternating', data: { sections: [] } }] },
+    };
+    expect(detailWarnings(withComponent, 'a')).toEqual([]);
   });
 });

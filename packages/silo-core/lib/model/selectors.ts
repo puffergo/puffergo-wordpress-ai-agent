@@ -40,21 +40,37 @@ export const taxonomyForNode = (ws: SiloWorkspace, nodeId: string): string | und
   return undefined;
 };
 
+/** The node itself or its nearest ancestor that is a real WP category — where a content placed at
+ *  `nodeId` lands on WordPress (virtual folders are transparent). Null when there is none. */
+export const nearestCategoryNode = (ws: SiloWorkspace, nodeId: string): SiloNode | null => {
+  for (const n of [...getNodePath(ws, nodeId)].reverse()) if (isCategoryNode(n)) return n;
+  return null;
+};
+
+/** A content's hierarchical taxonomy: from the connection's discovered types, else (no connection
+ *  loaded / types not discovered yet) from where it sits in the tree. */
+export const taxonomyOfContent = (ws: SiloWorkspace, content: ContentItem): string | undefined =>
+  taxonomyOfType(ws, content.postType) ?? taxonomyForNode(ws, content.siloNodeId);
+
 /**
- * Content shown under a node. A node is either:
- *   - a real TERM node (has `wpCategoryId` + `taxonomyRestBase`): returns every content whose OWN
- *     taxonomy matches this node's taxonomy AND whose `termIds` include this term — so a multi-category
- *     post appears under each of its categories (one item, many homes). Matching on (taxonomy, termId)
+ * Content shown under a node. A content's category membership has TWO records — `siloNodeId` (where it
+ * sits locally) and `termIds` (its categories on WP, known once imported or pushed) — and every reader
+ * must honor both, or content goes missing whenever they haven't converged yet (never pushed, just
+ * moved, types not discovered).
+ *   - a real TERM node (has `wpCategoryId` + `taxonomyRestBase`): content anchored here by `siloNodeId`,
+ *     plus every content of this taxonomy whose `termIds` include this term — so a multi-category post
+ *     appears under each of its categories (one item, many homes). Matching on (taxonomy, termId)
  *     avoids cross-taxonomy collisions (product_cat#5 vs category#5).
- *   - otherwise (type-root / 未分类 / page-root / legacy keyword node): returns content anchored here
- *     by `siloNodeId` — i.e. uncategorized content parked under it.
+ *   - otherwise (type-root / 未分类 / page-root / virtual folder): content anchored here by `siloNodeId`.
  */
 export const getContentsForNode = (ws: SiloWorkspace, nodeId: string): ContentItem[] => {
   const node = ws.nodes.find(n => n.id === nodeId);
   if (node && isCategoryNode(node) && node.wpCategoryId != null && node.taxonomyRestBase) {
     const tax = node.taxonomyRestBase;
     const termId = node.wpCategoryId;
-    return ws.contents.filter(c => taxonomyOfType(ws, c.postType) === tax && (c.termIds ?? []).includes(termId));
+    return ws.contents.filter(
+      c => c.siloNodeId === nodeId || ((c.termIds ?? []).includes(termId) && taxonomyOfContent(ws, c) === tax),
+    );
   }
   return ws.contents.filter(c => c.siloNodeId === nodeId);
 };
@@ -75,15 +91,16 @@ export const getNodePath = (ws: SiloWorkspace, nodeId: string): SiloNode[] => {
 };
 
 /**
- * Rank Math focus-keyword string: 1 core + up to 5 long-tail, comma-joined. Matches the PufferGo
- * plugin convention (`ai-site-builder.php:save_seo_meta_for_page`) so both systems produce identical
- * meta. Returns '' when there is nothing to write.
+ * The focus keywords to write: the core keyword, then long-tail ones, capped by the site's limits
+ * (see seo-limits.ts). Empty when there is nothing to write.
  */
-export const focusKeywordString = (seo: Seo): string =>
+export const focusKeywords = (seo: Seo): string[] =>
   [...seo.coreKeywords.slice(0, CORE_KEYWORDS_MAX), ...seo.longTailKeywords.slice(0, LONGTAIL_KEYWORDS_MAX)]
     .map(s => s.trim())
-    .filter(Boolean)
-    .join(', ');
+    .filter(Boolean);
+
+/** The focus keywords as Rank Math / Yoast store them: comma-joined. '' when there is nothing to write. */
+export const focusKeywordString = (seo: Seo): string => focusKeywords(seo).join(', ');
 
 /** Content items not yet pushed (status draft with no wpPostId) — for the "N pending" counter. */
 export const getPendingContents = (ws: SiloWorkspace): ContentItem[] => ws.contents.filter(c => c.wpPostId === null);

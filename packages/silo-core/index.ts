@@ -10,6 +10,7 @@ export * from './lib/model/migrate';
 export * from './lib/model/graph';
 export * from './lib/model/layout';
 export * from './lib/model/health';
+export { applySeoLimits, seoWidth, type SeoLimits } from './lib/model/seo-limits';
 export * from './lib/model/content-score';
 export * from './lib/model/connect';
 export * from './lib/model/selectors';

@@ -36,7 +36,7 @@ export function normalizeSiteUrl(input: string): string {
   return `${u.protocol}//${u.host}${path}`;
 }
 
-function openBrowser(url: string): void {
+export function openBrowser(url: string): void {
   if (process.env.PUFFERGO_NO_BROWSER) return;
   const [cmd, args] =
     process.platform === 'darwin'

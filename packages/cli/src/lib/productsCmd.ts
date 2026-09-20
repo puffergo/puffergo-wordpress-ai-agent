@@ -3,47 +3,37 @@
 import { resolve, join, relative } from 'node:path';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { sniffImage } from './imageSniff';
-import { AgentClient, AgentHttpError } from './agentClient';
+import type { AgentClient } from './agentClient';
+import { AgentHttpError } from './agentClient';
+import { editLiveAllowed } from './site';
 import {
-  resolveSite,
-  NoSiteError,
-  NotLoggedInError,
-  editLiveAllowed,
-  readWorkdirConfig,
-  writeWorkdirConfig,
-} from './site';
+  client,
+  errorOutput,
+  isLive as isLiveStatus,
+  liveLockedMessage,
+  customerSaid,
+  publishRefusal,
+  type CmdCtx,
+} from './siteCmd';
 import { loadProducts, writeProduct, readUploadsCache, writeUploadsCache, type LoadedProduct } from './productFiles';
 import { localCheckProduct } from './localCheck';
 import { walkImageRefs, identOf } from './imageRefs';
+import { walkConfigImages, isLocalImage } from './configData';
 import { resolveUpload } from './uploadImage';
-import { readSamples, writeSamples, resolveProductId, sampleReference, TargetError, type SampleEntry } from './samples';
-import { loadSiteSchema, optionalFactPaths, getPath, isEmptyValue, SchemaVersionError } from './siteSchema';
-import type { ProductFile, ValidationError, DetailSection } from './productTypes';
+import { readSamples, writeSamples, resolveProductId, sampleReference, type SampleEntry } from './samples';
+import {
+  loadSiteSchema,
+  optionalFactPaths,
+  getPath,
+  isEmptyValue,
+  ABILITIES_MISSING,
+  PluginOutdatedError,
+} from './siteSchema';
+import type { ProductFile, ValidationError, DetailBlock } from './productTypes';
+import { blockSignature, detailBlocks } from './detailBlocks';
+import { MissingImageError, uploadHtmlImages } from './htmlImages';
 import { placeProblems, type ImagesSpec } from './imageAdvice';
 import { readCategoriesFile, planCategories, CATEGORIES_FILE, type RemoteTerm } from './categories';
-
-export interface CmdCtx {
-  dir: string;
-  flags: Map<string, string>;
-  positional: string[];
-}
-
-async function client(ctx: CmdCtx): Promise<AgentClient> {
-  const siteFlag = ctx.flags.get('site');
-  const cred = await resolveSite(ctx.dir, siteFlag);
-  const c = new AgentClient(cred.config);
-  await loadSiteSchema(c); // refuses a site whose product-file version is newer than this CLI
-  return c;
-}
-
-function siteErrorOutput(
-  e: unknown,
-): { ok: false; code: string; sites?: string[]; fix?: string; message?: string } | null {
-  if (e instanceof NoSiteError) return { ok: false, code: 'no_site', sites: e.sites };
-  if (e instanceof NotLoggedInError) return { ok: false, code: 'not_logged_in' };
-  if (e instanceof SchemaVersionError) return { ok: false, code: 'update_skill', fix: 'user', message: e.message };
-  return null;
-}
 
 export async function cmdSchema(ctx: CmdCtx): Promise<unknown> {
   try {
@@ -56,9 +46,7 @@ export async function cmdSchema(ctx: CmdCtx): Promise<unknown> {
       samples: Object.entries(samples).map(([name, t]) => ({ name, id: t.id, title: t.title })),
     };
   } catch (e) {
-    const siteErr = siteErrorOutput(e);
-    if (siteErr) return siteErr;
-    return { ok: false, code: 'error', message: e instanceof Error ? e.message : String(e) };
+    return errorOutput(e);
   }
 }
 
@@ -71,9 +59,7 @@ export async function cmdListProducts(ctx: CmdCtx): Promise<unknown> {
     });
     return { ok: true, ...(res as Record<string, unknown>) };
   } catch (e) {
-    const siteErr = siteErrorOutput(e);
-    if (siteErr) return siteErr;
-    return { ok: false, code: 'error', message: e instanceof Error ? e.message : String(e) };
+    return errorOutput(e);
   }
 }
 
@@ -96,7 +82,12 @@ export function stripFileRefsForValidate(product: ProductFile): { clone: Product
       Object.keys(ref).forEach(k => delete (ref as Record<string, unknown>)[k]);
     }
   }
-  if (clone.detail) delete clone.detail.unmanagedHtml;
+  // A component's local image: left empty for the server check (checked locally, uploaded on push).
+  for (const leaf of walkConfigImages(clone, identOf(clone))) {
+    if (!isLocalImage(leaf.value)) continue;
+    strippedPaths.add(leaf.path);
+    leaf.set('');
+  }
   delete clone.sample;
   return { clone, strippedPaths };
 }
@@ -188,7 +179,13 @@ async function checkOne(c: AgentClient, loaded: LoadedProduct, baseDir: string, 
       warnings: [],
     };
   }
-  const local = await localCheckProduct(product, baseDir, (await loadSiteSchema(c)).images as ImagesSpec | undefined);
+  const site = await loadSiteSchema(c);
+  const local = await localCheckProduct(
+    product,
+    baseDir,
+    site.images as ImagesSpec | undefined,
+    site.blocks?.components,
+  );
   const { clone, strippedPaths } = stripFileRefsForValidate(product);
   let serverErrors: ValidationError[] = [];
   let serverWarnings: ValidationError[] = [];
@@ -216,6 +213,27 @@ async function checkOne(c: AgentClient, loaded: LoadedProduct, baseDir: string, 
   };
 }
 
+/** One error per file that shares its `id` with another local file: pushing both would overwrite each other. */
+async function duplicateIdErrors(dir: string): Promise<Map<string, ValidationError>> {
+  const byId = new Map<number, string[]>();
+  for (const { fileKey, product } of await loadProducts(dir)) {
+    if (typeof product.id === 'number') byId.set(product.id, [...(byId.get(product.id) ?? []), fileKey]);
+  }
+  const out = new Map<string, ValidationError>();
+  for (const [id, keys] of byId) {
+    if (keys.length < 2) continue;
+    for (const key of keys) {
+      out.set(key, {
+        path: `${key}.id`,
+        code: 'duplicate_id',
+        message: `Files ${keys.map(k => `products/${k}.json`).join(', ')} are all product ${id}. Merge them into one file and delete the others.`,
+        fix: 'ai',
+      });
+    }
+  }
+  return out;
+}
+
 export async function cmdCheck(ctx: CmdCtx): Promise<unknown> {
   const only = ctx.flags.get('only')?.split(',').filter(Boolean);
   const loaded = await loadProducts(ctx.dir, only);
@@ -224,13 +242,16 @@ export async function cmdCheck(ctx: CmdCtx): Promise<unknown> {
     const c = await client(ctx);
     const tpl = await SampleCtx.load(c, ctx.dir);
     const results: CheckResult[] = [];
-    for (const item of loaded) results.push(await checkOne(c, item, ctx.dir, tpl));
+    const dups = await duplicateIdErrors(ctx.dir);
+    for (const item of loaded) {
+      const r = await checkOne(c, item, ctx.dir, tpl);
+      const dup = dups.get(item.fileKey);
+      results.push(dup ? { ...r, errors: [dup, ...r.errors] } : r);
+    }
     const ok = results.every(r => r.errors.length === 0);
     return { ok, results };
   } catch (e) {
-    const siteErr = siteErrorOutput(e);
-    if (siteErr) return siteErr;
-    throw e;
+    return errorOutput(e);
   }
 }
 
@@ -251,13 +272,6 @@ interface PushOneResult {
   warnings: ValidationError[];
 }
 
-function sectionSignature(sections: DetailSection[] | undefined): Array<{ layout: string; images: number }> {
-  return (sections ?? []).map(s => ({
-    layout: s.layout,
-    images: s.layout === 'gallery' ? (s.images ?? []).length : s.image ? 1 : 0,
-  }));
-}
-
 export function readbackMismatches(local: ProductFile, remote: Record<string, unknown>): string[] {
   const mismatches: string[] = [];
   const eq = (a: unknown, b: unknown): boolean => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
@@ -268,6 +282,10 @@ export function readbackMismatches(local: ProductFile, remote: Record<string, un
     mismatches.push(`status: expected ${local.status}, got ${remote.status as string}`);
   if (local.excerpt !== undefined && (local.excerpt || '') !== ((remote.excerpt as string) ?? '')) {
     mismatches.push(`excerpt mismatch`);
+  }
+  if (local.seo !== undefined) {
+    const remoteSeo = (remote.seo ?? {}) as Record<string, unknown>;
+    for (const [k, v] of Object.entries(local.seo)) if (!eq(v, remoteSeo[k])) mismatches.push(`seo.${k} mismatch`);
   }
   if (local.price !== undefined && !eq(local.price, remote.price)) mismatches.push('price mismatch');
   if (local.moq !== undefined && !eq(local.moq, remote.moq)) mismatches.push('moq mismatch');
@@ -291,14 +309,16 @@ export function readbackMismatches(local: ProductFile, remote: Record<string, un
   if (local.gallery !== undefined && localGalleryCount !== remoteGalleryCount) {
     mismatches.push(`gallery count: expected ${localGalleryCount}, got ${remoteGalleryCount}`);
   }
-  if (local.detail?.sections !== undefined) {
-    const remoteDetail = remote.detail as { sections?: DetailSection[] } | undefined;
-    const localSig = sectionSignature(local.detail.sections);
-    const remoteSig = sectionSignature(remoteDetail?.sections);
-    if (!eq(localSig, remoteSig)) {
-      mismatches.push(
-        `detail.sections signature mismatch: expected ${JSON.stringify(localSig)}, got ${JSON.stringify(remoteSig)}`,
-      );
+  if (local.detail !== undefined) {
+    const localBlocks = detailBlocks(local, '').map(w => w.block);
+    const remoteBlocks = (remote.detail as { blocks?: DetailBlock[] } | undefined)?.blocks ?? [];
+    // A legacy file changes only its component block; compare that one.
+    const remoteSig = blockSignature(
+      local.detail.blocks ? remoteBlocks : remoteBlocks.filter(b => b.type === 'config'),
+    );
+    const localSig = blockSignature(localBlocks);
+    if (!(local.detail.blocks ? eq(localSig, remoteSig) : remoteSig.includes(localSig[0]))) {
+      mismatches.push(`detail blocks mismatch: expected ${JSON.stringify(localSig)}, got ${JSON.stringify(remoteSig)}`);
     }
   }
   void expectedStatus;
@@ -308,7 +328,6 @@ export function readbackMismatches(local: ProductFile, remote: Record<string, un
 /** Strip `file`/local-only fields from a (post-upload) product before sending it to upsert/validate. */
 function toWirePayload(product: ProductFile): Record<string, unknown> {
   const clone: ProductFile = JSON.parse(JSON.stringify(product));
-  if (clone.detail) delete clone.detail.unmanagedHtml;
   delete clone.sample;
   for (const { ref } of walkImageRefs(clone)) {
     delete ref.file;
@@ -316,45 +335,37 @@ function toWirePayload(product: ProductFile): Record<string, unknown> {
   return clone as unknown as Record<string, unknown>;
 }
 
-async function pushOne(
+interface PreparedWire {
+  /** The product as sent: images uploaded and referenced by mediaId, status only when publishing. */
+  wire: ProductFile;
+  uploaded: number;
+  reused: number;
+  errors: ValidationError[];
+  /** From the check. */
+  warnings: ValidationError[];
+  /** A status "publish" left out because this is not `products publish`. */
+  statusWarnings: ValidationError[];
+}
+
+/** What push and preview share: check the file, then upload its local images (on a clone). */
+async function prepareWire(
   c: AgentClient,
   loaded: LoadedProduct,
   ctx: CmdCtx,
   cache: Record<string, { mediaId: number; url: string }>,
-  allowPublish: boolean,
   tpl: SampleCtx,
-  editLive: boolean,
-): Promise<PushOneResult> {
-  const { product, path } = loaded;
-  if (!editLive && (await isLive(c, product))) {
-    return {
-      key: product.key ?? null,
-      id: product.id ?? null,
-      ok: false,
-      uploaded: 0,
-      reused: 0,
-      errors: [
-        {
-          path: identOf(product),
-          code: 'live_locked',
-          fix: 'user',
-          message:
-            'This product is published, so it was left unchanged. If the customer wants to change the live page, they can edit it in wp-admin, or tell you to turn on editing live content (`products edit-live on --customer-said "…"`).',
-        },
-      ],
-      warnings: [],
-    };
-  }
+  allowPublish: boolean,
+): Promise<PreparedWire> {
+  const { product } = loaded;
   const checkOutcome = await checkOne(c, loaded, ctx.dir, tpl);
   if (checkOutcome.errors.length) {
     return {
-      key: product.key ?? null,
-      id: product.id ?? null,
-      ok: false,
+      wire: product,
       uploaded: 0,
       reused: 0,
       errors: checkOutcome.errors,
       warnings: checkOutcome.warnings,
+      statusWarnings: [],
     };
   }
 
@@ -396,18 +407,92 @@ async function pushOne(
       });
     }
   }
-  if (uploadErrors.length) {
+  for (const leaf of walkConfigImages(wire, identOf(product))) {
+    if (!isLocalImage(leaf.value)) continue;
+    try {
+      const res = await resolveUpload(c, cache, resolve(ctx.dir, leaf.value));
+      if (res.reused) reused++;
+      else uploaded++;
+      leaf.set(res.url);
+    } catch (e) {
+      uploadErrors.push({
+        path: leaf.path,
+        code: 'error',
+        message: e instanceof Error ? e.message : String(e),
+        fix: 'ai',
+      });
+    }
+  }
+  for (const { path: blockPath, block } of detailBlocks(wire, identOf(product))) {
+    if (block.type !== 'static') continue;
+    try {
+      const up = await uploadHtmlImages(c, cache, block.html, ctx.dir);
+      block.html = up.html;
+      uploaded += up.uploaded.length;
+      reused += up.reused;
+    } catch (e) {
+      uploadErrors.push({
+        path: `${blockPath}.html`,
+        code: e instanceof MissingImageError ? 'not_found' : 'error',
+        message:
+          e instanceof MissingImageError
+            ? `${e.message} Image paths in static HTML are relative to the working folder.`
+            : String(e instanceof Error ? e.message : e),
+        fix: 'ai',
+      });
+    }
+  }
+  return {
+    wire,
+    uploaded,
+    reused,
+    errors: uploadErrors,
+    warnings: checkOutcome.warnings,
+    statusWarnings,
+  };
+}
+
+async function pushOne(
+  c: AgentClient,
+  loaded: LoadedProduct,
+  ctx: CmdCtx,
+  cache: Record<string, { mediaId: number; url: string }>,
+  allowPublish: boolean,
+  tpl: SampleCtx,
+  editLive: boolean,
+): Promise<PushOneResult> {
+  const { product } = loaded;
+  if (!editLive && (await isLive(c, product))) {
+    return {
+      key: product.key ?? null,
+      id: product.id ?? null,
+      ok: false,
+      uploaded: 0,
+      reused: 0,
+      errors: [
+        {
+          path: identOf(product),
+          code: 'live_locked',
+          fix: 'ai',
+          message: liveLockedMessage('product', 'products'),
+        },
+      ],
+      warnings: [],
+    };
+  }
+  const prep = await prepareWire(c, loaded, ctx, cache, tpl, allowPublish);
+  const { wire, uploaded, reused } = prep;
+  if (prep.errors.length) {
     return {
       key: product.key ?? null,
       id: product.id ?? null,
       ok: false,
       uploaded,
       reused,
-      errors: uploadErrors,
-      warnings: checkOutcome.warnings,
+      errors: prep.errors,
+      warnings: prep.warnings,
     };
   }
-
   const payload = toWirePayload(wire);
   let upsertRes: {
     key: string | null;
@@ -432,7 +517,7 @@ async function pushOne(
       errors: [
         { path: identOf(product), code: 'error', message: e instanceof Error ? e.message : String(e), fix: 'ai' },
       ],
-      warnings: checkOutcome.warnings,
+      warnings: prep.warnings,
     };
   }
 
@@ -444,7 +529,7 @@ async function pushOne(
       uploaded,
       reused,
       errors: upsertRes.errors,
-      warnings: checkOutcome.warnings,
+      warnings: prep.warnings,
     };
   }
 
@@ -454,7 +539,6 @@ async function pushOne(
   if (upsertRes.key) product.key = upsertRes.key;
   product.baseModified = upsertRes.modifiedGmt;
   await writeProduct(ctx.dir, loaded.fileKey, product);
-  void path;
 
   // Read-back: fetch the just-written product and compare against what we intended to write.
   let readbackErrors: ValidationError[] = [];
@@ -490,16 +574,15 @@ async function pushOne(
     uploaded,
     reused,
     errors: readbackErrors,
-    warnings: [...checkOutcome.warnings, ...statusWarnings],
+    warnings: [...prep.warnings, ...prep.statusWarnings],
   };
 }
 
 /** Published (or scheduled) on the site. A product not on the site yet is not live. */
 async function isLive(c: AgentClient, product: ProductFile): Promise<boolean> {
-  const live = (s: unknown) => s === 'publish' || s === 'future';
   if (product.id) {
     try {
-      return live((await c.getProduct<{ status?: string }>(product.id)).status);
+      return isLiveStatus((await c.getProduct<{ status?: string }>(product.id)).status);
     } catch (e) {
       if (e instanceof AgentHttpError && e.status === 404) return false;
       throw e;
@@ -507,29 +590,141 @@ async function isLive(c: AgentClient, product: ProductFile): Promise<boolean> {
   }
   if (!product.key) return false;
   const found = await c.listProducts<{ items: Array<{ status: string }> }>({ key: product.key });
-  return live(found.items[0]?.status);
+  return isLiveStatus(found.items[0]?.status);
 }
 
 export async function cmdPush(ctx: CmdCtx, allowPublish = false): Promise<unknown> {
   const only = ctx.flags.get('only')?.split(',').filter(Boolean);
+  // --customer-said on push: the go-ahead to change the live products named with --only, in this run only.
+  // (publish passes its own --customer-said, which is about publishing, not about changing live products.)
+  const said = allowPublish ? undefined : customerSaid(ctx);
+  if (said && !only?.length)
+    return {
+      ok: false,
+      code: 'usage',
+      fix: 'ai',
+      message: 'With --customer-said, name the live products the customer agreed to change: --only k1,k2.',
+    };
   const loaded = await loadProducts(ctx.dir, only);
   if (!loaded.length) return { ok: true, results: [] };
   try {
     const c = await client(ctx);
     const cache = await readUploadsCache(ctx.dir, c.siteUrl);
     const tpl = await SampleCtx.load(c, ctx.dir);
-    const editLive = await editLiveAllowed(ctx.dir, c.siteUrl);
+    const editLive = !!said || (await editLiveAllowed(ctx.dir, c.siteUrl));
     const results: PushOneResult[] = [];
+    const dups = await duplicateIdErrors(ctx.dir);
     for (const item of loaded) {
+      const dup = dups.get(item.fileKey);
+      if (dup) {
+        results.push({
+          key: item.product.key ?? null,
+          id: item.product.id ?? null,
+          ok: false,
+          uploaded: 0,
+          reused: 0,
+          errors: [dup],
+          warnings: [],
+        });
+        continue;
+      }
       results.push(await pushOne(c, item, ctx, cache, allowPublish, tpl, editLive));
       await writeUploadsCache(ctx.dir, c.siteUrl, cache); // persist as we go — an early failure shouldn't lose earlier uploads' cache entries
     }
     const ok = results.every(r => r.ok);
     return { ok, results };
   } catch (e) {
-    const siteErr = siteErrorOutput(e);
-    if (siteErr) return siteErr;
-    throw e;
+    return errorOutput(e);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// preview
+// ---------------------------------------------------------------------------
+
+interface PreviewOneResult {
+  key: string | null;
+  id: number | null;
+  ok: boolean;
+  previewUrl?: string;
+  /** Changes the preview page can't show (a new category, SEO): tell the customer in words. */
+  notShown?: string[];
+  errors: ValidationError[];
+  warnings: ValidationError[];
+}
+
+/** Shows products already on the site as a push would change them, without writing them: images are uploaded
+ *  (push reuses them), the product is not touched. Works on live products with no --customer-said. */
+export async function cmdPreview(ctx: CmdCtx): Promise<unknown> {
+  const keys = ctx.positional;
+  if (!keys.length) return { ok: false, code: 'usage', fix: 'ai', message: 'usage: puffergo products preview <key…>' };
+  const loaded = await loadProducts(ctx.dir, keys);
+  const missing = keys.filter(k => !loaded.some(l => l.fileKey === k));
+  if (missing.length)
+    return { ok: false, code: 'not_found', message: `No local file products/<key>.json for: ${missing.join(', ')}.` };
+  try {
+    const c = await client(ctx);
+    const cache = await readUploadsCache(ctx.dir, c.siteUrl);
+    const tpl = await SampleCtx.load(c, ctx.dir);
+    const results: PreviewOneResult[] = [];
+    for (const item of loaded) {
+      results.push(await previewOne(c, item, ctx, cache, tpl));
+      await writeUploadsCache(ctx.dir, c.siteUrl, cache);
+    }
+    return { ok: results.every(r => r.ok), results };
+  } catch (e) {
+    return errorOutput(e);
+  }
+}
+
+async function previewOne(
+  c: AgentClient,
+  loaded: LoadedProduct,
+  ctx: CmdCtx,
+  cache: Record<string, { mediaId: number; url: string }>,
+  tpl: SampleCtx,
+): Promise<PreviewOneResult> {
+  const { product } = loaded;
+  const failed = (errors: ValidationError[], warnings: ValidationError[] = []): PreviewOneResult => ({
+    key: product.key ?? null,
+    id: product.id ?? null,
+    ok: false,
+    errors,
+    warnings,
+  });
+  const prep = await prepareWire(c, loaded, ctx, cache, tpl, false);
+  if (prep.errors.length) return failed(prep.errors, prep.warnings);
+  try {
+    const res = await c.previewProduct<{
+      ok: boolean;
+      id?: number;
+      previewUrl?: string;
+      notShown?: string[];
+      errors?: ValidationError[];
+      warnings?: ValidationError[];
+    }>(toWirePayload(prep.wire));
+    if (!res.ok) return failed(res.errors ?? [], res.warnings ?? prep.warnings);
+    return {
+      key: product.key ?? null,
+      id: res.id ?? product.id ?? null,
+      ok: true,
+      previewUrl: res.previewUrl,
+      notShown: res.notShown ?? [],
+      errors: [],
+      warnings: res.warnings ?? prep.warnings,
+    };
+  } catch (e) {
+    if (!(e instanceof AgentHttpError)) throw e;
+    const body = (e.body ?? {}) as { code?: string; message?: string };
+    if (body.code && ABILITIES_MISSING.has(body.code)) throw new PluginOutdatedError();
+    return failed([
+      {
+        path: identOf(product),
+        code: body.code ?? `http_${e.status}`,
+        message: body.message ?? `HTTP ${e.status}`,
+        fix: 'ai',
+      },
+    ]);
   }
 }
 
@@ -559,42 +754,34 @@ export async function cmdPull(ctx: CmdCtx): Promise<unknown> {
   try {
     const c = await client(ctx);
     const id = await resolveProductId(c, target);
-    const remote = await c.getProduct<ProductFile & { key: string | null; unmanagedHtml?: string }>(id);
+    const { link, editUrl, ...remote } = await c.getProduct<
+      ProductFile & { key: string | null; link?: string; editUrl?: string }
+    >(id);
     const existing = await loadProducts(ctx.dir);
-    let key = remote.key;
+    // A product without a key on the site keeps the local file it already has, so a pull never makes a second one.
+    let key = remote.key ?? existing.find(p => p.product.id === id)?.fileKey;
     if (!key) key = deriveKeyFromTitle(remote.title, new Set(existing.map(p => p.fileKey)));
     // `sample` lives only in the local file — keep it across a pull.
     const sample = existing.find(p => p.fileKey === key)?.product.sample;
     const product: ProductFile = { ...remote, key, ...(sample ? { sample } : {}) };
     await writeProduct(ctx.dir, key, product);
-    if (product.detail?.unmanagedHtml) {
-      process.stderr.write(
-        `注意：该产品正文里有非 content-alternating 的内容（detail.unmanagedHtml），只读，推送时会原样保留、不会被这份文件覆盖。\n`,
-      );
-    }
     return {
       ok: true,
       key,
       id,
       path: `products/${key}.json`,
+      link,
+      editUrl,
       hint: 'pull is for editing THIS product. If the customer wants new products to look like it, run `products sample set <type name> <this link or id>` instead.',
     };
   } catch (e) {
-    const siteErr = siteErrorOutput(e);
-    if (siteErr) return siteErr;
-    if (e instanceof TargetError) return { ok: false, code: e.code, message: e.message };
-    if (e instanceof AgentHttpError) return { ok: false, code: 'error', status: e.status, body: e.body };
-    return { ok: false, code: 'error', message: e instanceof Error ? e.message : String(e) };
+    return errorOutput(e);
   }
 }
 
 // ---------------------------------------------------------------------------
 // publish
 // ---------------------------------------------------------------------------
-
-/** Publishing makes a product public, so it needs the customer's own words asking for it — "push" /
- *  "推" / "上传" / "更新" only ever mean a draft. Checked in code because models misread "直接推" as publish. */
-export const PUBLISH_INTENT = /发布|上线|公开|publish|go live|make (it|them|.+) live|put (it|them|.+) live/i;
 
 export async function cmdPublish(ctx: CmdCtx): Promise<unknown> {
   const keys = ctx.positional;
@@ -605,16 +792,8 @@ export async function cmdPublish(ctx: CmdCtx): Promise<unknown> {
       message: 'usage: puffergo products publish <key…> --customer-said "<the customer\'s exact words>"',
     };
   }
-  const said = ctx.flags.get('customer-said') ?? '';
-  if (!PUBLISH_INTENT.test(said)) {
-    return {
-      ok: false,
-      code: 'needs_publish_request',
-      fix: 'user',
-      message:
-        'Publishing makes the product public. Only publish when the customer explicitly asked to publish (发布/上线/publish) these products — "push"/"推"/"上传"/"更新" mean draft only. Ask the customer; if they say to publish, pass their exact words with --customer-said.',
-    };
-  }
+  const refused = publishRefusal(ctx, 'product');
+  if (refused) return refused;
   const loaded = await loadProducts(ctx.dir, keys);
   const missing = keys.filter(k => !loaded.some(l => l.fileKey === k));
   if (missing.length) {
@@ -687,12 +866,9 @@ export async function cmdSample(ctx: CmdCtx): Promise<unknown> {
         return { ok: false, code: 'usage', message: usage };
     }
   } catch (e) {
-    const siteErr = siteErrorOutput(e);
-    if (siteErr) return siteErr;
-    if (e instanceof TargetError) return { ok: false, code: e.code, message: e.message };
     if (e instanceof AgentHttpError && e.status === 404)
       return { ok: false, code: 'not_found', message: 'That product no longer exists on the site.' };
-    return { ok: false, code: 'error', message: e instanceof Error ? e.message : String(e) };
+    return errorOutput(e);
   }
 }
 
@@ -744,57 +920,9 @@ export async function cmdCategories(ctx: CmdCtx): Promise<unknown> {
     }
     return out;
   } catch (e) {
-    const siteErr = siteErrorOutput(e);
-    if (siteErr) return siteErr;
     if (e instanceof SyntaxError)
       return { ok: false, code: 'invalid_json', message: `${CATEGORIES_FILE}: ${e.message}` };
-    if (e instanceof AgentHttpError) return { ok: false, code: 'http_error', status: e.status, body: e.body };
-    return { ok: false, code: 'error', message: e instanceof Error ? e.message : String(e) };
-  }
-}
-
-// ---------------------------------------------------------------------------
-// edit-live [on --customer-said "…" | off] — may push change live products and existing categories?
-// ---------------------------------------------------------------------------
-
-export async function cmdEditLive(ctx: CmdCtx): Promise<unknown> {
-  const sub = ctx.positional[0];
-  try {
-    const cred = await resolveSite(ctx.dir, ctx.flags.get('site'));
-    const siteUrl = cred.config.siteUrl;
-    const cfg = (await readWorkdirConfig(ctx.dir)) ?? { siteUrl };
-    if (cfg.siteUrl !== siteUrl)
-      return { ok: false, code: 'other_site', message: `This work folder is for ${cfg.siteUrl}.` };
-    if (sub === 'on') {
-      const said = (ctx.flags.get('customer-said') ?? '').trim();
-      if (!said)
-        return {
-          ok: false,
-          code: 'needs_customer_request',
-          fix: 'user',
-          message:
-            'Turn this on only when the customer asks to change published products or existing categories. Pass their exact words with --customer-said.',
-        };
-      await writeWorkdirConfig(ctx.dir, {
-        siteUrl,
-        editLive: { on: true, customerSaid: said, at: new Date().toISOString() },
-      });
-      return {
-        ok: true,
-        editLive: true,
-        note: 'push now changes live pages directly. Turn it off with `products edit-live off` when done.',
-      };
-    }
-    if (sub === 'off') {
-      await writeWorkdirConfig(ctx.dir, { siteUrl, editLive: undefined });
-      return { ok: true, editLive: false };
-    }
-    if (sub === undefined) return { ok: true, editLive: await editLiveAllowed(ctx.dir, siteUrl) };
-    return { ok: false, code: 'usage', message: 'usage: puffergo products edit-live [on --customer-said "…" | off]' };
-  } catch (e) {
-    const siteErr = siteErrorOutput(e);
-    if (siteErr) return siteErr;
-    return { ok: false, code: 'error', message: e instanceof Error ? e.message : String(e) };
+    return errorOutput(e);
   }
 }
 
@@ -841,8 +969,6 @@ export async function cmdImages(ctx: CmdCtx): Promise<unknown> {
       images,
     };
   } catch (e) {
-    const siteErr = siteErrorOutput(e);
-    if (siteErr) return siteErr;
-    return { ok: false, code: 'error', message: e instanceof Error ? e.message : String(e) };
+    return errorOutput(e);
   }
 }

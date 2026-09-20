@@ -12,6 +12,7 @@
 import type { PostType, ContentItem, Edge, SiloWorkspace, LinkPlacement, BrokenLink } from '../model/types';
 import { createContent, createNode } from '../model/factory';
 import { reconcileKeywords } from '../model/keywords';
+import { applySeoLimits, type SeoLimits } from '../model/seo-limits';
 import { parseLinks, canonicalHost, isFallbackPermalink, type RawLink } from '../wp/parse-links';
 import { wpHtmlToMarkdown } from '../content/body-codec';
 import { buildNoteLinkIndex } from '../vault/note-links';
@@ -91,6 +92,8 @@ export interface ImportOptions {
   /** Content id → existing note file name, so pulled bodies link to notes by their real names
    *  (note-links.ts). Contents without an entry use the name their note will be created with. */
   noteNames?: ReadonlyMap<string, string>;
+  /** Import only these WP post ids (the rest of the workspace is left as it is). Default: every post. */
+  onlyIds?: readonly number[];
 }
 
 /** Catch-all node term for content of a type that carries no taxonomy term. */
@@ -116,18 +119,23 @@ export async function importFromWp(
     const pt = postTypes[i];
     opts.onProgress?.(i, postTypes.length, `拉取 ${pt}`);
     const posts = await client.listAllContentType(pt);
-    posts.forEach(post => raw.push({ postType: pt, post }));
+    posts.forEach(post => {
+      if (!opts.onlyIds || opts.onlyIds.includes(post.id)) raw.push({ postType: pt, post });
+    });
   }
   // 1b. lazily probe + batch-read SEO meta for all pulled posts (null = PufferGo plugin absent)
   opts.onProgress?.(postTypes.length, postTypes.length, '读取 SEO');
   const allIds = raw.map(r => r.post.id);
   let seoProvider: string | null = null;
+  let seoLimits: SeoLimits | undefined;
   const seoById = new Map<number, { title: string; description: string; focusKeyword: string }>();
   try {
     const seo = await client.fetchSeoMeta(allIds);
     if (seo) {
       seoProvider = seo.provider;
       seo.items.forEach(it => seoById.set(it.id, it));
+      seoLimits = seo.limits ?? undefined; // the site's PufferGo plugin decides the limits Silo checks against
+      applySeoLimits(seoLimits);
     }
   } catch {
     // A real auth/permission error shouldn't abort the whole import; treat SEO as unavailable.
@@ -155,7 +163,11 @@ export async function importFromWp(
   const termNodeIdByType = new Map<PostType, Map<number, string>>();
   const uncategorizedId = new Map<PostType, string>();
 
+  // Importing only some posts (onlyIds): only their types and the categories they sit in (with those
+  // categories' parents) come in, not every category of the site.
+  const usedTypes = new Set(raw.map(r => r.postType));
   for (const pt of postTypes) {
+    if (opts.onlyIds && !usedTypes.has(pt)) continue;
     const tax = client.taxRestBaseFor(pt);
     let root = findTypeRoot(pt);
     if (!root) {
@@ -169,7 +181,19 @@ export async function importFromWp(
     typeRootId.set(pt, root.id);
     if (!tax) continue; // no taxonomy (e.g. pages) → content sits flat under the type-root
 
-    const terms = await client.listAllTerms(tax);
+    let terms = await client.listAllTerms(tax);
+    if (opts.onlyIds) {
+      const keep = new Set(raw.filter(r => r.postType === pt).flatMap(r => r.post.termIds ?? []));
+      for (let grew = true; grew; ) {
+        grew = false;
+        for (const t of terms)
+          if (keep.has(t.id) && t.parent && !keep.has(t.parent)) {
+            keep.add(t.parent);
+            grew = true;
+          }
+      }
+      terms = terms.filter(t => keep.has(t.id));
+    }
     const nodeIdByTerm = new Map<number, string>();
     const placeTerm = (termId: number, name: string, parentId: string, archiveUrl?: string): void => {
       let node = findTermNode(tax, termId);
@@ -519,7 +543,7 @@ export async function importFromWp(
   const keywords = reconcileKeywords(mergedWs);
 
   return {
-    ws: { ...mergedWs, keywords },
+    ws: { ...mergedWs, keywords, ...(seoLimits ? { seoLimits } : {}) },
     rootNodeIds: [...typeRootId.values()].filter(id => keptIds.has(id)),
     reports,
     imported: imported.length,

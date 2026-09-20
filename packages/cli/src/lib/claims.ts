@@ -6,6 +6,8 @@
 
 import type { ProductFile, ValidationError } from './productTypes';
 import { identOf } from './imageRefs';
+import { detailBlocks, htmlText } from './detailBlocks';
+import { configTexts } from './configData';
 
 const CLAIMS = [
   'durable',
@@ -78,37 +80,47 @@ const CLAIMS = [
 ];
 const CLAIM_RE = new RegExp(`\\b(${CLAIMS.join('|')})\\b`, 'gi');
 
+/** The facts the customer gave: specs and trade fields. A word already in them isn't the model's invention. */
+function given(p: ProductFile): string {
+  const specs = (p.specs ?? []).flatMap(s => [s?.key, s?.value]);
+  const trade = Object.values((p as { trade?: Record<string, unknown> }).trade ?? {});
+  return [...specs, ...trade].filter(v => typeof v === 'string').join(' ');
+}
+
 /** Every text field of a product with the path the rest of check uses. */
 function texts(p: ProductFile): Array<[string, string | undefined]> {
   const id = identOf(p);
   const out: Array<[string, string | undefined]> = [
     [`${id}.title`, p.title],
     [`${id}.excerpt`, p.excerpt],
-    [`${id}.detail.title`, p.detail?.title],
-    [`${id}.detail.subtitle`, p.detail?.subtitle],
-    [`${id}.detail.intro`, p.detail?.intro],
+    [`${id}.seo.title`, p.seo?.title],
+    [`${id}.seo.description`, p.seo?.description],
   ];
-  (p.detail?.sections ?? []).forEach((s, i) => {
-    out.push([`${id}.detail.sections[${i}].heading`, s.heading], [`${id}.detail.sections[${i}].body`, s.body]);
-    (s.images ?? []).forEach((img, j) => {
-      out.push([`${id}.detail.sections[${i}].images[${j}].title`, img.title]);
-      out.push([`${id}.detail.sections[${i}].images[${j}].text`, img.text]);
-    });
-  });
+  for (const { path, block } of detailBlocks(p, id)) {
+    if (block.type === 'static') out.push([`${path}.html`, htmlText(block.html)]);
+    if (block.type === 'config')
+      for (const t of configTexts(block.data, undefined, `${path}.data`)) out.push([t.path, t.value]);
+  }
   return out;
 }
 
+/** The `unsupported_claim` warning for one piece of text, or null when it has none of the words.
+ *  Words already in `before` aren't flagged — the text as it was when editing, or the facts the customer gave. */
+export function claimWarning(path: string, text: string | undefined, before = ''): ValidationError | null {
+  const had = new Set(before.match(CLAIM_RE)?.map(w => w.toLowerCase()) ?? []);
+  const found = [...new Set((text ?? '').match(CLAIM_RE)?.map(w => w.toLowerCase()) ?? [])].filter(w => !had.has(w));
+  if (!found.length) return null;
+  return {
+    path,
+    code: 'unsupported_claim',
+    message: `Uses ${found.map(w => `"${w}"`).join(', ')}. Delete the claim unless the customer said it in their own words; keep only the facts they gave.`,
+    fix: 'ai',
+  };
+}
+
 export function claimWarnings(p: ProductFile): ValidationError[] {
-  const out: ValidationError[] = [];
-  for (const [path, text] of texts(p)) {
-    const found = [...new Set((text ?? '').match(CLAIM_RE)?.map(w => w.toLowerCase()) ?? [])];
-    if (!found.length) continue;
-    out.push({
-      path,
-      code: 'unsupported_claim',
-      message: `Uses ${found.map(w => `"${w}"`).join(', ')}. Delete the claim unless the customer said it in their own words; keep only the facts they gave.`,
-      fix: 'ai',
-    });
-  }
-  return out;
+  const facts = given(p);
+  return texts(p)
+    .map(([path, text]) => claimWarning(path, text, facts))
+    .filter((w): w is ValidationError => w !== null);
 }

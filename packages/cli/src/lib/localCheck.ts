@@ -8,9 +8,11 @@ import { resolve } from 'node:path';
 import { sniffImage, MAX_BYTES } from './imageSniff';
 import type { ProductFile } from './productTypes';
 import type { ValidationError } from './productTypes';
-import { walkImageRefs } from './imageRefs';
+import { walkImageRefs, identOf } from './imageRefs';
+import { detailWarnings } from './detailBlocks';
 import { claimWarnings } from './claims';
 import { placeProblems, suggestion, PLACE_LABELS, type ImagesSpec } from './imageAdvice';
+import { walkConfigImages, isLocalImage, type Components } from './configData';
 
 export interface LocalCheckOutcome {
   errors: ValidationError[];
@@ -22,12 +24,21 @@ export async function localCheckProduct(
   product: ProductFile,
   baseDir: string,
   images?: ImagesSpec,
+  components?: Components,
 ): Promise<LocalCheckOutcome> {
   const errors: ValidationError[] = [];
   const warnings: ValidationError[] = [];
+  const ident = identOf(product);
+  // Local images: refs with `file`, and a component's image fields holding a local path.
+  const locals = [
+    ...walkImageRefs(product).flatMap(({ path, ref, place }) => (ref.file ? [{ path, place, file: ref.file }] : [])),
+    ...walkConfigImages(product, ident, components)
+      .filter(l => isLocalImage(l.value))
+      .map(({ path, place, value }) => ({ path, place, file: value })),
+  ];
 
-  for (const { path, ref, place } of walkImageRefs(product)) {
-    if (!ref.file) continue;
+  for (const { path, place, file } of locals) {
+    const ref = { file };
     const abs = resolve(baseDir, ref.file);
     if (!existsSync(abs)) {
       errors.push({ path, code: 'not_found', message: `File not found: ${ref.file}`, fix: 'ai' });
@@ -61,7 +72,7 @@ export async function localCheckProduct(
         warnings.push({
           path,
           code: 'image_advice',
-          message: `${ref.file} in the ${PLACE_LABELS[place] ?? place}: ${problems.join('; ')}. ${suggestion(spec, images!.maxBytes)}`,
+          message: `${ref.file} in the ${PLACE_LABELS[place] ?? `${components?.[place.split('|')[0]]?.name ?? place.split('|')[0]} component`}: ${problems.join('; ')}. ${suggestion(spec, images!.maxBytes)}`,
           fix: 'user',
         });
       }
@@ -78,6 +89,6 @@ export async function localCheckProduct(
     }
   }
 
-  warnings.push(...claimWarnings(product));
+  warnings.push(...claimWarnings(product), ...detailWarnings(product, ident));
   return { errors, warnings };
 }

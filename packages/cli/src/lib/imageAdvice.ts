@@ -23,12 +23,9 @@ export interface ImageInfo {
 const RATIO_TOLERANCE = 0.05;
 const TOO_LARGE_FACTOR = 1.5;
 
+/** Places outside components; a component's place is `<templateId>|<slotClass>`, named by the component. */
 export const PLACE_LABELS: Record<string, string> = {
   productGallery: 'product gallery',
-  split: 'image + text section',
-  full: 'wide banner section',
-  image: 'full-width image section',
-  gallery: 'image row section',
 };
 
 function ratioValue(ratio: string): number | null {

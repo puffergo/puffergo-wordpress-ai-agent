@@ -11,7 +11,17 @@
 import type { HttpRequest, NetworkPort } from '../ports/network';
 import { WpHttpError } from '../ports/network';
 import type { ContentItem, ContentTypeInfo, PostType, Seo, WpConnection } from '../model/types';
-import { focusKeywordString } from '../model/selectors';
+import { focusKeywords } from '../model/selectors';
+import type { SeoLimits } from '../model/seo-limits';
+
+/** A term name as WP's REST returns it (HTML-escaped: `A &amp; B`) → plain text. */
+const decodeTermName = (s: string): string =>
+  s
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;/g, "'")
+    .replace(/&amp;/g, '&');
 
 /**
  * Fallback rest_base for the two WP-core types, used only before discovery has run (e.g. content
@@ -262,15 +272,17 @@ export class WpClient {
     }
   }
 
-  /** Live WP `modified_gmt` (UTC) for a post — the conflict-detection signal (compared for inequality
-   *  against the value captured at last sync). Falls back to `modified` on the rare site that omits it. */
-  async fetchRemoteModifiedGmt(postType: PostType, id: number): Promise<string | null> {
+  /** Live WP `modified_gmt` (UTC) + `status` for a post — the pre-push signal used both for conflict
+   *  detection (modifiedGmt compared for inequality against the value captured at last sync) and for
+   *  warning before overwriting an already-published post. `modifiedGmt` falls back to `modified` on the
+   *  rare site that omits it. */
+  async fetchRemoteState(postType: PostType, id: number): Promise<{ modifiedGmt: string | null; status?: string }> {
     const route = this.routeFor(postType);
-    const res = await this.call<{ modified?: string; modified_gmt?: string }>({
+    const res = await this.call<{ modified?: string; modified_gmt?: string; status?: string }>({
       method: 'GET',
-      url: `/wp/v2/${route}/${id}?_fields=modified,modified_gmt`,
+      url: `/wp/v2/${route}/${id}?_fields=modified,modified_gmt,status`,
     });
-    return res.modified_gmt ?? res.modified ?? null;
+    return { modifiedGmt: res.modified_gmt ?? res.modified ?? null, status: res.status };
   }
 
   /** Fetch ONE content item's importer fields (for single-item refresh from the cloud). Returns null
@@ -332,6 +344,15 @@ export class WpClient {
     return { id: res.id, modifiedGmt: res.modified_gmt ?? res.modified, status: res.status, link: res.link };
   }
 
+  /** A post's stored body (`content.raw`, block markup included), '' when it has none. */
+  async fetchRawContent(postType: PostType, id: number): Promise<string> {
+    const res = await this.call<{ content?: { raw?: string } }>({
+      method: 'GET',
+      url: `/wp/v2/${this.routeFor(postType)}/${id}?context=edit&_fields=content`,
+    });
+    return res.content?.raw ?? '';
+  }
+
   /**
    * Fetch a single post's RENDERED body HTML on demand — for PREVIEW only. The extension never stores
    * bodies; this pulls the current WP content when the user opens a preview, to be held in memory and
@@ -374,24 +395,68 @@ export class WpClient {
   }
 
   /**
-   * Write Rank Math SEO meta the ONLY way that actually persists on a standard Rank Math site:
-   * POST /rankmath/v1/updateMeta with { objectID, objectType, meta:{...} }. Verified against
-   * a local test site. `objectType` is 'post' for a post/page/CPT entry (it names the WP object, not the
-   * post_type) and 'term' for a taxonomy term's archive page. No-op when there is nothing to write.
+   * Write a post's (or a term archive's) SEO title, description and focus keywords. Blank fields are left
+   * out; nothing is sent when all are blank. `objectType` is 'post' for any post/page/CPT entry and 'term'
+   * for a taxonomy term's archive page.
+   *
+   * Goes through the PufferGo plugin (`POST /puffergo/v1/seo-meta`), which writes whichever SEO plugin the
+   * site runs (Rank Math, Yoast). A site without the PufferGo plugin falls back to Rank Math's own
+   * `POST /rankmath/v1/updateMeta` — the only route that persists Rank Math meta there.
    */
-  async updateRankMathMeta(objectId: number, seo: Seo, objectType: 'post' | 'term' = 'post'): Promise<void> {
-    const meta: Record<string, string> = {};
-    if (seo.title.trim()) meta.rank_math_title = seo.title.trim();
-    if (seo.description.trim()) meta.rank_math_description = seo.description.trim();
-    const fk = focusKeywordString(seo);
-    if (fk) meta.rank_math_focus_keyword = fk;
-    if (Object.keys(meta).length === 0) return;
+  async writeSeo(objectId: number, seo: Seo, objectType: 'post' | 'term' = 'post'): Promise<void> {
+    const title = seo.title.trim();
+    const description = seo.description.trim();
+    const keywords = focusKeywords(seo);
+    if (!title && !description && !keywords.length) return;
 
+    const res = await this.net.request({
+      method: 'POST',
+      url: `${this.base}/puffergo/v1/seo-meta`,
+      headers: { 'Content-Type': 'application/json', Authorization: this.authHeader },
+      body: {
+        objectType,
+        id: objectId,
+        ...(title ? { title } : {}),
+        ...(description ? { description } : {}),
+        ...(keywords.length ? { keywords } : {}),
+      },
+    });
+    const body = res.json as { code?: string; message?: string } | undefined;
+    if (res.status === 404 && body?.code === 'rest_no_route') {
+      await this.writeRankMathMeta(objectId, { title, description, keywords: keywords.join(', ') }, objectType);
+      return;
+    }
+    if (res.status < 200 || res.status >= 300) {
+      throw new WpHttpError(res.status, body?.code ?? 'wp_error', body?.message ?? `HTTP ${res.status}`, body);
+    }
+  }
+
+  /** Rank Math's own route, for sites without the PufferGo plugin. */
+  private async writeRankMathMeta(
+    objectId: number,
+    seo: { title: string; description: string; keywords: string },
+    objectType: 'post' | 'term',
+  ): Promise<void> {
+    const meta: Record<string, string> = {};
+    if (seo.title) meta.rank_math_title = seo.title;
+    if (seo.description) meta.rank_math_description = seo.description;
+    if (seo.keywords) meta.rank_math_focus_keyword = seo.keywords;
     await this.call({
       method: 'POST',
       url: '/rankmath/v1/updateMeta',
       body: { objectID: objectId, objectType, meta },
     });
+  }
+
+  /** The SEO limits the site's PufferGo plugin publishes, or null without the plugin. */
+  async fetchSeoLimits(): Promise<SeoLimits | null> {
+    const res = await this.net.request({
+      method: 'GET',
+      url: `${this.base}/puffergo/v1/seo-limits`,
+      headers: { 'Content-Type': 'application/json', Authorization: this.authHeader },
+    });
+    const body = res.json as { limits?: SeoLimits } | undefined;
+    return res.status >= 200 && res.status < 300 && body?.limits ? body.limits : null;
   }
 
   /**
@@ -438,7 +503,7 @@ export class WpClient {
    * plugin isn't installed/active — so the caller can degrade gracefully and prompt installation.
    * Probed lazily each import (never cached), so installing the plugin later "just works" next import.
    */
-  async fetchSeoMeta(ids: number[]): Promise<{ provider: string; items: SeoMetaItem[] } | null> {
+  async fetchSeoMeta(ids: number[]): Promise<{ provider: string; items: SeoMetaItem[]; limits?: SeoLimits } | null> {
     if (!ids.length) return { provider: 'none', items: [] };
     const include = Array.from(new Set(ids)).join(',');
     const res = await this.net.request({
@@ -478,17 +543,20 @@ export class WpClient {
    * list suitable for assignment. `taxRestBase` is the taxonomy's REST base ('categories',
    * 'product_cat', 'puffergo_product_cat', …), so this works for post categories AND any CPT taxonomy.
    */
-  async ensureTermPath(taxRestBase: string, terms: string[]): Promise<number[]> {
-    let parent = 0;
+  async ensureTermPath(taxRestBase: string, terms: string[], startParent = 0): Promise<number[]> {
+    let parent = startParent;
     let leafId = 0;
     for (const term of terms) {
       const name = term.trim();
       if (!name) continue;
-      const existing = await this.call<Array<{ id: number }>>({
+      const existing = await this.call<Array<{ id: number; name: string }>>({
         method: 'GET',
-        url: `/wp/v2/${taxRestBase}?per_page=100&parent=${parent}&search=${encodeURIComponent(name)}`,
+        url: `/wp/v2/${taxRestBase}?per_page=100&parent=${parent}&search=${encodeURIComponent(name)}&_fields=id,name`,
       });
-      const match = existing.find(Boolean);
+      // `search` is a substring match: "SEO" also returns "SEO 技巧". Only an exact name (case-insensitive,
+      // WP returns names HTML-escaped) is the same category; anything else would file the post wrongly.
+      const want = name.toLowerCase();
+      const match = existing.find(t => decodeTermName(t.name).trim().toLowerCase() === want);
       if (match) {
         leafId = match.id;
       } else {

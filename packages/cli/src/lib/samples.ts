@@ -9,38 +9,29 @@
  * Only `product` exists today; other content types get their own key.
  */
 
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
 import type { AgentClient } from './agentClient';
 import { walkImageRefs } from './imageRefs';
+import { detailBlocks } from './detailBlocks';
+import { configImages, configTexts } from './configData';
 import type { ProductFile, UnitValue } from './productTypes';
 import { getPath, setPath, isEmptyValue, optionalFactPaths, type SiteSchema } from './siteSchema';
+import { CodedError } from './siteCmd';
+import { siteState } from './workdirState';
 
 export interface SampleEntry {
   id: number;
   title: string;
 }
 export type SampleKind = 'product';
-type SamplesFile = Record<string, Partial<Record<SampleKind, Record<string, SampleEntry>>>>;
 
-const samplesPath = (dir: string): string => join(dir, '.puffergo', 'samples.json');
-
-async function readAll(dir: string): Promise<SamplesFile> {
-  if (!existsSync(samplesPath(dir))) return {};
-  try {
-    return JSON.parse(await readFile(samplesPath(dir), 'utf8')) as SamplesFile;
-  } catch {
-    return {};
-  }
-}
+const samplesState = siteState<Partial<Record<SampleKind, Record<string, SampleEntry>>>>('samples.json');
 
 export async function readSamples(
   dir: string,
   siteUrl: string,
   kind: SampleKind,
 ): Promise<Record<string, SampleEntry>> {
-  return (await readAll(dir))[siteUrl]?.[kind] ?? {};
+  return (await samplesState.read(dir, siteUrl))[kind] ?? {};
 }
 
 export async function writeSamples(
@@ -49,20 +40,11 @@ export async function writeSamples(
   kind: SampleKind,
   samples: Record<string, SampleEntry>,
 ): Promise<void> {
-  const all = await readAll(dir);
-  all[siteUrl] = { ...all[siteUrl], [kind]: samples };
-  await mkdir(join(dir, '.puffergo'), { recursive: true });
-  await writeFile(samplesPath(dir), JSON.stringify(all, null, 2) + '\n', 'utf8');
+  await samplesState.remember(dir, siteUrl, kind, samples);
 }
 
-export class TargetError extends Error {
-  constructor(
-    readonly code: 'not_found' | 'other_site',
-    message: string,
-  ) {
-    super(message);
-  }
-}
+/** The product a command was pointed at isn't on this site (or isn't this site's link at all). */
+export class TargetError extends CodedError {}
 
 /** A product id, a product key, or any link to the product the customer pasted (edit screen, preview, page). */
 export async function resolveProductId(c: AgentClient, target: string): Promise<number> {
@@ -100,10 +82,13 @@ function maskUnitValue(v: UnitValue | undefined): unknown {
  * and where images go. Values, spec values, every piece of text and images become placeholders, so nothing
  * of the sample product itself can leak into a new one. Trade fields come from the site's schema.
  */
-export function sampleReference(remote: ProductFile, schema: Pick<SiteSchema, 'tradeFields'>): Record<string, unknown> {
+export function sampleReference(
+  remote: ProductFile,
+  schema: Pick<SiteSchema, 'tradeFields' | 'blocks'>,
+): Record<string, unknown> {
   const p: ProductFile = JSON.parse(JSON.stringify(remote));
-  for (const k of ['id', 'key', 'baseModified', 'status'] as const) delete p[k];
-  if (p.detail) delete p.detail.unmanagedHtml;
+  for (const k of ['id', 'key', 'baseModified', 'status', 'link', 'editUrl'])
+    delete (p as unknown as Record<string, unknown>)[k];
   for (const { ref } of walkImageRefs(p)) {
     for (const k of Object.keys(ref)) delete (ref as Record<string, unknown>)[k];
     ref.file = '<customer photo>';
@@ -120,16 +105,30 @@ export function sampleReference(remote: ProductFile, schema: Pick<SiteSchema, 't
   const shape = (t: string | undefined) => (t?.trim() ? TEXT : t);
   p.title = shape(p.title)!;
   p.excerpt = shape(p.excerpt);
-  if (p.detail) {
-    for (const k of ['title', 'subtitle', 'intro'] as const) p.detail[k] = shape(p.detail[k]);
-    for (const s of p.detail.sections ?? []) {
-      s.heading = shape(s.heading);
-      s.body = shape(s.body);
-      for (const img of s.images ?? []) {
-        img.title = shape(img.title);
-        img.text = shape(img.text);
-      }
-    }
+  if (p.seo) {
+    p.seo = {
+      title: shape(p.seo.title),
+      description: shape(p.seo.description),
+      focusKeyword: shape(p.seo.focusKeyword),
+      keywords: (p.seo.keywords ?? []).map(() => TEXT),
+    };
+  }
+  // A component keeps its layout choices (selects, lists); its text and images become placeholders.
+  for (const { block } of detailBlocks(p, '')) {
+    if (block.type !== 'config') continue;
+    const fields = schema.blocks?.components?.[block.component]?.schema;
+    for (const t of configTexts(block.data, fields)) t.set(shape(t.value)!);
+    for (const img of configImages(block.data, fields)) if (img.value) img.set('<customer photo>');
+  }
+  // Static HTML and editor blocks are the sample product's own content: keep only what kind of block goes where.
+  if (p.detail?.blocks) {
+    p.detail.blocks = p.detail.blocks.map(b =>
+      b.type === 'static'
+        ? { type: 'static', html: TEXT }
+        : b.type === 'native'
+          ? { type: 'native', raw: '', name: b.name }
+          : b,
+    );
   }
   // Same rule as the check command's SampleCtx, so what the AI is told matches what check enforces.
   out.notUsed = optionalFactPaths(schema).filter(path => isEmptyValue(getPath(remote, path)));

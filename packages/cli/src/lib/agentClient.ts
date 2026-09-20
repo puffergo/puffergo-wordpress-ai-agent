@@ -1,12 +1,24 @@
 /**
- * Thin REST client for the plugin's `puffergo/v1/agent/*` surface (spec section 6). Deliberately not
- * built on WpClient (silo-core) — that class targets the generic `/wp/v2` + Rank Math surface for the
- * SEO Silo; the agent-products routes are a separate, already-fully-shaped JSON contract this CLI just
- * needs to call and relay. Uses node's global fetch directly (Node ≥18 never rides HTTP_PROXY/HTTPS_PROXY
- * env vars automatically — no explicit bypass code needed; see the e2e notes in the final report).
+ * Thin client for the plugin's `puffergo/*` WordPress Abilities (spec section 6), run through core REST at
+ * `/wp-abilities/v1/abilities/puffergo/<name>/run`. Deliberately not built on WpClient (silo-core) — that
+ * class targets the generic `/wp/v2` + Rank Math surface for the SEO Silo. Uses node's global fetch directly
+ * (Node ≥18 never rides HTTP_PROXY/HTTPS_PROXY env vars automatically).
  */
 
 import type { SiloConfig } from '../adapters/credentials';
+
+/** The plugin's product post type (PufferGo_Product_CPT::CPT_SLUG). */
+export const PRODUCT_TYPE = 'puffergo_product';
+
+/** A post's slug, SEO title / description, focus keywords (core + long-tail) and featured image (a media id). */
+export interface SeoInput {
+  slug: string;
+  seoTitle: string;
+  seoDescription: string;
+  focusKeyword: string;
+  keywords?: string[];
+  featuredImage?: number;
+}
 
 export class AgentHttpError extends Error {
   constructor(
@@ -22,7 +34,7 @@ export class AgentClient {
   private readonly authHeader: string;
 
   constructor(private readonly cfg: SiloConfig) {
-    this.base = `${cfg.siteUrl.replace(/\/+$/, '')}/wp-json/puffergo/v1`;
+    this.base = `${cfg.siteUrl.replace(/\/+$/, '')}/wp-json/wp-abilities/v1/abilities/puffergo`;
     this.authHeader = `Basic ${Buffer.from(`${cfg.username}:${cfg.appPassword}`).toString('base64')}`;
   }
 
@@ -50,34 +62,98 @@ export class AgentClient {
     return json as T;
   }
 
-  schema<T = unknown>(): Promise<T> {
-    return this.call('GET', '/agent/products/schema');
+  /** Readonly abilities run over GET. Core reads the raw `input` query param (no JSON decoding), so each
+   *  field goes as `input[field]=value`; empty fields are left out. */
+  private read<T>(ability: string, input: Record<string, string | number | undefined> = {}): Promise<T> {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(input)) {
+      if (v !== undefined && v !== '') q.set(`input[${k}]`, String(v));
+    }
+    const qs = q.toString();
+    return this.call('GET', `/${ability}/run${qs ? `?${qs}` : ''}`);
   }
 
+  private write<T>(ability: string, input: unknown): Promise<T> {
+    return this.call('POST', `/${ability}/run`, { input });
+  }
+
+  schema<T = unknown>(): Promise<T> {
+    return this.read('get-product-schema');
+  }
+
+  /** Products are found through the generic find-posts ability, limited to the product type. */
   listProducts<T = unknown>(params: { search?: string; key?: string; url?: string; page?: number } = {}): Promise<T> {
-    const q = new URLSearchParams();
-    if (params.search) q.set('search', params.search);
-    if (params.key) q.set('key', params.key);
-    if (params.url) q.set('url', params.url);
-    if (params.page) q.set('page', String(params.page));
-    const qs = q.toString();
-    return this.call('GET', `/agent/products${qs ? `?${qs}` : ''}`);
+    return this.findPosts({ ...params, type: PRODUCT_TYPE });
+  }
+
+  postTypes<T = unknown>(): Promise<T> {
+    return this.read('list-post-types');
+  }
+
+  findPosts<T = unknown>(
+    params: { type?: string; status?: string; search?: string; key?: string; url?: string; page?: number } = {},
+  ): Promise<T> {
+    return this.read('find-posts', params);
+  }
+
+  getBlocks<T = unknown>(id: number, path?: string): Promise<T> {
+    return this.read('get-blocks', { id, path });
+  }
+
+  /** With `inPage`, the one section is previewed in place of that block on the post's own page. */
+  /** With inPage.data (a component's data) in place of sections, that component block is previewed in its page. */
+  previewBlocks<T = unknown>(
+    sections: string[],
+    title?: string,
+    inPage?: { id: number; path: string; data?: unknown },
+  ): Promise<T> {
+    return this.write('preview-blocks', {
+      ...(sections.length ? { sections } : {}),
+      ...(title ? { title } : {}),
+      ...(inPage ?? {}),
+    });
+  }
+
+  createPost<T = unknown>(
+    input: { type: string; title: string; excerpt?: string; sections: string[] } & SeoInput,
+  ): Promise<T> {
+    return this.write('create-post', input);
+  }
+
+  publishPost<T = unknown>(input: { id: number; baseModified: string }): Promise<T> {
+    return this.write('publish-post', input);
+  }
+
+  updateSeo<T = unknown>(input: { id: number; baseModified: string } & Partial<SeoInput>): Promise<T> {
+    return this.write('update-seo', input);
+  }
+
+  /** A static block takes its new html; a component block its new data. */
+  replaceBlock<T = unknown>(
+    input: { id: number; path: string; baseModified: string } & ({ html: string } | { data: unknown }),
+  ): Promise<T> {
+    return this.write('replace-block', input);
   }
 
   getProduct<T = unknown>(id: number): Promise<T> {
-    return this.call('GET', `/agent/products/${id}`);
+    return this.read('get-product', { id });
   }
 
   validate<T = unknown>(products: unknown[]): Promise<T> {
-    return this.call('POST', '/agent/products/validate', { products });
+    return this.write('validate-products', { products });
   }
 
   upsert<T = unknown>(products: unknown[]): Promise<T> {
-    return this.call('POST', '/agent/products/upsert', { products });
+    return this.write('upsert-products', { products });
+  }
+
+  /** The product's page as upserting this file would make it, without writing it. */
+  previewProduct<T = unknown>(product: unknown): Promise<T> {
+    return this.write('preview-product', { product });
   }
 
   mediaLookup<T = unknown>(sha256: string): Promise<T> {
-    return this.call('GET', `/agent/media?sha256=${sha256}`);
+    return this.read('find-media', { sha256 });
   }
 
   /** Product category terms via WordPress's own `/wp/v2/puffergo_product_cat` route; `lang` filters under Polylang. */

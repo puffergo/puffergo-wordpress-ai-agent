@@ -6,9 +6,10 @@
  *   silo init      → create the workspace from a site positioning
  *   silo plan p.json → apply an agent-authored keyword+silo+content plan, scaffold md files
  *   (agent writes bodies into the md files)
- *   silo push      → author bodies + SEO + categories to WordPress (drafts)
+ *   silo push [note…] → author bodies + SEO + categories to WordPress (drafts): the named notes, or the
+ *                     ones new or edited since their last push / pull
  *   silo health    → guardrail the agent reads to self-correct
- *   silo pull      → sync back from WordPress
+ *   silo pull [id…]  → sync back from WordPress (bodies too, never over unpushed edits)
  *
  * The WP Application Password is read from silo.config.json by the CLI only and is never printed.
  */
@@ -17,6 +18,7 @@ import { readFile } from 'node:fs/promises';
 import {
   emptyWorkspace,
   healthCheck,
+  applySeoLimits,
   syncContent,
   importFromWp,
   getDirtyContents,
@@ -36,26 +38,39 @@ import { wpAssetUploader } from './adapters/assetUploader';
 import { connect } from './lib/wp';
 import { applyPlan, type Plan } from './lib/plan';
 import { scanVault, scaffoldVault, applyFrontmatterEdits, updateNoteBody } from './lib/vault';
+import { readSynced, writeSynced, changedIds, matchTargets, recordSynced, isEdited } from './lib/siloSync';
 import {
   cmdSchema,
   cmdListProducts,
   cmdCheck,
   cmdPush as cmdProductsPush,
+  cmdPreview as cmdProductsPreview,
   cmdPull as cmdProductsPull,
   cmdPublish,
   cmdSample,
   cmdCategories,
-  cmdEditLive,
   cmdImages,
 } from './lib/productsCmd';
+import { cmdEditLive } from './lib/siteCmd';
 import { cmdLogin, cmdLoginWait } from './lib/loginCmd';
+import {
+  cmdTypes,
+  cmdFind,
+  cmdBlocks,
+  cmdGet,
+  cmdPreview,
+  cmdCreate,
+  cmdReplace,
+  cmdSeo,
+  cmdPublish as cmdPagesPublish,
+} from './lib/pagesCmd';
 
 // ---- tiny arg parsing -------------------------------------------------------
 // `puffergo <login|products …|silo …>`; the legacy `silo <cmd>` bin calls this with no group word,
 // so anything that isn't a known group falls through to the silo commands unchanged.
 const rawArgv = process.argv.slice(2);
-const group = ['products', 'login', '__login-wait'].includes(rawArgv[0] ?? '') ? rawArgv[0] : 'silo';
-const argv = rawArgv[0] === 'silo' ? rawArgv.slice(1) : group === 'products' ? rawArgv.slice(1) : rawArgv;
+const group = ['products', 'pages', 'login', '__login-wait'].includes(rawArgv[0] ?? '') ? rawArgv[0] : 'silo';
+const argv = rawArgv[0] === 'silo' || group === 'products' || group === 'pages' ? rawArgv.slice(1) : rawArgv;
 const cmd = argv[0];
 const flags = new Map<string, string>();
 const positional: string[] = [];
@@ -83,6 +98,7 @@ const die = (s: string): never => {
 async function loadWs(): Promise<SiloWorkspace> {
   const ws = await readWorkspace(dir);
   if (!ws) die(`未找到工作区（先运行 silo init）：${dir}`);
+  applySeoLimits(ws!.seoLimits); // the site's SEO limits from the last pull (push caps keywords by them)
   return ws!;
 }
 
@@ -154,6 +170,29 @@ async function cmdPush(): Promise<void> {
   const edited = applyFrontmatterEdits(ws, bodies);
   ws = edited.ws;
   if (edited.changed) log(`↩ 已从 ${edited.changed} 篇笔记的 frontmatter 读回编辑`);
+
+  // Only what was named, or else what is new or edited here: a push never rewrites posts nobody touched.
+  const synced = await readSynced(dir);
+  let targets: string[];
+  if (positional.length) {
+    const m = matchTargets(positional, ws, bodies, dir);
+    if (m.unknown.length) die(`找不到这些笔记：${m.unknown.join('、')}（写笔记文件名、slug 或 WordPress 文章 id）`);
+    // A named note that hasn't changed isn't pushed again, unless --force.
+    const changed = new Set(changedIds(ws, bodies, synced));
+    const same = m.ids.filter(id => !force && !changed.has(id));
+    if (same.length)
+      log(
+        `· 没有改动，跳过：${same.map(id => ws.contents.find(c => c.id === id)?.title ?? id).join('、')}（一定要重推就加 --force）`,
+      );
+    targets = m.ids.filter(id => !same.includes(id));
+    if (!targets.length) return log('没有要推送的改动。');
+  } else {
+    targets = changedIds(ws, bodies, synced);
+    const skipped = ws.contents.length - targets.length;
+    if (skipped) log(`· 跳过 ${skipped} 篇上次同步后没改过的；要推送指定的笔记，把文件名写在命令后面`);
+    if (!targets.length) return log('没有要推送的改动。');
+  }
+  const pushing = new Set(targets);
   const { client, legacyWarning } = await connect(dir, { configPath });
   if (legacyWarning) log(`⚠ ${legacyWarning}`);
 
@@ -163,6 +202,7 @@ async function cmdPush(): Promise<void> {
   const resolvedBody = new Map<string, string>();
   let uploaded = 0;
   for (const [id, file] of bodies) {
+    if (!pushing.has(id)) continue;
     if (!file.body.trim()) {
       resolvedBody.set(id, file.body);
       continue;
@@ -184,7 +224,9 @@ async function cmdPush(): Promise<void> {
   let failed = 0;
   // Notes whose body referenced a sibling that had no permalink yet this run — re-authored in pass 2.
   const needsRelink = new Set<string>();
+  const pushedIds: string[] = [];
   for (const item of ws.contents) {
+    if (!pushing.has(item.id)) continue;
     // Resolve `[[…]]` internal links to real permalinks via the glue codec. Rebuilt each iteration so
     // it picks up permalinks assigned to siblings earlier in this same run.
     const { html, unresolved } = markdownToWpHtml(bodyOf(item.id), buildLinkResolver(ws, noteNames));
@@ -192,6 +234,7 @@ async function cmdPush(): Promise<void> {
     if (res.ok) {
       ws = updateContent(ws, item.id, res.patch);
       ok++;
+      pushedIds.push(item.id);
       if (unresolved.length) needsRelink.add(item.id);
       log(`  ✓ ${item.title}${html ? '（含正文）' : '（仅结构/SEO）'} → #${res.patch.wpPostId}`);
     } else if ('conflict' in res && res.conflict) {
@@ -224,7 +267,9 @@ async function cmdPush(): Promise<void> {
   await writeWorkspace(dir, ws);
   // Write the freshly-assigned wp.postId/link (and any server-updated fields) back into the md
   // frontmatter so the note in Obsidian reflects reality right after a push. Bodies are preserved.
+  const before = await scanVault(dir);
   await scaffoldVault(dir, ws);
+  await writeSynced(dir, recordSynced(synced, before, await scanVault(dir), pushedIds));
   log(`\n完成：成功 ${ok}，冲突 ${conflict}，失败 ${failed}`);
 }
 
@@ -235,15 +280,52 @@ async function cmdPull(): Promise<void> {
   const types = (flags.get('types')?.split(',') ?? conn.contentTypes?.map(t => t.type) ?? ['post', 'page']).filter(
     Boolean,
   );
-  log(`拉取类型：${types.join(', ')}`);
-  const res = await importFromWp(client, ws, types);
-  await writeWorkspace(dir, res.ws);
-  // Project pulled content into editable md files (preserves any body already written locally).
-  const files = await scaffoldVault(dir, res.ws);
+  // `silo pull <id…>`: just these posts (WP post id, or a link / note already in the workspace).
+  let onlyIds: number[] | undefined;
+  if (positional.length) {
+    const before = await scanVault(dir);
+    onlyIds = positional.map(t => {
+      if (/^\d+$/.test(t)) return Number(t);
+      const id = ws.contents.find(c => c.id === matchTargets([t], ws, before, dir).ids[0])?.wpPostId;
+      return id ?? die(`找不到：${t}（写 WordPress 文章 id，编辑页地址里 post= 后面的数字）`);
+    });
+  }
+  log(`拉取类型：${types.join(', ')}${onlyIds ? `，只拉 ${onlyIds.join(', ')}` : ''}`);
+  const synced = await readSynced(dir);
+  const res = await importFromWp(client, ws, types, {
+    onlyIds,
+    noteNames: noteNamesFromScan(await scanVault(dir)),
+  });
+  if (onlyIds && res.imported < onlyIds.length)
+    log(`⚠ 拉到 ${res.imported} 篇，少于要的 ${onlyIds.length} 篇（id 不对，或类型不在 ${types.join(', ')} 里）`);
+  ws = res.ws;
+  await writeWorkspace(dir, ws);
+  // Project pulled content into editable md files, then their bodies — never over edits not pushed yet.
+  const before = await scanVault(dir);
+  const files = await scaffoldVault(dir, ws);
+  const scanned = await scanVault(dir);
+  const kept: string[] = [];
+  const pulled: string[] = [];
+  for (const [id, md] of res.bodies) {
+    const note = scanned.get(id);
+    if (!note) continue;
+    if (isEdited(id, before, synced)) {
+      kept.push(ws.contents.find(c => c.id === id)?.title ?? id);
+      continue;
+    }
+    await updateNoteBody(note.path, `\n${md}\n`);
+    pulled.push(id);
+  }
+  await writeSynced(dir, recordSynced(synced, before, await scanVault(dir), pulled));
   log(
-    `✓ 已同步：导入/更新 ${res.ws.contents.length} 篇内容，${res.ws.nodes.length} 个节点；写入/刷新 ${files} 个 md 文件`,
+    `✓ 已同步：导入/更新 ${res.imported} 篇内容，${ws.nodes.length} 个节点；写入/刷新 ${files} 个 md 文件，正文 ${pulled.length} 篇`,
   );
-  printHealth(healthCheck(res.ws));
+  if (kept.length) log(`⚠ 这些笔记有没推送的改动，正文没覆盖：${kept.join('、')}`);
+  // Pulling some posts: only their own issues, not every category of the site.
+  const mine = new Set(
+    onlyIds ? ws.contents.filter(c => onlyIds.includes(c.wpPostId ?? -1)).flatMap(c => [c.id, c.siloNodeId]) : [],
+  );
+  printHealth(healthCheck(ws).filter(i => !onlyIds || i.nodeIds.some(id => mine.has(id))));
 }
 
 async function cmdMigrateConfig(): Promise<void> {
@@ -291,6 +373,7 @@ async function main(): Promise<void> {
       log('puffergo silo <init|plan|push|pull|health|status|migrate-config> [--dir <vault>] [--config <path>]');
       log('puffergo login <siteUrl>');
       log(PRODUCTS_USAGE);
+      log(PAGES_USAGE);
       if (cmd && cmd !== 'help' && cmd !== '--help') process.exitCode = 1;
   }
 }
@@ -302,7 +385,7 @@ function emit(result: unknown): void {
 }
 
 const PRODUCTS_USAGE =
-  'puffergo products <schema|list [--search q]|check [--only k1,k2]|push [--only k1,k2]|pull <key|id|link>|publish <key…> --customer-said "<customer words>"|sample <list|set <name> <key|id|link>|show <name>|remove <name>>|images <file|folder…>|categories <check|push>|edit-live [on --customer-said "<customer words>"|off]> [--dir <workdir>] [--site <url>]';
+  'puffergo products <schema|list [--search q]|check [--only k1,k2]|preview <key…>|push [--only k1,k2 [--customer-said "<customer words>"]]|pull <key|id|link>|publish <key…> --customer-said "<customer words>"|sample <list|set <name> <key|id|link>|show <name>|remove <name>>|images <file|folder…>|categories <check|push>|edit-live [on --customer-said "<customer words>"|off]> [--dir <workdir>] [--site <url>]';
 
 async function products(): Promise<void> {
   const ctx = { dir, flags, positional };
@@ -313,6 +396,8 @@ async function products(): Promise<void> {
       return emit(await cmdListProducts(ctx));
     case 'check':
       return emit(await cmdCheck(ctx));
+    case 'preview':
+      return emit(await cmdProductsPreview(ctx));
     case 'push':
       return emit(await cmdProductsPush(ctx));
     case 'pull':
@@ -332,17 +417,50 @@ async function products(): Promise<void> {
   }
 }
 
+const PAGES_USAGE =
+  'puffergo pages <types|find [--type t] [--status publish] [--search q] [--url link]|blocks <id|link>|get <id|link> [path]|preview <files|folder…> [--title t]|preview <id|link> <path> <file>|create --type <type> --title "<title>" --slug <slug> --seo-title "…" --seo-description "…" --focus-keyword "…" [--keywords "a, b"] [--featured-image <file>] [--excerpt "…"] [--new] <files|folder…>|replace <id|link> <path> <file> [--customer-said "<customer words>"]|seo <id|link> [--slug s] [--seo-title "…"] [--seo-description "…"] [--focus-keyword "…"] [--keywords "a, b"] [--featured-image <file>] [--customer-said "<customer words>"]|publish <id|link> --customer-said "<customer words>"|edit-live [on --customer-said "<customer words>"|off]> [--dir <workdir>] [--site <url>]';
+
+async function pages(): Promise<void> {
+  const ctx = { dir, flags, positional };
+  switch (cmd) {
+    case 'types':
+      return emit(await cmdTypes(ctx));
+    case 'find':
+      return emit(await cmdFind(ctx));
+    case 'blocks':
+      return emit(await cmdBlocks(ctx));
+    case 'get':
+      return emit(await cmdGet(ctx));
+    case 'preview':
+      return emit(await cmdPreview(ctx));
+    case 'create':
+      return emit(await cmdCreate(ctx));
+    case 'replace':
+      return emit(await cmdReplace(ctx));
+    case 'seo':
+      return emit(await cmdSeo(ctx));
+    case 'publish':
+      return emit(await cmdPagesPublish(ctx));
+    case 'edit-live':
+      return emit(await cmdEditLive(ctx));
+    default:
+      return emit({ ok: false, code: 'usage', message: PAGES_USAGE });
+  }
+}
+
 const run =
   group === 'products'
     ? products
-    : group === 'login'
-      ? async () => emit(await cmdLogin(dir, positional[0] ?? argv[1]))
-      : group === '__login-wait'
-        ? () => cmdLoginWait(argv[1]!, argv[2]!, argv[3]!)
-        : main;
+    : group === 'pages'
+      ? pages
+      : group === 'login'
+        ? async () => emit(await cmdLogin(dir, positional[0] ?? argv[1]))
+        : group === '__login-wait'
+          ? () => cmdLoginWait(argv[1]!, argv[2]!, argv[3]!)
+          : main;
 
 run().catch(e => {
-  if (group === 'products' || group === 'login') {
+  if (group === 'products' || group === 'pages' || group === 'login') {
     emit({ ok: false, code: 'error', message: e instanceof Error ? e.message : String(e) });
   } else die(e instanceof Error ? e.message : String(e));
 });

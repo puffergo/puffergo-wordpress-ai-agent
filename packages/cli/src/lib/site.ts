@@ -1,6 +1,7 @@
 /**
  * Site resolution for every `puffergo` command that isn't `login` (spec section 7):
- *   --site <url> flag → <workdir>/.puffergo/config.json → the only site in credentials → error.
+ *   --site <url> flag (remembered in the workdir) → <workdir>/.puffergo/config.json → the only site in
+ *   credentials → error.
  * Also the small `.puffergo/config.json` reader/writer `login` uses to remember a workdir's site.
  */
 
@@ -65,6 +66,8 @@ export async function resolveSite(dir: string, siteFlag: string | undefined): Pr
   if (siteUrl) {
     const cred = await resolveCredential(dir, siteUrl);
     if (!cred) throw new NotLoggedInError(siteUrl);
+    // A --site for an already logged-in site sticks to this work folder, as `login` would.
+    if (siteFlag) await writeWorkdirConfig(dir, { siteUrl: cred.config.siteUrl });
     return cred;
   }
   // No explicit/remembered site: fall back to "the only site in credentials".
