@@ -2,6 +2,8 @@
 
 给外贸独立站的 WordPress AI 智能体：用 Codex、Claude Code 等 AI 工具对话式批量上架产品、建页面和改页面、规划 SEO Silo。
 
+[PufferGo 官网](https://puffergo.com) · [WordPress 插件](https://puffergo.com/wp) · [English](README.md)
+
 📖 **图文教程：[用 AI 上传网站产品](https://puffergo.com/docs/ai-product-upload/)**——在豆包、千问、WorkBuddy、Claude Code、Codex 里安装 Skill，连接网站，核对草稿，发布。
 
 - **网站是你的，凭据也只在你电脑上。** AI 看不到你的 WordPress 密码。在浏览器里一键授权后，应用密码只保存在你电脑的 `~/.puffergo/credentials.json`（仅本人可读），只有自带的脚本会读它。

@@ -2,7 +2,7 @@
 
 **WordPress AI agent skills and CLI for B2B manufacturer websites.** Upload products to your own WordPress site by talking to Claude Code, Codex or any agent that supports Agent Skills (`SKILL.md`) — one product or a whole catalog — build and edit pages, and plan an SEO silo of pillar and cluster pages.
 
-[中文说明](README.zh-CN.md)
+[PufferGo](https://puffergo.com) · [WordPress plugin](https://puffergo.com/wp) · [中文说明](README.zh-CN.md)
 
 📖 **Step-by-step guide (Chinese, with screenshots): [用 AI 上传网站产品](https://puffergo.com/docs/ai-product-upload/)** — install the skill in 豆包 / 千问 / WorkBuddy / Claude Code / Codex, connect your site, review and publish.
 
