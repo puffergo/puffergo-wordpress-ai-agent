@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import type * as NodeOs from 'node:os';
 import { mkdtemp, writeFile, mkdir, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -127,7 +128,7 @@ describe('site resolution', () => {
     dir = await mkdtemp(join(tmpdir(), 'pg-cli-site-'));
     home = await mkdtemp(join(tmpdir(), 'pg-cli-home-'));
     vi.resetModules();
-    vi.doMock('node:os', async orig => ({ ...(await orig<typeof import('node:os')>()), homedir: () => home }));
+    vi.doMock('node:os', async orig => ({ ...(await orig<typeof NodeOs>()), homedir: () => home }));
   });
   afterEach(async () => {
     vi.doUnmock('node:os');
@@ -406,16 +407,19 @@ describe('sampleReference', () => {
       keywords: ['quiet compressor'],
     },
   };
-  const ref = sampleReference(remote, SCHEMA3) as Record<string, any>;
+  const ref = sampleReference(remote, SCHEMA3) as Record<string, unknown>;
+  // The reference is deliberately untyped data (it mirrors whatever the site's schema holds); this is only
+  // the shape these assertions drill into.
+  const detail = ref.detail as { blocks: { data: { sections: Record<string, unknown>[] } }[] };
 
   it('hides every number and spec value, keeps units and spec names', () => {
     expect(ref.moq).toEqual({ value: '<from customer>', unit: 'sets' });
     expect(ref.leadTime).toEqual({ min: '<from customer>', max: '<from customer>', unit: 'days' });
     expect(ref.specs).toEqual([{ key: 'Power', value: '<from customer>' }]);
     expect(JSON.stringify(ref)).not.toContain('5.5');
-    expect(ref.detail.blocks[0].data.sections[0].body).toBe('<text from customer facts>');
+    expect(detail.blocks[0]!.data.sections[0]!.body).toBe('<text from customer facts>');
     expect(ref.title).toBe('<text from customer facts>');
-    expect(ref.detail.blocks[0].data.sections[0].layout).toBe('split');
+    expect(detail.blocks[0]!.data.sections[0]!.layout).toBe('split');
     const T = '<text from customer facts>';
     expect(ref.seo).toEqual({ title: T, description: T, focusKeyword: T, keywords: [T] });
   });
@@ -423,15 +427,17 @@ describe('sampleReference', () => {
     expect(ref.notUsed).toEqual(['price']);
     expect(ref.id ?? ref.key ?? ref.status).toBeUndefined();
     expect(ref.gallery).toEqual([{ file: '<customer photo>' }]);
-    expect(ref.detail.blocks[0].data.sections[0].image).toBe('<customer photo>');
+    expect(detail.blocks[0]!.data.sections[0]!.image).toBe('<customer photo>');
     // Static HTML and editor blocks of the sample are its own content: only their kind is kept.
-    expect(ref.detail.blocks.slice(1)).toEqual([
+    expect(detail.blocks.slice(1)).toEqual([
       { type: 'static', html: '<text from customer facts>' },
       { type: 'native', raw: '', name: 'core/embed' },
     ]);
   });
   it('keeps "price on request" as is', () => {
-    expect((sampleReference({ title: 't', price: { type: 'contact' } }, SCHEMA3) as any).price).toEqual({
+    expect(
+      (sampleReference({ title: 't', price: { type: 'contact' } }, SCHEMA3) as Record<string, unknown>).price,
+    ).toEqual({
       type: 'contact',
     });
   });
@@ -559,7 +565,7 @@ describe('site schema drives trade fields', () => {
         specs: [{ key: 'a', value: 'b' }],
       },
       CUSTOM,
-    ) as any;
+    ) as Record<string, unknown>;
     expect(ref.trade).toEqual({ payment_terms: '<from customer>' });
     expect(ref.notUsed).toEqual(['moq']);
     expect(optionalFactPaths(CUSTOM)).toEqual(['trade.payment_terms', 'moq', 'specs']);

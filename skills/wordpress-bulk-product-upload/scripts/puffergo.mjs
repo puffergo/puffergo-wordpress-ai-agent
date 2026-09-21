@@ -5029,9 +5029,9 @@ var require_URL = __commonJS({
       },
       // See: http://tools.ietf.org/html/rfc3986#section-5.2
       // and https://url.spec.whatwg.org/#constructors
-      resolve: function(relative3) {
+      resolve: function(relative4) {
         var base = this;
-        var r = new URL2(relative3);
+        var r = new URL2(relative4);
         var t = new URL2();
         if (r.scheme !== void 0) {
           t.scheme = r.scheme;
@@ -17310,14 +17310,14 @@ var require_turndown_cjs = __commonJS({
         } else if (node.nodeType === 1) {
           replacement = replacementForNode.call(self, node);
         }
-        return join12(output, replacement);
+        return join13(output, replacement);
       }, "");
     }
     function postProcess(output) {
       var self = this;
       this.rules.forEach(function(rule) {
         if (typeof rule.append === "function") {
-          output = join12(output, rule.append(self.options));
+          output = join13(output, rule.append(self.options));
         }
       });
       return output.replace(/^[\t\r\n]+/, "").replace(/[\t\r\n\s]+$/, "");
@@ -17329,7 +17329,7 @@ var require_turndown_cjs = __commonJS({
       if (whitespace.leading || whitespace.trailing) content = content.trim();
       return whitespace.leading + rule.replacement(content, node, this.options) + whitespace.trailing;
     }
-    function join12(output, replacement) {
+    function join13(output, replacement) {
       var s1 = trimTrailingNewlines(output);
       var s2 = trimLeadingNewlines(replacement);
       var nls = Math.max(output.length - s1.length, replacement.length - s2.length);
@@ -24701,7 +24701,7 @@ function isCallbackRequest(params) {
 }
 function runAuthorizeServer(siteUrl, onListening, opts = {}) {
   const { appName = "PufferGo", timeoutMs = 5 * 60 * 1e3, resultPage = DEFAULT_RESULT_PAGE } = opts;
-  return new Promise((resolve7, reject) => {
+  return new Promise((resolve9, reject) => {
     let settled = false;
     const server = http.createServer((req, res) => {
       const url = new URL(req.url ?? "/", "http://127.0.0.1");
@@ -24721,7 +24721,7 @@ function runAuthorizeServer(siteUrl, onListening, opts = {}) {
       settled = true;
       clearTimeout(timer);
       server.close();
-      resolve7(value);
+      resolve9(value);
     };
     server.on("error", (err) => {
       if (settled) return;
@@ -24749,7 +24749,7 @@ div{text-align:center}</style></head><body><div>${ok ? "\u2705 \u5DF2\u6388\u674
 });
 
 // src/index.ts
-import { readFile as readFile15 } from "node:fs/promises";
+import { readFile as readFile16 } from "node:fs/promises";
 
 // ../silo-core/lib/model/types.ts
 var SILO_WORKSPACE_VERSION = 3;
@@ -25148,7 +25148,7 @@ var TITLE_MAX = 60;
 var DESC_MIN = 120;
 var DESC_MAX = 160;
 var CORE_KEYWORDS_MAX = 1;
-var LONGTAIL_KEYWORDS_MAX = 4;
+var LONGTAIL_KEYWORDS_MAX = 5;
 var FOCUS_KEYWORDS_MAX = CORE_KEYWORDS_MAX + LONGTAIL_KEYWORDS_MAX;
 function applySeoLimits(l) {
   if (!l) return;
@@ -25178,7 +25178,6 @@ function healthCheck(ws) {
   const graph = linkGraph(ws);
   const overlay = keywordOverlay(ws);
   const graphNodeById = new Map(graph.nodes.map((n) => [n.id, n]));
-  const contentLabel = (id) => graphNodeById.get(id)?.label ?? id;
   const cannibalByTerm = /* @__PURE__ */ new Map();
   for (const e of overlay.cannibalEdges) {
     const key = normalizeTerm(e.term);
@@ -28301,7 +28300,7 @@ function describeSeoWriteFailure(e) {
   return `SEO \u5B57\u6BB5\u5199\u5165\u5931\u8D25\uFF1A${e instanceof Error ? e.message : String(e)}`;
 }
 async function syncContent(client2, ws, item, opts = {}) {
-  const { force = false, syncCategories = true, seoBestEffort = false } = opts;
+  const { force = false, syncCategories: syncCategories2 = true, seoBestEffort = false } = opts;
   try {
     if (item.wpPostId && !force) {
       const remote = await client2.fetchRemoteState(item.postType, item.wpPostId);
@@ -28322,7 +28321,7 @@ async function syncContent(client2, ws, item, opts = {}) {
     }
     const taxonomyRestBase = client2.taxRestBaseFor(item.postType) ?? taxonomyForNode(ws, item.siloNodeId);
     let termIds;
-    if (syncCategories && taxonomyRestBase) {
+    if (syncCategories2 && taxonomyRestBase) {
       const home = await resolvePlacementTerm(client2, ws, item.siloNodeId, taxonomyRestBase);
       const known = item.termIds ?? [];
       const merged = home != null && !known.includes(home) ? [...known, home] : known;
@@ -28604,7 +28603,7 @@ async function importFromWp(client2, ws, postTypes, opts = {}) {
     if (!byUrl.has(key)) byUrl.set(key, nodeId);
   }
   const importedIds = new Set(imported.map((x) => x.item.id));
-  let edges = ws.edges.filter(
+  const edges = ws.edges.filter(
     (e) => !(importedIds.has(e.from) && (e.type === "internal-link" || e.type === "external-link"))
   );
   const reports = [];
@@ -28720,7 +28719,7 @@ async function importFromWp(client2, ws, postTypes, opts = {}) {
 }
 
 // src/index.ts
-import { dirname as dirname6 } from "node:path";
+import { dirname as dirname7 } from "node:path";
 
 // src/adapters/fileStore.ts
 import { readFile, writeFile, mkdir } from "node:fs/promises";
@@ -28871,16 +28870,73 @@ var nodeNetwork = {
   }
 };
 
+// src/lib/site.ts
+import { readFile as readFile4, writeFile as writeFile3, mkdir as mkdir3 } from "node:fs/promises";
+import { existsSync as existsSync4 } from "node:fs";
+import { join as join3 } from "node:path";
+function configPath(dir2) {
+  return join3(dir2, ".puffergo", "config.json");
+}
+async function readWorkdirConfig(dir2) {
+  const path = configPath(dir2);
+  if (!existsSync4(path)) return null;
+  try {
+    const raw = JSON.parse(await readFile4(path, "utf8"));
+    if (typeof raw.siteUrl !== "string") return null;
+    return raw.editLive ? { siteUrl: raw.siteUrl, editLive: raw.editLive } : { siteUrl: raw.siteUrl };
+  } catch {
+    return null;
+  }
+}
+async function writeWorkdirConfig(dir2, cfg) {
+  const prev = await readWorkdirConfig(dir2);
+  if (!("editLive" in cfg) && prev?.editLive && prev.siteUrl === cfg.siteUrl) cfg = { ...cfg, editLive: prev.editLive };
+  const path = configPath(dir2);
+  await mkdir3(join3(dir2, ".puffergo"), { recursive: true });
+  await writeFile3(path, JSON.stringify(cfg, null, 2), "utf8");
+}
+var NoSiteError = class extends Error {
+  constructor(sites) {
+    super("no_site");
+    this.sites = sites;
+  }
+  code = "no_site";
+};
+var NotLoggedInError = class extends Error {
+  constructor(siteUrl) {
+    super("not_logged_in");
+    this.siteUrl = siteUrl;
+  }
+  code = "not_logged_in";
+};
+async function resolveSite(dir2, siteFlag) {
+  let siteUrl = siteFlag;
+  if (!siteUrl) {
+    const cfg = await readWorkdirConfig(dir2);
+    siteUrl = cfg?.siteUrl;
+  }
+  if (siteUrl) {
+    const cred2 = await resolveCredential(dir2, siteUrl);
+    if (!cred2) throw new NotLoggedInError(siteUrl);
+    if (siteFlag) await writeWorkdirConfig(dir2, { siteUrl: cred2.config.siteUrl });
+    return cred2;
+  }
+  const cred = await resolveCredential(dir2, void 0);
+  if (cred) return cred;
+  const sites = await listCredentialSites();
+  throw new NoSiteError(sites);
+}
+async function editLiveAllowed(dir2, siteUrl) {
+  const cfg = await readWorkdirConfig(dir2);
+  return !!cfg?.editLive?.on && cfg.siteUrl === siteUrl;
+}
+
 // src/lib/wp.ts
 async function connect(dir2, opts = {}) {
   const ws = await readWorkspace(dir2);
   const siteUrl = ws?.profile?.url;
   const resolved = await resolveCredential(dir2, siteUrl, opts.configPath);
-  if (!resolved) {
-    throw new Error(
-      `\u672A\u627E\u5230\u51ED\u636E\u3002\u8BF7\u5728 ${GLOBAL_CREDENTIALS} \u914D\u7F6E\u7AD9\u70B9\u8D26\u53F7\uFF08\u6216\u7528 --config \u6307\u5B9A\u6587\u4EF6\uFF09\u3002` + (siteUrl ? ` \u7AD9\u70B9\uFF1A${siteUrl}` : "")
-    );
-  }
+  if (!resolved) throw new NotLoggedInError(siteUrl ?? "");
   const { config } = resolved;
   const baseConn = {
     siteUrl: config.siteUrl,
@@ -28987,34 +29043,34 @@ function applyPlan(ws, plan) {
 }
 
 // src/lib/vault.ts
-import { readFile as readFile4, writeFile as writeFile3, mkdir as mkdir3, readdir, rename } from "node:fs/promises";
-import { existsSync as existsSync4 } from "node:fs";
-import { join as join3, dirname as dirname3, basename as basename2 } from "node:path";
+import { readFile as readFile5, writeFile as writeFile4, mkdir as mkdir4, readdir, rename } from "node:fs/promises";
+import { existsSync as existsSync5 } from "node:fs";
+import { join as join4, dirname as dirname3, basename as basename2 } from "node:path";
 function contentDir(dir2, ws, content) {
-  return join3(dir2, ...contentDirSegments(ws, content));
+  return join4(dir2, ...contentDirSegments(ws, content));
 }
 function contentFilePath(dir2, ws, content) {
-  return join3(contentDir(dir2, ws, content), `${contentFileBaseName(content)}.md`);
+  return join4(contentDir(dir2, ws, content), `${contentFileBaseName(content)}.md`);
 }
 async function writeContentFile(dir2, ws, content, internalLinks, externalLinks, purpose, knownPath) {
-  let p = knownPath ? join3(contentDir(dir2, ws, content), basename2(knownPath)) : contentFilePath(dir2, ws, content);
-  if (!knownPath && existsSync4(p) && siloIdOf(splitFrontmatter(await readFile4(p, "utf8")).fm) !== content.id) {
-    p = join3(contentDir(dir2, ws, content), `${contentFileFallbackName(content)}.md`);
+  let p = knownPath ? join4(contentDir(dir2, ws, content), basename2(knownPath)) : contentFilePath(dir2, ws, content);
+  if (!knownPath && existsSync5(p) && siloIdOf(splitFrontmatter(await readFile5(p, "utf8")).fm) !== content.id) {
+    p = join4(contentDir(dir2, ws, content), `${contentFileFallbackName(content)}.md`);
   }
   if (knownPath && knownPath !== p) {
-    await mkdir3(dirname3(p), { recursive: true });
+    await mkdir4(dirname3(p), { recursive: true });
     await rename(knownPath, p);
   }
   let body = "\n";
   let existingPurpose;
-  if (existsSync4(p)) {
-    const split = splitFrontmatter(await readFile4(p, "utf8"));
+  if (existsSync5(p)) {
+    const split = splitFrontmatter(await readFile5(p, "utf8"));
     body = split.body || body;
     existingPurpose = parseFrontmatterEdits(split.fm)?.purpose;
   }
   const finalPurpose = existingPurpose || purpose || "";
-  await mkdir3(dirname3(p), { recursive: true });
-  await writeFile3(p, renderFrontmatter(ws, content, internalLinks, externalLinks, finalPurpose) + body, "utf8");
+  await mkdir4(dirname3(p), { recursive: true });
+  await writeFile4(p, renderFrontmatter(ws, content, internalLinks, externalLinks, finalPurpose) + body, "utf8");
   return p;
 }
 async function scaffoldVault(dir2, ws, purposes) {
@@ -29031,8 +29087,8 @@ async function scaffoldVault(dir2, ws, purposes) {
   return files;
 }
 async function updateNoteBody(path, newBody) {
-  const { fm } = splitFrontmatter(await readFile4(path, "utf8"));
-  await writeFile3(path, `---
+  const { fm } = splitFrontmatter(await readFile5(path, "utf8"));
+  await writeFile4(path, `---
 ${fm}
 ---
 ${newBody}`, "utf8");
@@ -29042,32 +29098,32 @@ async function scanVault(dir2) {
   async function walk(d) {
     for (const ent of await readdir(d, { withFileTypes: true })) {
       if (ent.name.startsWith(".")) continue;
-      const full = join3(d, ent.name);
+      const full = join4(d, ent.name);
       if (ent.isDirectory()) await walk(full);
       else if (ent.isFile() && ent.name.endsWith(".md")) {
-        const { fm, body } = splitFrontmatter(await readFile4(full, "utf8"));
+        const { fm, body } = splitFrontmatter(await readFile5(full, "utf8"));
         const id = siloIdOf(fm);
         if (id) out.set(id, { path: full, fm, body });
       }
     }
   }
-  if (existsSync4(dir2)) await walk(dir2);
+  if (existsSync5(dir2)) await walk(dir2);
   return out;
 }
 
 // src/lib/siloSync.ts
 import { createHash } from "node:crypto";
-import { existsSync as existsSync5 } from "node:fs";
-import { mkdir as mkdir4, readFile as readFile5, writeFile as writeFile4 } from "node:fs/promises";
-import { basename as basename3, join as join4, resolve as resolve2 } from "node:path";
-var syncedPath = (dir2) => join4(dir2, ".silo", "synced.json");
+import { existsSync as existsSync6 } from "node:fs";
+import { mkdir as mkdir5, readFile as readFile6, writeFile as writeFile5 } from "node:fs/promises";
+import { basename as basename3, join as join5, resolve as resolve2 } from "node:path";
+var syncedPath = (dir2) => join5(dir2, ".silo", "synced.json");
 async function readSynced(dir2) {
   const p = syncedPath(dir2);
-  return existsSync5(p) ? JSON.parse(await readFile5(p, "utf8")) : {};
+  return existsSync6(p) ? JSON.parse(await readFile6(p, "utf8")) : {};
 }
 async function writeSynced(dir2, synced) {
-  await mkdir4(join4(dir2, ".silo"), { recursive: true });
-  await writeFile4(syncedPath(dir2), JSON.stringify(synced, null, 2) + "\n", "utf8");
+  await mkdir5(join5(dir2, ".silo"), { recursive: true });
+  await writeFile5(syncedPath(dir2), JSON.stringify(synced, null, 2) + "\n", "utf8");
 }
 function noteHash(note) {
   return createHash("sha256").update(`${note.fm}
@@ -29263,11 +29319,10 @@ var AgentClient = class {
   getBlocks(id, path) {
     return this.read("get-blocks", { id, path });
   }
-  /** With `inPage`, the one section is previewed in place of that block on the post's own page. */
-  /** With inPage.data (a component's data) in place of sections, that component block is previewed in its page. */
-  previewBlocks(sections, title, inPage) {
+  /** With `inPage`, the one block is previewed in place of that block on the post's own page. */
+  previewBlocks(blocks, title, inPage) {
     return this.write("preview-blocks", {
-      ...sections.length ? { sections } : {},
+      ...blocks.length ? { blocks } : {},
       ...title ? { title } : {},
       ...inPage ?? {}
     });
@@ -29281,7 +29336,7 @@ var AgentClient = class {
   updateSeo(input) {
     return this.write("update-seo", input);
   }
-  /** A static block takes its new html; a component block its new data. */
+  /** The block that takes its place: body text as Markdown, a static block as HTML, a component as its data. */
   replaceBlock(input) {
     return this.write("replace-block", input);
   }
@@ -29302,12 +29357,13 @@ var AgentClient = class {
     return this.read("find-media", { sha256 });
   }
   /** Product category terms via WordPress's own `/wp/v2/puffergo_product_cat` route; `lang` filters under Polylang. */
-  async listCategoryTerms(lang = "") {
+  /** @param restBase The taxonomy's own route: `puffergo_product_cat`, `categories`, `docs_category`… */
+  async listCategoryTerms(restBase, lang = "") {
     const out = [];
     for (let page = 1; ; page++) {
       const batch = await this.call(
         "GET",
-        `/puffergo_product_cat?per_page=100&page=${page}&hide_empty=false&context=edit${lang ? `&lang=${encodeURIComponent(lang)}` : ""}`,
+        `/${restBase}?per_page=100&page=${page}&hide_empty=false&context=edit${lang ? `&lang=${encodeURIComponent(lang)}` : ""}`,
         void 0,
         this.wpBase
       );
@@ -29315,8 +29371,8 @@ var AgentClient = class {
       if (batch.length < 100) return out;
     }
   }
-  saveCategoryTerm(id, body) {
-    return this.call("POST", `/puffergo_product_cat${id ? `/${id}` : ""}`, body, this.wpBase);
+  saveCategoryTerm(restBase, id, body) {
+    return this.call("POST", `/${restBase}${id ? `/${id}` : ""}`, body, this.wpBase);
   }
   get wpBase() {
     return `${this.cfg.siteUrl.replace(/\/+$/, "")}/wp-json/wp/v2`;
@@ -29345,70 +29401,9 @@ var AgentClient = class {
   }
 };
 
-// src/lib/site.ts
-import { readFile as readFile6, writeFile as writeFile5, mkdir as mkdir5 } from "node:fs/promises";
-import { existsSync as existsSync6 } from "node:fs";
-import { join as join5 } from "node:path";
-function configPath(dir2) {
-  return join5(dir2, ".puffergo", "config.json");
-}
-async function readWorkdirConfig(dir2) {
-  const path = configPath(dir2);
-  if (!existsSync6(path)) return null;
-  try {
-    const raw = JSON.parse(await readFile6(path, "utf8"));
-    if (typeof raw.siteUrl !== "string") return null;
-    return raw.editLive ? { siteUrl: raw.siteUrl, editLive: raw.editLive } : { siteUrl: raw.siteUrl };
-  } catch {
-    return null;
-  }
-}
-async function writeWorkdirConfig(dir2, cfg) {
-  const prev = await readWorkdirConfig(dir2);
-  if (!("editLive" in cfg) && prev?.editLive && prev.siteUrl === cfg.siteUrl) cfg = { ...cfg, editLive: prev.editLive };
-  const path = configPath(dir2);
-  await mkdir5(join5(dir2, ".puffergo"), { recursive: true });
-  await writeFile5(path, JSON.stringify(cfg, null, 2), "utf8");
-}
-var NoSiteError = class extends Error {
-  constructor(sites) {
-    super("no_site");
-    this.sites = sites;
-  }
-  code = "no_site";
-};
-var NotLoggedInError = class extends Error {
-  constructor(siteUrl) {
-    super("not_logged_in");
-    this.siteUrl = siteUrl;
-  }
-  code = "not_logged_in";
-};
-async function resolveSite(dir2, siteFlag) {
-  let siteUrl = siteFlag;
-  if (!siteUrl) {
-    const cfg = await readWorkdirConfig(dir2);
-    siteUrl = cfg?.siteUrl;
-  }
-  if (siteUrl) {
-    const cred2 = await resolveCredential(dir2, siteUrl);
-    if (!cred2) throw new NotLoggedInError(siteUrl);
-    if (siteFlag) await writeWorkdirConfig(dir2, { siteUrl: cred2.config.siteUrl });
-    return cred2;
-  }
-  const cred = await resolveCredential(dir2, void 0);
-  if (cred) return cred;
-  const sites = await listCredentialSites();
-  throw new NoSiteError(sites);
-}
-async function editLiveAllowed(dir2, siteUrl) {
-  const cfg = await readWorkdirConfig(dir2);
-  return !!cfg?.editLive?.on && cfg.siteUrl === siteUrl;
-}
-
 // src/lib/siteSchema.ts
-var SUPPORTED_SCHEMA_VERSION = 5;
-var MIN_SCHEMA_VERSION = 5;
+var SUPPORTED_SCHEMA_VERSION = 6;
+var MIN_SCHEMA_VERSION = 6;
 var SchemaVersionError = class extends Error {
   constructor(siteVersion) {
     super(
@@ -30130,19 +30125,24 @@ function remoteOrder(term) {
   return typeof raw === "number" ? raw : Number(raw ?? 0) || 0;
 }
 var CATEGORIES_FILE = "categories.json";
+var PRODUCT_CAT_REST_BASE = "puffergo_product_cat";
+function categoriesFileFor(type) {
+  return `${type}-categories.json`;
+}
 var MAX_SUGGESTED_DEPTH = 3;
 var SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-async function readCategoriesFile(dir2) {
-  const path = join8(dir2, CATEGORIES_FILE);
+async function readCategoriesFile(dir2, file = CATEGORIES_FILE) {
+  const path = join8(dir2, file);
   if (!existsSync11(path)) return null;
   return JSON.parse(await readFile11(path, "utf8"));
 }
-function planCategories(file, remote) {
+function planCategories(tree, remote, opts = {}) {
+  const { file = CATEGORIES_FILE, order: takesOrder = true } = opts;
   const errors = [];
   const warnings = [];
   const ops = [];
-  const roots = file?.categories;
-  if (!Array.isArray(roots)) return { errors: [`${CATEGORIES_FILE} must be { "categories": [ \u2026 ] }`], warnings, ops };
+  const roots = tree?.categories;
+  if (!Array.isArray(roots)) return { errors: [`${file} must be { "categories": [ \u2026 ] }`], warnings, ops };
   const bySlug = new Map(remote.map((t) => [t.slug, t]));
   const byId = new Map(remote.map((t) => [t.id, t]));
   const seen = /* @__PURE__ */ new Set();
@@ -30164,7 +30164,9 @@ function planCategories(file, remote) {
         );
       let order;
       if (n?.order !== void 0) {
-        if (typeof n.order !== "number" || !Number.isInteger(n.order) || n.order < 1)
+        if (!takesOrder)
+          errors.push(`${at}: order is only for product categories; these are sorted by name. Leave it out.`);
+        else if (typeof n.order !== "number" || !Number.isInteger(n.order) || n.order < 1)
           errors.push(`${at}: order must be a whole number \u2265 1 (leave it out to put the category last)`);
         else order = n.order;
       }
@@ -30196,6 +30198,49 @@ function planCategories(file, remote) {
   };
   walk(roots, "", 1, "categories");
   return { errors, warnings, ops };
+}
+async function syncCategories(c, opts) {
+  const remote = await c.listCategoryTerms(opts.restBase, opts.language ?? "");
+  const sortable = "order" in opts;
+  const { errors, warnings, ops } = planCategories(opts.tree, remote, { file: opts.file, order: sortable });
+  if (errors.length) return { ok: false, code: "invalid", errors, warnings };
+  const wantsOrder = ops.some((o) => o.op !== "keep" && o.order !== void 0);
+  if (wantsOrder && opts.order === null)
+    return {
+      ok: false,
+      code: "update_plugin",
+      message: "This site's PufferGo plugin is too old to set category order from here. Ask the customer to update the plugin, or to fill in Order on each category in wp-admin."
+    };
+  if (wantsOrder && opts.order && opts.order.orderby !== "manual")
+    warnings.push(
+      `Category order is written, but the site sorts these categories by "${opts.order.orderby}", so it has no visible effect yet. Ask the customer to set \u4EA7\u54C1\u8BBE\u7F6E \u2192 \u5206\u7C7B\u6392\u5E8F to \u624B\u52A8 (Manual).`
+    );
+  const todo = ops.filter((o) => o.op === "create" || o.op === "update" && opts.editLive);
+  const leftAlone = opts.editLive ? [] : ops.filter((o) => o.op === "update").map((o) => o.slug);
+  const out = {
+    ok: true,
+    changes: todo.map((o) => ({ op: o.op, slug: o.slug })),
+    ...leftAlone.length ? {
+      leftAlone,
+      leftAloneNote: `These categories already exist on the site and differ from ${opts.file}; they were not changed. The customer can change them in wp-admin, or tell you to turn on editing live content (\`${opts.editLiveHint}\`).`
+    } : {},
+    warnings
+  };
+  if (!opts.push) return out;
+  const idBySlug = new Map(remote.map((t) => [t.slug, t.id]));
+  for (const o of todo) {
+    if (o.op === "keep") continue;
+    const body = {
+      name: o.name,
+      slug: o.slug,
+      parent: o.parentSlug ? idBySlug.get(o.parentSlug) ?? 0 : 0,
+      ...o.description !== void 0 ? { description: o.description } : {},
+      ...o.order !== void 0 ? { meta: { [CAT_ORDER_META]: o.order } } : {}
+    };
+    const saved = await c.saveCategoryTerm(opts.restBase, o.op === "update" ? o.id : null, body);
+    idBySlug.set(o.slug, saved.id);
+  }
+  return out;
 }
 
 // src/lib/productsCmd.ts
@@ -30856,50 +30901,21 @@ async function cmdCategories(ctx) {
   if (sub !== "check" && sub !== "push")
     return { ok: false, code: "usage", message: "usage: puffergo products categories <check | push>" };
   try {
-    const file = await readCategoriesFile(ctx.dir);
-    if (file === null) return { ok: false, code: "no_file", message: `No ${CATEGORIES_FILE} in the work folder.` };
+    const tree = await readCategoriesFile(ctx.dir);
+    if (tree === null) return { ok: false, code: "no_file", message: `No ${CATEGORIES_FILE} in the work folder.` };
     const c = await client(ctx);
     const schema = await loadSiteSchema(c);
-    const remote = await c.listCategoryTerms(schema.language ?? "");
-    const { errors, warnings, ops } = planCategories(file, remote);
-    if (errors.length) return { ok: false, code: "invalid", errors, warnings };
-    const wantsOrder = ops.some((o) => o.op !== "keep" && o.order !== void 0);
-    if (wantsOrder && !schema.categoryOrder)
-      return {
-        ok: false,
-        code: "update_plugin",
-        message: "This site's PufferGo plugin is too old to set category order from here. Ask the customer to update the plugin, or to fill in Order on each category in wp-admin."
-      };
-    if (wantsOrder && schema.categoryOrder?.orderby !== "manual")
-      warnings.push(
-        `Category order is written, but the site sorts product categories by "${schema.categoryOrder?.orderby ?? "name"}", so it has no visible effect yet. Ask the customer to set \u4EA7\u54C1\u8BBE\u7F6E \u2192 \u5206\u7C7B\u6392\u5E8F to \u624B\u52A8 (Manual).`
-      );
-    const editLive = await editLiveAllowed(ctx.dir, c.siteUrl);
-    const todo = ops.filter((o) => o.op === "create" || o.op === "update" && editLive);
-    const leftAlone = editLive ? [] : ops.filter((o) => o.op === "update").map((o) => o.slug);
-    const out = {
-      ok: true,
-      changes: todo.map((o) => ({ op: o.op, slug: o.slug })),
-      ...leftAlone.length ? {
-        leftAlone,
-        leftAloneNote: 'These categories already exist on the site and differ from categories.json; they were not changed. The customer can change them in wp-admin, or tell you to turn on editing live content (`products edit-live on --customer-said "\u2026"`).'
-      } : {},
-      warnings
-    };
-    if (sub === "check") return out;
-    const idBySlug = new Map(remote.map((t) => [t.slug, t.id]));
-    for (const o of todo) {
-      if (o.op === "keep") continue;
-      const body = {
-        name: o.name,
-        slug: o.slug,
-        parent: o.parentSlug ? idBySlug.get(o.parentSlug) ?? 0 : 0,
-        ...o.description !== void 0 ? { description: o.description } : {},
-        ...o.order !== void 0 ? { meta: { [CAT_ORDER_META]: o.order } } : {}
-      };
-      const saved = await c.saveCategoryTerm(o.op === "update" ? o.id : null, body);
-      idBySlug.set(o.slug, saved.id);
-    }
+    const out = await syncCategories(c, {
+      tree,
+      restBase: PRODUCT_CAT_REST_BASE,
+      file: CATEGORIES_FILE,
+      push: sub === "push",
+      editLive: await editLiveAllowed(ctx.dir, c.siteUrl),
+      editLiveHint: 'products edit-live on --customer-said "\u2026"',
+      language: schema.language,
+      // Products are the one sortable taxonomy; null says the site's plugin is too old to set the order.
+      order: schema.categoryOrder ? { orderby: schema.categoryOrder.orderby ?? "name" } : null
+    });
     return out;
   } catch (e) {
     if (e instanceof SyntaxError)
@@ -31089,13 +31105,157 @@ async function cmdLoginWait(siteUrl, handshake, dir2) {
 }
 
 // src/lib/pagesCmd.ts
+import { existsSync as existsSync15 } from "node:fs";
+import { mkdir as mkdir9, readFile as readFile15, writeFile as writeFile9 } from "node:fs/promises";
+import { dirname as dirname6, join as join12, relative as relative3, resolve as resolve8 } from "node:path";
+
+// src/lib/contentBlocks.ts
+import { existsSync as existsSync14 } from "node:fs";
+import { readFile as readFile14, readdir as readdir4, stat as stat3 } from "node:fs/promises";
+import { dirname as dirname5, join as join11, relative as relative2, resolve as resolve7 } from "node:path";
+
+// src/lib/markdownImages.ts
 import { existsSync as existsSync13 } from "node:fs";
-import { mkdir as mkdir9, readFile as readFile14, readdir as readdir4, stat as stat3, writeFile as writeFile9 } from "node:fs/promises";
-import { dirname as dirname5, join as join11, relative as relative2, resolve as resolve6 } from "node:path";
-var editable = (b) => b.kind === "static" || b.kind === "config";
+import { isAbsolute as isAbsolute2, resolve as resolve6 } from "node:path";
+var LOCAL_REF2 = /(!\[[^\]]*\]\(\s*)(?!https?:|\/\/|data:|\/|#)([^)\s]+)/g;
+function localMarkdownImageRefs(markdown) {
+  return [...new Set([...markdown.matchAll(LOCAL_REF2)].map((m) => m[2]))];
+}
+async function uploadMarkdownImages(c, cache2, markdown, baseDir) {
+  const urls = /* @__PURE__ */ new Map();
+  const uploaded = [];
+  let reused = 0;
+  for (const ref of localMarkdownImageRefs(markdown)) {
+    const abs = isAbsolute2(ref) ? ref : resolve6(baseDir, decodeURI(ref));
+    if (!existsSync13(abs)) throw new MissingImageError(ref);
+    const up = await resolveUpload(c, cache2, abs);
+    if (up.reused) reused++;
+    else uploaded.push(abs);
+    urls.set(ref, up.url);
+  }
+  return {
+    markdown: markdown.replace(
+      LOCAL_REF2,
+      (all, pre, ref) => urls.has(ref) ? pre + urls.get(ref) : all
+    ),
+    uploaded,
+    reused
+  };
+}
+
+// src/lib/contentBlocks.ts
+var FileError = class extends CodedError {
+};
+var SUFFIXES = [".md", ".html", ".json"];
+function suffixOf(file) {
+  return SUFFIXES.find((s) => file.toLowerCase().endsWith(s));
+}
+var isOriginal = (name) => /\.orig\.(md|html|json)$/i.test(name);
+async function blockFiles(dir2, args) {
+  if (!args.length)
+    throw new UsageError(
+      "Give the block files (.md body text, .html sections, .json components), or a folder of them."
+    );
+  const out = [];
+  for (const a of args) {
+    const p = resolve7(dir2, a);
+    if (!existsSync14(p)) throw new FileError("file_not_found", `Not found: ${a}`);
+    if ((await stat3(p)).isDirectory()) {
+      const names = (await readdir4(p)).filter((n) => suffixOf(n) && !isOriginal(n)).sort();
+      if (!names.length) throw new FileError("file_not_found", `No .md, .html or .json block files in ${a}`);
+      out.push(...names.map((n) => join11(p, n)));
+    } else {
+      if (!suffixOf(p))
+        throw new FileError(
+          "format",
+          `${a} is not a block file: body text is .md, a section .html, a component .json.`
+        );
+      out.push(p);
+    }
+  }
+  return out;
+}
+async function blocksFromFiles(c, ctx, files, componentData) {
+  const cache2 = await readUploadsCache(ctx.dir, c.siteUrl);
+  const uploaded = [];
+  const blocks = [];
+  try {
+    for (const file of files) {
+      const name = relative2(ctx.dir, file);
+      const suffix = suffixOf(file);
+      if (suffix === ".json") {
+        const cf = await componentData(file);
+        uploaded.push(...cf.uploaded);
+        blocks.push({
+          type: "config",
+          component: String(cf.component ?? ""),
+          data: cf.data ?? {}
+        });
+        continue;
+      }
+      const text = (await readFile14(file, "utf8")).replace(/\n+$/, "");
+      try {
+        if (suffix === ".md") {
+          const up = await uploadMarkdownImages(c, cache2, text, dirname5(file));
+          uploaded.push(...up.uploaded.map((abs) => relative2(ctx.dir, abs)));
+          blocks.push({ type: "prose", markdown: up.markdown });
+        } else {
+          const up = await uploadHtmlImages(c, cache2, text, dirname5(file));
+          uploaded.push(...up.uploaded.map((abs) => relative2(ctx.dir, abs)));
+          blocks.push({ type: "static", html: up.html });
+        }
+      } catch (e) {
+        if (!(e instanceof MissingImageError)) throw e;
+        throw new FileError(
+          "image_not_found",
+          `${name} uses the image "${e.ref}", which isn't there. Paths are relative to the ${suffix} file.`
+        );
+      }
+    }
+  } finally {
+    await writeUploadsCache(ctx.dir, c.siteUrl, cache2);
+  }
+  return { blocks, uploaded };
+}
+function blockText2(block2) {
+  if (block2.type === "prose") return block2.markdown;
+  if (block2.type === "static") return block2.html.replace(/<[^>]*>/g, " ");
+  return "";
+}
+async function blockWarnings(dir2, files, blocks) {
+  const out = [];
+  for (const [i, block2] of blocks.entries()) {
+    const file = files[i];
+    if (!file) continue;
+    const suffix = suffixOf(file);
+    if (suffix === ".json") continue;
+    const orig = file.replace(new RegExp(`\\${suffix}$`, "i"), `.orig${suffix}`);
+    const words = (t) => suffix === ".md" ? t : t.replace(/<[^>]*>/g, " ");
+    const before = existsSync14(orig) ? words(await readFile14(orig, "utf8")) : "";
+    const w = claimWarning(relative2(dir2, file), blockText2(block2), before);
+    if (w) out.push(w);
+  }
+  return out;
+}
+function withFileNames(out, files, dir2) {
+  if (!Array.isArray(out.errors)) return out;
+  return {
+    ...out,
+    errors: out.errors.map((e) => {
+      const at = typeof e.path === "string" ? e.path : "";
+      const i = /^blocks\[(\d+)\]/.exec(at);
+      const file = i ? files[Number(i[1])] : void 0;
+      return file ? { file: relative2(dir2, file), ...e } : e;
+    })
+  };
+}
+
+// src/lib/pagesCmd.ts
+var editable = (b) => b.kind === "prose" || b.kind === "static" || b.kind === "config";
+var SUFFIX_OF_KIND = { prose: ".md", static: ".html", config: ".json" };
 async function componentInput(c, ctx, file) {
-  const name = relative2(ctx.dir, file);
-  const read = async (f) => existsSync13(f) ? JSON.parse(await readFile14(f, "utf8")) : null;
+  const name = relative3(ctx.dir, file);
+  const read = async (f) => existsSync15(f) ? JSON.parse(await readFile15(f, "utf8")) : null;
   let cf;
   try {
     cf = await read(file);
@@ -31112,7 +31272,7 @@ async function componentInput(c, ctx, file) {
   try {
     for (const { value, set } of configImages(cf.data, cf.schema)) {
       if (!isLocalImage(value)) continue;
-      const abs = [resolve6(dirname5(file), value), resolve6(ctx.dir, value)].find((p) => existsSync13(p));
+      const abs = [resolve8(dirname6(file), value), resolve8(ctx.dir, value)].find((p) => existsSync15(p));
       if (!abs)
         throw new FileError(
           "image_not_found",
@@ -31131,8 +31291,6 @@ async function componentInput(c, ctx, file) {
   return { data: cf.data, uploaded, warnings };
 }
 var run = (ctx, body) => runWith(client, ctx, body);
-var FileError = class extends CodedError {
-};
 var bases = siteState("post-bases.json");
 var created = siteState("created.json");
 async function baseOf(dir2, siteUrl, id) {
@@ -31141,62 +31299,15 @@ async function baseOf(dir2, siteUrl, id) {
 async function rememberBase(dir2, siteUrl, post) {
   await bases.remember(dir2, siteUrl, post.id, post.baseModified);
 }
-async function sectionFiles(dir2, args) {
-  if (!args.length) throw new UsageError("Give the section .html files, or a folder of them.");
-  const out = [];
-  for (const a of args) {
-    const p = resolve6(dir2, a);
-    if (!existsSync13(p)) throw new FileError("file_not_found", `Not found: ${a}`);
-    if ((await stat3(p)).isDirectory()) {
-      const names = (await readdir4(p)).filter((n) => n.toLowerCase().endsWith(".html") && !n.endsWith(".orig.html")).sort();
-      if (!names.length) throw new FileError("file_not_found", `No .html files in ${a}`);
-      out.push(...names.map((n) => join11(p, n)));
-    } else out.push(p);
-  }
-  return out;
-}
-async function withUploadedImages(c, ctx, files) {
-  const cache2 = await readUploadsCache(ctx.dir, c.siteUrl);
-  const uploaded = [];
-  const sections = [];
-  try {
-    for (const file of files) {
-      try {
-        const up = await uploadHtmlImages(c, cache2, await readFile14(file, "utf8"), dirname5(file));
-        uploaded.push(...up.uploaded.map((abs) => relative2(ctx.dir, abs)));
-        sections.push(up.html);
-      } catch (e) {
-        if (!(e instanceof MissingImageError)) throw e;
-        throw new FileError(
-          "image_not_found",
-          `${relative2(ctx.dir, file)} uses the image "${e.ref}", which isn't there. Paths are relative to the .html file.`
-        );
-      }
-    }
-  } finally {
-    await writeUploadsCache(ctx.dir, c.siteUrl, cache2);
-  }
-  return { sections, uploaded };
-}
-async function sectionWarnings(dir2, files, sections) {
-  const text = (html2) => html2.replace(/<[^>]*>/g, " ");
-  const out = [];
-  for (const [i, html2] of sections.entries()) {
-    const orig = files[i].replace(/\.html$/i, ".orig.html");
-    const before = existsSync13(orig) ? text(await readFile14(orig, "utf8")) : "";
-    const w = claimWarning(relative2(dir2, files[i]), text(html2), before);
-    if (w) out.push(w);
-  }
-  return out;
-}
-function withFileNames(out, files, dir2) {
-  if (!Array.isArray(out.errors)) return out;
-  return {
-    ...out,
-    errors: out.errors.map(
-      (e) => e.section ? { file: relative2(dir2, files[e.section - 1] ?? ""), ...e } : e
-    )
-  };
+async function blocksOf(c, ctx, files) {
+  const componentWarnings = [];
+  const { blocks, uploaded } = await blocksFromFiles(c, ctx, files, async (file) => {
+    const { data, uploaded: up, warnings } = await componentInput(c, ctx, file);
+    componentWarnings.push(...warnings);
+    const component = JSON.parse(await readFile15(file, "utf8")).component;
+    return { component, data, uploaded: up };
+  });
+  return { blocks, uploaded, warnings: [...await blockWarnings(ctx.dir, files, blocks), ...componentWarnings] };
 }
 async function resolvePostId(c, target) {
   if (!target) throw new UsageError("Give the page/post id or a link to it.");
@@ -31267,39 +31378,36 @@ function cmdGet(ctx) {
       const res = await c.getBlocks(id, path);
       base = res;
       const { block: block2 } = res;
-      if (block2.kind === "config" && block2.data) {
-        const { component, guide, schema, data } = block2;
-        const json = JSON.stringify({ component, guide, schema, data }, null, 2) + "\n";
-        const file2 = join11("pages", String(id), `block-${path}.json`);
-        await mkdir9(join11(ctx.dir, "pages", String(id)), { recursive: true });
-        await writeFile9(join11(ctx.dir, file2), json, "utf8");
-        await writeFile9(join11(ctx.dir, "pages", String(id), `block-${path}.orig.json`), json, "utf8");
-        saved.push({ path, file: file2, text: block2.text });
-        continue;
-      }
-      if (block2.kind !== "static") {
+      const content = block2.kind === "prose" ? block2.markdown ?? "" : block2.kind === "static" ? block2.html ?? "" : block2.data ? JSON.stringify(
+        { component: block2.component, guide: block2.guide, schema: block2.schema, data: block2.data },
+        null,
+        2
+      ) + "\n" : null;
+      if (content === null) {
         if (!want) continue;
         await rememberBase(ctx.dir, c.siteUrl, res);
         return {
           ok: false,
-          code: "not_static",
+          code: "not_editable",
           fix: "user",
-          message: block2.kind === "config" ? "This component has no data to edit here; the customer edits it in the WordPress editor." : "Only PufferGo Tailwind blocks can be edited here.",
+          message: block2.kind === "config" ? "This component has no data to edit here; the customer edits it in the WordPress editor." : "Only body text, PufferGo Tailwind blocks and components can be edited here.",
           block: { path: block2.path, name: block2.name, text: block2.text }
         };
       }
-      const file = join11("pages", String(id), `block-${path}.html`);
-      await mkdir9(join11(ctx.dir, "pages", String(id)), { recursive: true });
-      await writeFile9(join11(ctx.dir, file), block2.html, "utf8");
-      await writeFile9(join11(ctx.dir, "pages", String(id), `block-${path}.orig.html`), block2.html, "utf8");
+      const suffix = SUFFIX_OF_KIND[block2.kind];
+      const file = join12("pages", String(id), `block-${path}${suffix}`);
+      await mkdir9(join12(ctx.dir, "pages", String(id)), { recursive: true });
+      const text = content.endsWith("\n") ? content : content + "\n";
+      await writeFile9(join12(ctx.dir, file), text, "utf8");
+      await writeFile9(join12(ctx.dir, "pages", String(id), `block-${path}.orig${suffix}`), text, "utf8");
       saved.push({ path, file, text: block2.text });
     }
     if (!base)
       return {
         ok: false,
-        code: "no_static_blocks",
+        code: "no_editable_blocks",
         fix: "user",
-        message: "This page has no PufferGo Tailwind blocks or components to edit here."
+        message: "This page has no body text, PufferGo Tailwind blocks or components to edit here."
       };
     await rememberBase(ctx.dir, c.siteUrl, base);
     const head = { ok: true, id, title: base.title, status: base.status };
@@ -31308,7 +31416,7 @@ function cmdGet(ctx) {
         ...head,
         path: want,
         file: saved[0].file,
-        original: saved[0].file.replace(/\.(html|json)$/, ".orig.$1"),
+        original: saved[0].file.replace(/\.(md|html|json)$/, ".orig.$1"),
         text: saved[0].text
       };
     }
@@ -31322,45 +31430,18 @@ function cmdPreview2(ctx) {
   return run(ctx, async (c) => {
     const [target, path, fileArg, ...rest] = ctx.positional;
     const inPage = !!fileArg && !rest.length && BLOCK_PATH.test(path ?? "");
-    if (inPage && fileArg.toLowerCase().endsWith(".json")) {
-      const file = resolve6(ctx.dir, fileArg);
-      const { data, uploaded: uploaded2, warnings } = await componentInput(c, ctx, file);
-      try {
-        const res = await c.previewBlocks([], void 0, {
-          id: await resolvePostId(c, target),
-          path,
-          data
-        });
-        openBrowser(res.previewUrl);
-        return {
-          ok: true,
-          previewUrl: res.previewUrl,
-          sections: [relative2(ctx.dir, file)],
-          uploaded: uploaded2,
-          warnings,
-          note: IN_PAGE_NOTE
-        };
-      } catch (e) {
-        if (e instanceof AgentHttpError) return withFileNames(abilityError(e), [file], ctx.dir);
-        throw e;
-      }
-    }
-    const files = await sectionFiles(ctx.dir, inPage ? [fileArg] : ctx.positional);
+    const files = await blockFiles(ctx.dir, inPage ? [fileArg] : ctx.positional);
     const at = inPage ? { id: await resolvePostId(c, target), path } : void 0;
-    const { sections, uploaded } = await withUploadedImages(c, ctx, files);
+    const { blocks, uploaded, warnings } = await blocksOf(c, ctx, files);
     try {
-      const res = await c.previewBlocks(
-        sections,
-        ctx.flags.get("title"),
-        at
-      );
+      const res = await c.previewBlocks(blocks, ctx.flags.get("title"), at);
       openBrowser(res.previewUrl);
       return {
         ok: true,
         previewUrl: res.previewUrl,
-        sections: files.map((f) => relative2(ctx.dir, f)),
+        blocks: files.map((f) => relative3(ctx.dir, f)),
         uploaded,
-        warnings: await sectionWarnings(ctx.dir, files, sections),
+        warnings,
         note: at ? IN_PAGE_NOTE : "Opened in the browser. The customer must be logged in to wp-admin to see it; the link works for 7 days."
       };
     } catch (e) {
@@ -31388,8 +31469,8 @@ function cmdCreate(ctx) {
         message: `Give ${missing.join(", ")}: every new page gets its address (slug), the SEO title and description search results and shared links show, and the core keyword it should rank for (long-tail ones with --keywords "a, b"). Ask the customer, or agree them with the customer, then run create again.`
       };
     }
-    const files = await sectionFiles(ctx.dir, ctx.positional);
-    const key = files.map((f) => relative2(ctx.dir, f)).join("|");
+    const files = await blockFiles(ctx.dir, ctx.positional);
+    const key = files.map((f) => relative3(ctx.dir, f)).join("|");
     const earlier = (await created.read(ctx.dir, c.siteUrl))[key];
     if (earlier && ctx.flags.get("new") !== "true") {
       return {
@@ -31400,7 +31481,8 @@ function cmdCreate(ctx) {
         message: `These files were already made into post ${earlier}. To change it, edit its blocks (\`pages blocks ${earlier}\`, then get / replace). Only if the customer wants one more separate copy, run create again with --new.`
       };
     }
-    const { sections, uploaded } = await withUploadedImages(c, ctx, files);
+    const { blocks, uploaded, warnings } = await blocksOf(c, ctx, files);
+    const categories = categoryFlag(ctx);
     const featured = await featuredImage(c, ctx);
     if (featured?.uploaded) uploaded.push(featured.uploaded);
     try {
@@ -31408,10 +31490,11 @@ function cmdCreate(ctx) {
       const post = await c.createPost({
         type,
         title,
-        sections,
+        blocks,
         ...excerpt ? { excerpt } : {},
         ...seoInput(seo),
-        ...featured ? { featuredImage: featured.id } : {}
+        ...featured ? { featuredImage: featured.id } : {},
+        ...categories ? { categories } : {}
       });
       await rememberBase(ctx.dir, c.siteUrl, post);
       await created.remember(ctx.dir, c.siteUrl, key, post.id);
@@ -31424,8 +31507,9 @@ function cmdCreate(ctx) {
         previewUrl: post.link,
         editUrl: post.editUrl,
         seo: post.seo,
+        categories: post.categories,
         uploaded,
-        warnings: [...await sectionWarnings(ctx.dir, files, sections), ...seoWarnings(seo)]
+        warnings: [...warnings, ...seoWarnings(seo)]
       };
     } catch (e) {
       if (e instanceof AgentHttpError) return withFileNames(abilityError(e), files, ctx.dir);
@@ -31457,18 +31541,13 @@ function cmdReplace(ctx) {
         message: liveLockedMessage("page", "pages")
       };
     }
-    const component = fileArg.toLowerCase().endsWith(".json");
-    const files = component ? [resolve6(ctx.dir, fileArg)] : await sectionFiles(ctx.dir, [fileArg]);
-    const { input, uploaded, warnings } = component ? await componentInput(c, ctx, files[0]).then((r) => ({ ...r, input: { data: r.data } })) : await withUploadedImages(c, ctx, files).then(async (r) => ({
-      input: { html: r.sections[0] },
-      uploaded: r.uploaded,
-      warnings: await sectionWarnings(ctx.dir, files, r.sections)
-    }));
+    const files = await blockFiles(ctx.dir, [fileArg]);
+    const { blocks, uploaded, warnings } = await blocksOf(c, ctx, files);
     try {
       const updated = await c.replaceBlock({
         id,
         path,
-        ...input,
+        block: blocks[0],
         baseModified: base
       });
       await rememberBase(ctx.dir, c.siteUrl, updated);
@@ -31517,18 +31596,69 @@ function seoFlags(ctx) {
   }
   return out;
 }
+function categoryFlag(ctx) {
+  const raw = ctx.flags.get("category");
+  if (!raw || raw === "true") return void 0;
+  return raw.split(",").map((t) => t.trim()).filter(Boolean);
+}
+async function taxonomyOf(c, type) {
+  const { items } = await c.postTypes();
+  const found = items.find((i) => i.type === type);
+  if (!found) throw new UsageError(`No content type "${type}" on this site. Run \`puffergo pages types\` to see them.`);
+  return found.taxonomy;
+}
+function cmdPageCategories(ctx) {
+  return run(ctx, async (c) => {
+    const [type, sub] = ctx.positional;
+    if (!type || sub !== "check" && sub !== "push")
+      throw new UsageError("usage: puffergo pages categories <type> <check | push>");
+    const tax = await taxonomyOf(c, type);
+    if (!tax)
+      return {
+        ok: false,
+        code: "no_categories",
+        fix: "ai",
+        message: `Content of type "${type}" is not filed under categories on this site, so it has no tree to write. Pages are filed nowhere; blog posts, case studies and solutions are.`
+      };
+    const file = categoriesFileFor(type);
+    const tree = await readCategoriesFile(ctx.dir, file);
+    if (tree === null)
+      return {
+        ok: false,
+        code: "no_file",
+        fix: "ai",
+        message: `No ${file} in the work folder. Write the customer's ${tax.label} tree there as { "categories": [ { "name": "\u2026", "slug": "\u2026", "children": [ \u2026 ] } ] }, show it to them, then run this again.`
+      };
+    try {
+      return {
+        taxonomy: tax.slug,
+        ...await syncCategories(c, {
+          tree,
+          restBase: tax.restBase,
+          file,
+          push: sub === "push",
+          editLive: await editLiveAllowed(ctx.dir, c.siteUrl),
+          editLiveHint: 'pages edit-live on --customer-said "\u2026"'
+        })
+      };
+    } catch (e) {
+      if (e instanceof SyntaxError) return { ok: false, code: "invalid_json", message: `${file}: ${e.message}` };
+      throw e;
+    }
+  });
+}
 function seoWarnings(seo, before = {}) {
   return ["seoTitle", "seoDescription"].map((k) => claimWarning(flagName(k), seo[k], before[k] ?? "")).filter((w) => w !== null);
 }
 async function featuredImage(c, ctx) {
   const arg = ctx.flags.get("featured-image");
   if (!arg) return null;
-  const abs = resolve6(ctx.dir, arg);
-  if (!existsSync13(abs)) throw new FileError("image_not_found", `The featured image "${arg}" isn't there.`);
+  const abs = resolve8(ctx.dir, arg);
+  if (!existsSync15(abs)) throw new FileError("image_not_found", `The featured image "${arg}" isn't there.`);
   const cache2 = await readUploadsCache(ctx.dir, c.siteUrl);
   try {
     const up = await resolveUpload(c, cache2, abs);
-    return { id: up.mediaId, ...up.reused ? {} : { uploaded: relative2(ctx.dir, abs) } };
+    return { id: up.mediaId, ...up.reused ? {} : { uploaded: relative3(ctx.dir, abs) } };
   } finally {
     await writeUploadsCache(ctx.dir, c.siteUrl, cache2);
   }
@@ -31560,11 +31690,20 @@ function cmdSeo(ctx) {
   return run(ctx, async (c) => {
     const id = await resolvePostId(c, ctx.positional[0]);
     const seo = seoFlags(ctx);
+    const categories = categoryFlag(ctx);
     const wantsImage = !!ctx.flags.get("featured-image");
-    if (!Object.keys(seo).length && !wantsImage) {
+    if (!Object.keys(seo).length && !wantsImage && !categories) {
       const post2 = await c.getBlocks(id);
       await rememberBase(ctx.dir, c.siteUrl, post2);
-      return { ok: true, id, title: post2.title, status: post2.status, link: post2.link, seo: post2.seo };
+      return {
+        ok: true,
+        id,
+        title: post2.title,
+        status: post2.status,
+        link: post2.link,
+        seo: post2.seo,
+        categories: post2.categories
+      };
     }
     const base = await baseOf(ctx.dir, c.siteUrl, id);
     if (!base) {
@@ -31598,7 +31737,8 @@ function cmdSeo(ctx) {
         id,
         baseModified: base,
         ...seoInput(seo),
-        ...featured ? { featuredImage: featured.id } : {}
+        ...featured ? { featuredImage: featured.id } : {},
+        ...categories ? { categories } : {}
       });
       await rememberBase(ctx.dir, c.siteUrl, updated);
       const before = {
@@ -31612,6 +31752,7 @@ function cmdSeo(ctx) {
         link: updated.link,
         editUrl: updated.editUrl,
         seo: updated.seo,
+        categories: updated.categories,
         before: post.seo,
         ...featured?.uploaded ? { uploaded: [featured.uploaded] } : {},
         warnings: seoWarnings(seo, before)
@@ -31643,14 +31784,13 @@ var configPath2 = flags.get("config") ?? process.env.PUFFERGO_CONFIG;
 var log = (s = "") => {
   process.stdout.write(s + "\n");
 };
-var die = (s) => {
-  process.stderr.write(`\u2716 ${s}
-`);
+var die = (code, message) => {
+  emit({ ok: false, code, message });
   process.exit(1);
 };
 async function loadWs() {
   const ws = await readWorkspace(dir);
-  if (!ws) die(`\u672A\u627E\u5230\u5DE5\u4F5C\u533A\uFF08\u5148\u8FD0\u884C silo init\uFF09\uFF1A${dir}`);
+  if (!ws) die("no_workspace", `\u672A\u627E\u5230\u5DE5\u4F5C\u533A\uFF08\u5148\u8FD0\u884C silo init\uFF09\uFF1A${dir}`);
   applySeoLimits(ws.seoLimits);
   return ws;
 }
@@ -31669,10 +31809,10 @@ ${SEV_ICON[sev]} ${sev} (${group2.length})`);
 async function cmdInit() {
   const name = flags.get("name");
   const url = flags.get("url");
-  if (!name || !url) die('\u7528\u6CD5\uFF1Asilo init --name "\u7AD9\u70B9\u540D" --url "https://example.com" [--tagline "\u5B9A\u4F4D"]');
+  if (!name || !url) die("usage", '\u7528\u6CD5\uFF1Asilo init --name "\u7AD9\u70B9\u540D" --url "https://example.com" [--tagline "\u5B9A\u4F4D"]');
   const existing = await readWorkspace(dir);
   if (existing && flags.get("force") !== "true") {
-    die("\u5DE5\u4F5C\u533A\u5DF2\u5B58\u5728\uFF08\u52A0 --force \u8986\u76D6\uFF09");
+    die("workspace_exists", "\u5DE5\u4F5C\u533A\u5DF2\u5B58\u5728\uFF08\u52A0 --force \u8986\u76D6\uFF09");
   }
   const ws = emptyWorkspace({ name, url, tagline: flags.get("tagline") });
   await writeWorkspace(dir, ws);
@@ -31680,21 +31820,21 @@ async function cmdInit() {
 }
 async function cmdPlan() {
   const file = positional[0];
-  if (!file) die("\u7528\u6CD5\uFF1Asilo plan <plan.json>");
+  if (!file) die("usage", "\u7528\u6CD5\uFF1Asilo plan <plan.json>");
   let raw;
   try {
-    raw = await readFile15(file, "utf8");
+    raw = await readFile16(file, "utf8");
   } catch {
-    die(`\u672A\u627E\u5230 plan \u6587\u4EF6\uFF1A${file}`);
+    die("file_not_found", `\u672A\u627E\u5230 plan \u6587\u4EF6\uFF1A${file}`);
   }
   let plan;
   try {
     plan = JSON.parse(raw);
   } catch (e) {
-    die(`plan \u6587\u4EF6\u4E0D\u662F\u5408\u6CD5 JSON\uFF1A${e instanceof Error ? e.message : String(e)}`);
+    die("invalid_json", `plan \u6587\u4EF6\u4E0D\u662F\u5408\u6CD5 JSON\uFF1A${e instanceof Error ? e.message : String(e)}`);
   }
-  let ws = await readWorkspace(dir) ?? (plan.profile ? emptyWorkspace(plan.profile) : null);
-  if (!ws) die("\u65E0\u5DE5\u4F5C\u533A\u4E14 plan \u672A\u542B profile\uFF1A\u5148 silo init \u6216\u5728 plan \u91CC\u52A0 profile");
+  const ws = await readWorkspace(dir) ?? (plan.profile ? emptyWorkspace(plan.profile) : null);
+  if (!ws) die("no_profile", "\u65E0\u5DE5\u4F5C\u533A\u4E14 plan \u672A\u542B profile\uFF1A\u5148 silo init \u6216\u5728 plan \u91CC\u52A0 profile");
   const res = applyPlan(ws, plan);
   await writeWorkspace(dir, res.ws);
   const files = await scaffoldVault(dir, res.ws, res.purposes);
@@ -31715,7 +31855,8 @@ async function cmdPush2() {
   let targets;
   if (positional.length) {
     const m = matchTargets(positional, ws, bodies, dir);
-    if (m.unknown.length) die(`\u627E\u4E0D\u5230\u8FD9\u4E9B\u7B14\u8BB0\uFF1A${m.unknown.join("\u3001")}\uFF08\u5199\u7B14\u8BB0\u6587\u4EF6\u540D\u3001slug \u6216 WordPress \u6587\u7AE0 id\uFF09`);
+    if (m.unknown.length)
+      die("note_not_found", `\u627E\u4E0D\u5230\u8FD9\u4E9B\u7B14\u8BB0\uFF1A${m.unknown.join("\u3001")}\uFF08\u5199\u7B14\u8BB0\u6587\u4EF6\u540D\u3001slug \u6216 WordPress \u6587\u7AE0 id\uFF09`);
     const changed = new Set(changedIds(ws, bodies, synced));
     const same = m.ids.filter((id) => !force && !changed.has(id));
     if (same.length)
@@ -31741,7 +31882,7 @@ async function cmdPush2() {
       resolvedBody.set(id, file.body);
       continue;
     }
-    const res = await resolveBodyAssets(file.body, wpAssetUploader(client2, [dirname6(file.path), dir]));
+    const res = await resolveBodyAssets(file.body, wpAssetUploader(client2, [dirname7(file.path), dir]));
     resolvedBody.set(id, res.md);
     if (res.uploaded) {
       await updateNoteBody(file.path, res.md);
@@ -31809,7 +31950,7 @@ async function cmdPull2() {
     onlyIds = positional.map((t) => {
       if (/^\d+$/.test(t)) return Number(t);
       const id = ws.contents.find((c) => c.id === matchTargets([t], ws, before2, dir).ids[0])?.wpPostId;
-      return id ?? die(`\u627E\u4E0D\u5230\uFF1A${t}\uFF08\u5199 WordPress \u6587\u7AE0 id\uFF0C\u7F16\u8F91\u9875\u5730\u5740\u91CC post= \u540E\u9762\u7684\u6570\u5B57\uFF09`);
+      return id ?? die("post_not_found", `\u627E\u4E0D\u5230\uFF1A${t}\uFF08\u5199 WordPress \u6587\u7AE0 id\uFF0C\u7F16\u8F91\u9875\u5730\u5740\u91CC post= \u540E\u9762\u7684\u6570\u5B57\uFF09`);
     });
   }
   log(`\u62C9\u53D6\u7C7B\u578B\uFF1A${types.join(", ")}${onlyIds ? `\uFF0C\u53EA\u62C9 ${onlyIds.join(", ")}` : ""}`);
@@ -31930,7 +32071,7 @@ async function products() {
       return emit({ ok: false, code: "usage", message: PRODUCTS_USAGE });
   }
 }
-var PAGES_USAGE = 'puffergo pages <types|find [--type t] [--status publish] [--search q] [--url link]|blocks <id|link>|get <id|link> [path]|preview <files|folder\u2026> [--title t]|preview <id|link> <path> <file>|create --type <type> --title "<title>" --slug <slug> --seo-title "\u2026" --seo-description "\u2026" --focus-keyword "\u2026" [--keywords "a, b"] [--featured-image <file>] [--excerpt "\u2026"] [--new] <files|folder\u2026>|replace <id|link> <path> <file> [--customer-said "<customer words>"]|seo <id|link> [--slug s] [--seo-title "\u2026"] [--seo-description "\u2026"] [--focus-keyword "\u2026"] [--keywords "a, b"] [--featured-image <file>] [--customer-said "<customer words>"]|publish <id|link> --customer-said "<customer words>"|edit-live [on --customer-said "<customer words>"|off]> [--dir <workdir>] [--site <url>]';
+var PAGES_USAGE = 'puffergo pages <types|find [--type t] [--status publish] [--search q] [--url link]|blocks <id|link>|get <id|link> [path]|preview <files|folder\u2026> [--title t]|preview <id|link> <path> <file>|categories <type> <check|push>|create --type <type> --title "<title>" --slug <slug> --seo-title "\u2026" --seo-description "\u2026" --focus-keyword "\u2026" [--keywords "a, b"] [--category "a, b"] [--featured-image <file>] [--excerpt "\u2026"] [--new] <files|folder\u2026>|replace <id|link> <path> <file> [--customer-said "<customer words>"]|seo <id|link> [--slug s] [--seo-title "\u2026"] [--seo-description "\u2026"] [--focus-keyword "\u2026"] [--keywords "a, b"] [--category "a, b"] [--featured-image <file>] [--customer-said "<customer words>"]|publish <id|link> --customer-said "<customer words>"|edit-live [on --customer-said "<customer words>"|off]> [--dir <workdir>] [--site <url>]';
 async function pages() {
   const ctx = { dir, flags, positional };
   switch (cmd) {
@@ -31952,6 +32093,8 @@ async function pages() {
       return emit(await cmdSeo(ctx));
     case "publish":
       return emit(await cmdPublish2(ctx));
+    case "categories":
+      return emit(await cmdPageCategories(ctx));
     case "edit-live":
       return emit(await cmdEditLive(ctx));
     default:
@@ -31962,9 +32105,8 @@ var run2 = group === "products" ? products : group === "pages" ? pages : group =
   positional[0] === "status" ? await cmdLoginStatus(flags.get("wait")) : await cmdLogin(dir, positional[0] ?? argv[1])
 ) : group === "__login-wait" ? () => cmdLoginWait(argv[1], argv[2], argv[3]) : main;
 run2().catch((e) => {
-  if (group === "products" || group === "pages" || group === "login") {
-    emit({ ok: false, code: "error", message: e instanceof Error ? e.message : String(e) });
-  } else die(e instanceof Error ? e.message : String(e));
+  const shared = siteErrorOutput(e);
+  emit(shared ?? { ok: false, code: "error", message: e instanceof Error ? e.message : String(e) });
 });
 /*! Bundled license information:
 

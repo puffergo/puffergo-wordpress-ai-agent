@@ -14,6 +14,7 @@
  */
 
 import { spawn } from 'node:child_process';
+import type * as AuthorizeServer from '../authorize/authorize-server';
 import { existsSync } from 'node:fs';
 import { readFile, rm, writeFile, mkdtemp, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -182,7 +183,7 @@ export async function cmdLoginStatus(waitSeconds?: string): Promise<unknown> {
 export async function cmdLoginWait(siteUrl: string, handshake: string, dir: string): Promise<void> {
   // Lazy + interop-tolerant: under tsx (source runs) the authorize module can load as CommonJS, so the named
   // export sits on `default`; the esbuild bundle exposes it directly.
-  type AuthzModule = typeof import('../authorize/authorize-server');
+  type AuthzModule = typeof AuthorizeServer;
   const mod = (await import('../authorize/authorize-server')) as AuthzModule & {
     default?: AuthzModule;
   };

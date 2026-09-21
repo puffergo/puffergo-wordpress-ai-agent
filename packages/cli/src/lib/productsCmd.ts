@@ -33,7 +33,7 @@ import type { ProductFile, ValidationError, DetailBlock } from './productTypes';
 import { blockSignature, detailBlocks } from './detailBlocks';
 import { MissingImageError, uploadHtmlImages } from './htmlImages';
 import { placeProblems, type ImagesSpec } from './imageAdvice';
-import { readCategoriesFile, planCategories, CATEGORIES_FILE, CAT_ORDER_META, type RemoteTerm } from './categories';
+import { readCategoriesFile, syncCategories, CATEGORIES_FILE, PRODUCT_CAT_REST_BASE } from './categories';
 
 export async function cmdSchema(ctx: CmdCtx): Promise<unknown> {
   try {
@@ -881,62 +881,21 @@ export async function cmdCategories(ctx: CmdCtx): Promise<unknown> {
   if (sub !== 'check' && sub !== 'push')
     return { ok: false, code: 'usage', message: 'usage: puffergo products categories <check | push>' };
   try {
-    const file = await readCategoriesFile(ctx.dir);
-    if (file === null) return { ok: false, code: 'no_file', message: `No ${CATEGORIES_FILE} in the work folder.` };
+    const tree = await readCategoriesFile(ctx.dir);
+    if (tree === null) return { ok: false, code: 'no_file', message: `No ${CATEGORIES_FILE} in the work folder.` };
     const c = await client(ctx);
-    const schema = (await loadSiteSchema(c)) as {
-      language?: string;
-      categoryOrder?: { orderby?: string };
-    };
-    const remote = await c.listCategoryTerms<RemoteTerm>(schema.language ?? '');
-    const { errors, warnings, ops } = planCategories(file, remote);
-    if (errors.length) return { ok: false, code: 'invalid', errors, warnings };
-
-    // `order` only reaches the site through the term meta the plugin registers, and only shows up on the
-    // front end when the site's category order is set to manual — say so instead of writing silently.
-    const wantsOrder = ops.some(o => o.op !== 'keep' && o.order !== undefined);
-    if (wantsOrder && !schema.categoryOrder)
-      return {
-        ok: false,
-        code: 'update_plugin',
-        message:
-          "This site's PufferGo plugin is too old to set category order from here. Ask the customer to update the plugin, or to fill in Order on each category in wp-admin.",
-      };
-    if (wantsOrder && schema.categoryOrder?.orderby !== 'manual')
-      warnings.push(
-        `Category order is written, but the site sorts product categories by "${schema.categoryOrder?.orderby ?? 'name'}", so it has no visible effect yet. Ask the customer to set 产品设置 → 分类排序 to 手动 (Manual).`,
-      );
-    // Switch off (default): existing categories are left alone, only missing ones are created.
-    const editLive = await editLiveAllowed(ctx.dir, c.siteUrl);
-    const todo = ops.filter(o => o.op === 'create' || (o.op === 'update' && editLive));
-    const leftAlone = editLive ? [] : ops.filter(o => o.op === 'update').map(o => o.slug);
-    const out = {
-      ok: true,
-      changes: todo.map(o => ({ op: o.op, slug: o.slug })),
-      ...(leftAlone.length
-        ? {
-            leftAlone,
-            leftAloneNote:
-              'These categories already exist on the site and differ from categories.json; they were not changed. The customer can change them in wp-admin, or tell you to turn on editing live content (`products edit-live on --customer-said "…"`).',
-          }
-        : {}),
-      warnings,
-    };
-    if (sub === 'check') return out;
-
-    const idBySlug = new Map(remote.map(t => [t.slug, t.id]));
-    for (const o of todo) {
-      if (o.op === 'keep') continue;
-      const body: Record<string, unknown> = {
-        name: o.name,
-        slug: o.slug,
-        parent: o.parentSlug ? (idBySlug.get(o.parentSlug) ?? 0) : 0,
-        ...(o.description !== undefined ? { description: o.description } : {}),
-        ...(o.order !== undefined ? { meta: { [CAT_ORDER_META]: o.order } } : {}),
-      };
-      const saved = await c.saveCategoryTerm<{ id: number }>(o.op === 'update' ? o.id : null, body);
-      idBySlug.set(o.slug, saved.id);
-    }
+    const schema = (await loadSiteSchema(c)) as { language?: string; categoryOrder?: { orderby?: string } };
+    const out = await syncCategories(c, {
+      tree,
+      restBase: PRODUCT_CAT_REST_BASE,
+      file: CATEGORIES_FILE,
+      push: sub === 'push',
+      editLive: await editLiveAllowed(ctx.dir, c.siteUrl),
+      editLiveHint: 'products edit-live on --customer-said "…"',
+      language: schema.language,
+      // Products are the one sortable taxonomy; null says the site's plugin is too old to set the order.
+      order: schema.categoryOrder ? { orderby: schema.categoryOrder.orderby ?? 'name' } : null,
+    });
     return out;
   } catch (e) {
     if (e instanceof SyntaxError)

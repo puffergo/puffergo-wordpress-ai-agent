@@ -3,16 +3,21 @@ import { mkdtemp, mkdir, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AgentHttpError, type AgentClient } from '../lib/agentClient';
+import type * as SiteCmd from '../lib/siteCmd';
 
 const fake: { current: AgentClient | null } = { current: null };
 vi.mock('../lib/siteCmd', async orig => ({
-  ...(await orig<typeof import('../lib/siteCmd')>()),
+  ...(await orig<typeof SiteCmd>()),
   client: async () => fake.current,
 }));
 process.env.PUFFERGO_NO_BROWSER = '1';
 
-const { sectionFiles, cmdPreview, cmdBlocks, cmdGet, cmdReplace, cmdCreate, cmdSeo } = await import('../lib/pagesCmd');
+const { cmdPreview, cmdBlocks, cmdGet, cmdReplace, cmdCreate, cmdSeo, cmdPageCategories } = await import(
+  '../lib/pagesCmd'
+);
+const { blockFiles } = await import('../lib/contentBlocks');
 const { localImageRefs } = await import('../lib/htmlImages');
+const { localMarkdownImageRefs } = await import('../lib/markdownImages');
 
 const SEO = {
   slug: 'home',
@@ -41,7 +46,7 @@ const ctx = (dir: string, positional: string[], flags: Record<string, string> = 
   flags: new Map(Object.entries(flags)),
 });
 
-describe('section files', () => {
+describe('block files', () => {
   it('finds local image refs, not web ones', () => {
     const html =
       '<img src="images/a.png"><img src="https://x.com/b.png"><img src="//cdn/c.png"><img src="/wp-content/d.png">' +
@@ -49,13 +54,25 @@ describe('section files', () => {
     expect(localImageRefs(html)).toEqual(['images/a.png', 'images/e.jpg']);
   });
 
-  it('a folder gives its .html files in name order', async () => {
+  it('finds local image refs in Markdown, not web ones', () => {
+    const md =
+      '![a](images/a.png) ![b](https://x.com/b.png) ![c](//cdn/c.png) ![d](/wp-content/d.png) ![e](images/a.png)';
+    expect(localMarkdownImageRefs(md)).toEqual(['images/a.png']);
+  });
+
+  it('a folder gives its block files in name order, whatever they are written in', async () => {
     const dir = await workdir();
     await mkdir(join(dir, 'pages/home'), { recursive: true });
-    for (const n of ['02-b.html', '01-a.html', 'notes.md', '10-c.html', 'block-1.orig.html'])
+    for (const n of ['02-body.md', '01-hero.html', '03-faq.json', '10-cta.html', 'block-1.orig.md', 'notes.txt'])
       await writeFile(join(dir, 'pages/home', n), 'x');
-    const files = await sectionFiles(dir, ['pages/home']);
-    expect(files.map(f => f.split('/').pop())).toEqual(['01-a.html', '02-b.html', '10-c.html']);
+    const files = await blockFiles(dir, ['pages/home']);
+    expect(files.map(f => f.split('/').pop())).toEqual(['01-hero.html', '02-body.md', '03-faq.json', '10-cta.html']);
+  });
+
+  it('a file that is not a block file is refused', async () => {
+    const dir = await workdir();
+    await writeFile(join(dir, 'notes.txt'), 'x');
+    await expect(blockFiles(dir, ['notes.txt'])).rejects.toMatchObject({ code: 'format' });
   });
 });
 
@@ -102,7 +119,13 @@ describe('pages preview / create', () => {
     const out = await cmdPreview(ctx(dir, ['pages/home'], { title: 'Home' }));
     expect(out).toMatchObject({ ok: true, uploaded: ['pages/home/images/hero.png'] });
     expect(previewBlocks).toHaveBeenCalledWith(
-      ['<section><img src="http://site.test/uploads/hero.png" alt="Hero"></section>', '<section><p>b</p></section>'],
+      [
+        {
+          type: 'static',
+          html: '<section><img src="http://site.test/uploads/hero.png" alt="Hero"></section>',
+        },
+        { type: 'static', html: '<section><p>b</p></section>' },
+      ],
       'Home',
       undefined,
     );
@@ -111,24 +134,27 @@ describe('pages preview / create', () => {
     expect(uploadMedia).toHaveBeenCalledTimes(1); // second run reuses the upload
   });
 
-  it('names section errors by file', async () => {
+  it('names block errors by file', async () => {
     fake.current = {
       siteUrl: SITE,
       mediaLookup: async () => ({ found: true, mediaId: 7, url: `${SITE}/uploads/hero.png` }),
       createPost: async () => {
         throw new AgentHttpError(400, {
-          code: 'invalid_sections',
-          message: 'Some sections need fixing; nothing was written.',
-          data: { status: 400, errors: [{ section: 2, code: 'width_missing', message: 'Wrap…', fix: 'ai' }] },
+          code: 'invalid_blocks',
+          message: "Some blocks can't be used; see errors.",
+          data: {
+            status: 400,
+            errors: [{ path: 'blocks[1].html', code: 'width_missing', message: 'Wrap…', fix: 'ai' }],
+          },
         });
       },
     } as unknown as AgentClient;
     const out = await cmdCreate(ctx(dir, ['pages/home'], { type: 'page', title: 'Home', ...SEO }));
     expect(out).toMatchObject({
       ok: false,
-      code: 'invalid_sections',
+      code: 'invalid_blocks',
       fix: 'ai',
-      errors: [{ file: 'pages/home/02-body.html', section: 2, code: 'width_missing' }],
+      errors: [{ file: 'pages/home/02-body.html', path: 'blocks[1].html', code: 'width_missing' }],
     });
   });
 
@@ -173,17 +199,182 @@ describe('pages preview / create', () => {
   });
 });
 
-describe('pages get / replace', () => {
-  const post = (status: string, baseModified: string) => ({
-    id: 5,
-    type: 'page',
-    title: 'About',
-    status,
-    baseModified,
-    link: `${SITE}/?page_id=5`,
-    editUrl: `${SITE}/wp-admin/post.php?post=5&action=edit`,
+/** The post shape the abilities return, for the get / replace tests. */
+const post = (status: string, baseModified: string) => ({
+  id: 5,
+  type: 'page',
+  title: 'About',
+  status,
+  baseModified,
+  link: `${SITE}/?page_id=5`,
+  editUrl: `${SITE}/wp-admin/post.php?post=5&action=edit`,
+});
+
+describe('body text in .md files', () => {
+  let dir: string;
+  beforeEach(async () => {
+    dir = await workdir();
+    await mkdir(join(dir, 'pages/post/images'), { recursive: true });
+    await writeFile(join(dir, 'pages/post/images/gear.png'), PNG);
   });
 
+  it('a .md file is body text, a .html file a section, a .json file a component', async () => {
+    await writeFile(join(dir, 'pages/post/01-intro.md'), '## What is a gear motor\n\nA motor with a gearbox.');
+    await writeFile(join(dir, 'pages/post/02-compare.html'), '<section><p>table</p></section>');
+    await writeFile(
+      join(dir, 'pages/post/03-faq.json'),
+      JSON.stringify({ component: 'faq', data: { items: [{ q: 'Why?' }] } }),
+    );
+    const previewBlocks = vi.fn(async () => ({ previewUrl: 'p', expiresIn: 3600 }));
+    fake.current = { siteUrl: SITE, previewBlocks } as unknown as AgentClient;
+
+    await cmdPreview(ctx(dir, ['pages/post']));
+    expect(previewBlocks).toHaveBeenCalledWith(
+      [
+        { type: 'prose', markdown: '## What is a gear motor\n\nA motor with a gearbox.' },
+        { type: 'static', html: '<section><p>table</p></section>' },
+        { type: 'config', component: 'faq', data: { items: [{ q: 'Why?' }] } },
+      ],
+      undefined,
+      undefined,
+    );
+  });
+
+  it('uploads a local image the Markdown uses and points it at the site', async () => {
+    await writeFile(join(dir, 'pages/post/01-intro.md'), 'A photo:\n\n![A gear motor](images/gear.png)');
+    const previewBlocks = vi.fn(async () => ({ previewUrl: 'p', expiresIn: 3600 }));
+    fake.current = {
+      siteUrl: SITE,
+      mediaLookup: async () => ({ found: false }),
+      uploadMedia: async () => ({ id: 7, url: `${SITE}/uploads/gear.png` }),
+      previewBlocks,
+    } as unknown as AgentClient;
+
+    const out = await cmdPreview(ctx(dir, ['pages/post']));
+    expect(out).toMatchObject({ ok: true, uploaded: ['pages/post/images/gear.png'] });
+    expect(previewBlocks).toHaveBeenCalledWith(
+      [{ type: 'prose', markdown: 'A photo:\n\n![A gear motor](http://site.test/uploads/gear.png)' }],
+      undefined,
+      undefined,
+    );
+  });
+
+  it('an image the Markdown names but is not there names the file', async () => {
+    await writeFile(join(dir, 'pages/post/01-intro.md'), '![Missing](images/nope.png)');
+    fake.current = { siteUrl: SITE } as unknown as AgentClient;
+    expect(await cmdPreview(ctx(dir, ['pages/post']))).toMatchObject({ ok: false, code: 'image_not_found' });
+  });
+
+  it('create sends the blocks in file order', async () => {
+    await writeFile(join(dir, 'pages/post/01-intro.md'), 'First line.');
+    await writeFile(join(dir, 'pages/post/02-cta.html'), '<section><p>cta</p></section>');
+    const createPost = vi.fn(async () => ({
+      id: 9,
+      type: 'post',
+      status: 'draft',
+      baseModified: 'T1',
+      title: 'P',
+      link: 'l',
+      editUrl: 'e',
+      blocks: 2,
+      seo: {},
+    }));
+    fake.current = { siteUrl: SITE, createPost } as unknown as AgentClient;
+    const out = await cmdCreate(ctx(dir, ['pages/post'], { type: 'post', title: 'Gear motors', ...SEO }));
+    expect(out).toMatchObject({ ok: true, id: 9, blocks: 2 });
+    expect(createPost).toHaveBeenCalledWith(
+      expect.objectContaining({
+        blocks: [
+          { type: 'prose', markdown: 'First line.' },
+          { type: 'static', html: '<section><p>cta</p></section>' },
+        ],
+      }),
+    );
+  });
+
+  it('get saves body text as .md, replace sends it back as Markdown', async () => {
+    const replaceBlock = vi.fn(async () => post('draft', 'T2'));
+    fake.current = {
+      siteUrl: SITE,
+      getBlocks: vi.fn(async (_id: number, path?: string) =>
+        path
+          ? {
+              ...post('draft', 'T1'),
+              block: { path: '2', name: 'body text', kind: 'prose', markdown: '## Old\n\nText.' },
+            }
+          : post('draft', 'T1'),
+      ),
+      replaceBlock,
+    } as unknown as AgentClient;
+
+    const got = await cmdGet(ctx(dir, ['5', '2']));
+    expect(got).toMatchObject({ ok: true, file: 'pages/5/block-2.md', original: 'pages/5/block-2.orig.md' });
+    // The file ends with a newline, the block's content does not.
+    expect(await readFile(join(dir, 'pages/5/block-2.md'), 'utf8')).toBe('## Old\n\nText.\n');
+    expect(await readFile(join(dir, 'pages/5/block-2.orig.md'), 'utf8')).toBe('## Old\n\nText.\n');
+
+    await writeFile(join(dir, 'pages/5/block-2.md'), '## New\n\nText.\n\nOne more line.\n');
+    expect(await cmdReplace(ctx(dir, ['5', '2', 'pages/5/block-2.md']))).toMatchObject({ ok: true, path: '2' });
+    expect(replaceBlock).toHaveBeenCalledWith({
+      id: 5,
+      path: '2',
+      block: { type: 'prose', markdown: '## New\n\nText.\n\nOne more line.' },
+      baseModified: 'T1',
+    });
+  });
+
+  it('edited body text is warned only about marketing words the edit added', async () => {
+    fake.current = {
+      siteUrl: SITE,
+      getBlocks: async () => ({
+        ...post('draft', 'T1'),
+        block: { path: '1', name: 'body text', kind: 'prose', markdown: 'ISO 9001 certification.' },
+      }),
+      previewBlocks: async () => ({ previewUrl: 'p', expiresIn: 3600 }),
+    } as unknown as AgentClient;
+    await cmdGet(ctx(dir, ['5', '1']));
+    await writeFile(join(dir, 'pages/5/block-1.md'), 'ISO 9001 certification. Premium valves.');
+    const out = await cmdPreview(ctx(dir, ['pages/5/block-1.md']));
+    expect(JSON.stringify(out.warnings)).toContain('premium');
+    expect(JSON.stringify(out.warnings)).not.toContain('certification');
+  });
+
+  it('get without a path saves body text next to the sections', async () => {
+    fake.current = {
+      siteUrl: SITE,
+      getBlocks: vi.fn(async (_id: number, path?: string) => {
+        if (!path)
+          return {
+            ...post('draft', 'T1'),
+            blocks: [
+              { path: '1', name: 'puffergo/tailwind-container', kind: 'static' },
+              { path: '2', name: 'body text', kind: 'prose' },
+              { path: '3', name: 'core/embed', kind: 'native', text: 'A video' },
+            ],
+          };
+        return {
+          ...post('draft', 'T1'),
+          block:
+            path === '1'
+              ? { path, name: 'puffergo/tailwind-container', kind: 'static', html: '<section>hero</section>' }
+              : { path, name: 'body text', kind: 'prose', markdown: 'Body.' },
+        };
+      }),
+    } as unknown as AgentClient;
+    const got = await cmdGet(ctx(dir, ['5']));
+    expect(got).toMatchObject({
+      ok: true,
+      saved: [
+        { path: '1', file: 'pages/5/block-1.html' },
+        { path: '2', file: 'pages/5/block-2.md' },
+      ],
+      notSaved: [{ path: '3', kind: 'native', text: 'A video' }],
+    });
+    expect(await readFile(join(dir, 'pages/5/block-2.md'), 'utf8')).toBe('Body.\n');
+  });
+});
+
+describe('pages get / replace', () => {
   it('refuses to replace before get', async () => {
     const dir = await workdir();
     fake.current = { siteUrl: SITE } as unknown as AgentClient;
@@ -209,12 +400,17 @@ describe('pages get / replace', () => {
 
     const got = await cmdGet(ctx(dir, ['5', '2']));
     expect(got).toMatchObject({ ok: true, file: 'pages/5/block-2.html' });
-    expect(await readFile(join(dir, 'pages/5/block-2.html'), 'utf8')).toBe('<p>old</p>');
-    expect(await readFile(join(dir, 'pages/5/block-2.orig.html'), 'utf8')).toBe('<p>old</p>');
+    expect(await readFile(join(dir, 'pages/5/block-2.html'), 'utf8')).toBe('<p>old</p>\n');
+    expect(await readFile(join(dir, 'pages/5/block-2.orig.html'), 'utf8')).toBe('<p>old</p>\n');
 
     await writeFile(join(dir, 'pages/5/block-2.html'), '<p>new</p>');
     expect(await cmdReplace(ctx(dir, ['5', '2', 'pages/5/block-2.html']))).toMatchObject({ ok: true, path: '2' });
-    expect(replaceBlock).toHaveBeenCalledWith({ id: 5, path: '2', html: '<p>new</p>', baseModified: 'T1' });
+    expect(replaceBlock).toHaveBeenCalledWith({
+      id: 5,
+      path: '2',
+      block: { type: 'static', html: '<p>new</p>' },
+      baseModified: 'T1',
+    });
 
     // The next replace on the same post carries the new baseModified.
     await cmdReplace(ctx(dir, ['5', '2', 'pages/5/block-2.html']));
@@ -288,7 +484,7 @@ describe('pages get / replace', () => {
         block: { path: '3', name: 'puffergo/tailwind-container', kind: 'config' },
       }),
     } as unknown as AgentClient;
-    expect(await cmdGet(ctx(dir, ['5', '3']))).toMatchObject({ ok: false, code: 'not_static', fix: 'user' });
+    expect(await cmdGet(ctx(dir, ['5', '3']))).toMatchObject({ ok: false, code: 'not_editable', fix: 'user' });
   });
 
   it('a classic-editor or page-builder page: its content is left to its own editor', async () => {
@@ -325,7 +521,7 @@ describe('pages get / replace', () => {
                 {
                   path: '2',
                   name: 'core/group',
-                  kind: 'other',
+                  kind: 'native',
                   innerBlocks: [{ path: '2.1', name: 'puffergo/tailwind-container', kind: 'static' }],
                 },
                 { path: '3', name: 'puffergo/tailwind-container', kind: 'config', text: 'Slider' },
@@ -340,11 +536,14 @@ describe('pages get / replace', () => {
       saved: [{ path: '1' }, { path: '2.1' }],
       notSaved: [{ path: '3', kind: 'config', text: 'Slider' }],
     });
-    expect(await readFile(join(dir, 'pages/5/block-2.1.orig.html'), 'utf8')).toBe('<p>b</p>');
+    expect(await readFile(join(dir, 'pages/5/block-2.1.orig.html'), 'utf8')).toBe('<p>b</p>\n');
 
     const out = await cmdPreview(ctx(dir, ['5', '2.1', 'pages/5/block-2.1.html']));
     expect(out).toMatchObject({ ok: true, previewUrl: 'http://s.test/about/?puffergo_ai_preview=2.1' });
-    expect(previewBlocks).toHaveBeenCalledWith(['<p>b</p>'], undefined, { id: 5, path: '2.1' });
+    expect(previewBlocks).toHaveBeenCalledWith([{ type: 'static', html: '<p>b</p>' }], undefined, {
+      id: 5,
+      path: '2.1',
+    });
   });
 
   it('a stale post is a conflict to redo', async () => {
@@ -435,5 +634,128 @@ describe('pages SEO', () => {
     expect(updateSeo).toHaveBeenCalledWith({ id: 5, baseModified: 'T1', slug: 'about', seoTitle: 'Durable valves' });
     expect(out).toMatchObject({ ok: true, before: { seoTitle: 'About' } });
     expect(JSON.stringify(out.warnings)).toContain('durable');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// categories — the tree, and filing a post under it
+// ---------------------------------------------------------------------------
+
+/** `list-post-types`: a post is filed under one taxonomy, a page under none. */
+const POST_TYPES = {
+  items: [
+    {
+      type: 'post',
+      taxonomy: {
+        slug: 'category',
+        label: '分类',
+        restBase: 'categories',
+        categories: [{ name: 'Valves', slug: 'valves', parent: '' }],
+      },
+    },
+    { type: 'page', taxonomy: null },
+  ],
+};
+
+describe('pages categories', () => {
+  let dir = '';
+  beforeEach(async () => {
+    dir = await workdir();
+  });
+
+  const tree = { categories: [{ name: 'Valves', slug: 'valves', children: [{ name: 'Gate', slug: 'gate' }] }] };
+
+  it('pushes the tree through the type’s own route, parents before children', async () => {
+    await writeFile(join(dir, 'post-categories.json'), JSON.stringify(tree));
+    const saveCategoryTerm = vi.fn(async () => ({ id: 42 }));
+    fake.current = {
+      siteUrl: SITE,
+      postTypes: async () => POST_TYPES,
+      listCategoryTerms: async () => [{ id: 7, name: 'Valves', slug: 'valves', description: '', parent: 0 }],
+      saveCategoryTerm,
+    } as unknown as AgentClient;
+    const out = await cmdPageCategories(ctx(dir, ['post', 'push']));
+    expect(out).toMatchObject({ ok: true, taxonomy: 'category', changes: [{ op: 'create', slug: 'gate' }] });
+    // Only the missing one is written, and it is written under the id the site already had for its parent.
+    expect(saveCategoryTerm).toHaveBeenCalledTimes(1);
+    expect(saveCategoryTerm).toHaveBeenCalledWith(
+      'categories',
+      null,
+      expect.objectContaining({ slug: 'gate', parent: 7 }),
+    );
+  });
+
+  it('check writes nothing', async () => {
+    await writeFile(join(dir, 'post-categories.json'), JSON.stringify(tree));
+    const saveCategoryTerm = vi.fn();
+    fake.current = {
+      siteUrl: SITE,
+      postTypes: async () => POST_TYPES,
+      listCategoryTerms: async () => [],
+      saveCategoryTerm,
+    } as unknown as AgentClient;
+    expect(await cmdPageCategories(ctx(dir, ['post', 'check']))).toMatchObject({
+      ok: true,
+      changes: [
+        { op: 'create', slug: 'valves' },
+        { op: 'create', slug: 'gate' },
+      ],
+    });
+    expect(saveCategoryTerm).not.toHaveBeenCalled();
+  });
+
+  it('refuses an order: nothing sorts these by it', async () => {
+    await writeFile(
+      join(dir, 'post-categories.json'),
+      JSON.stringify({ categories: [{ name: 'Valves', slug: 'valves', order: 1 }] }),
+    );
+    fake.current = {
+      siteUrl: SITE,
+      postTypes: async () => POST_TYPES,
+      listCategoryTerms: async () => [],
+    } as unknown as AgentClient;
+    const out = (await cmdPageCategories(ctx(dir, ['post', 'push']))) as unknown as { code: string; errors: string[] };
+    expect(out.code).toBe('invalid');
+    expect(out.errors[0]).toContain('order is only for product categories');
+  });
+
+  it('a type filed nowhere has no tree to write', async () => {
+    fake.current = { siteUrl: SITE, postTypes: async () => POST_TYPES } as unknown as AgentClient;
+    expect(await cmdPageCategories(ctx(dir, ['page', 'push']))).toMatchObject({ ok: false, code: 'no_categories' });
+  });
+
+  it('create and seo file the post under the slugs of --category', async () => {
+    await mkdir(join(dir, 'pages/post'), { recursive: true });
+    await writeFile(join(dir, 'pages/post/01-intro.md'), 'First line.');
+    const created = {
+      id: 9,
+      type: 'post',
+      status: 'draft',
+      baseModified: 'T1',
+      title: 'P',
+      link: 'l',
+      editUrl: 'e',
+      blocks: 1,
+      seo: {},
+      categories: ['gate'],
+    };
+    const createPost = vi.fn(async () => created);
+    const updateSeo = vi.fn(async () => ({ ...created, categories: ['valves'] }));
+    fake.current = {
+      siteUrl: SITE,
+      createPost,
+      updateSeo,
+      getBlocks: async () => ({ ...created, seo: { slug: 'p' } }),
+    } as unknown as AgentClient;
+    const made = await cmdCreate(
+      ctx(dir, ['pages/post'], { type: 'post', title: 'Gear motors', category: 'gate, valves', ...SEO }),
+    );
+    expect(createPost).toHaveBeenCalledWith(expect.objectContaining({ categories: ['gate', 'valves'] }));
+    // Read back, so the AI can tell the customer where it actually landed.
+    expect(made).toMatchObject({ categories: ['gate'] });
+    // A category on its own is change enough for `seo`, which otherwise just reads the post back.
+    expect(await cmdSeo(ctx(dir, ['9'], {}))).toMatchObject({ categories: ['gate'] });
+    expect(await cmdSeo(ctx(dir, ['9'], { category: 'valves' }))).toMatchObject({ categories: ['valves'] });
+    expect(updateSeo).toHaveBeenCalledWith(expect.objectContaining({ categories: ['valves'] }));
   });
 });

@@ -373,7 +373,7 @@ export async function importFromWp(
 
   // 5. parse links per doc → edges + report. Drop stale edges from re-imported docs first.
   const importedIds = new Set(imported.map(x => x.item.id));
-  let edges: Edge[] = ws.edges.filter(
+  const edges: Edge[] = ws.edges.filter(
     e => !(importedIds.has(e.from) && (e.type === 'internal-link' || e.type === 'external-link')),
   );
   const reports: DocLinkReport[] = [];

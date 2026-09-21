@@ -44,7 +44,7 @@ function stubSite(answers: Record<string, unknown>) {
   return called;
 }
 
-const SCHEMA = { schemaVersion: 5, tradeFields: [], categories: [], images: {}, blocks: {}, units: {}, limits: {} };
+const SCHEMA = { schemaVersion: 6, tradeFields: [], categories: [], images: {}, blocks: {}, units: {}, limits: {} };
 const ctx = (dir: string, positional: string[] = [], flags: Record<string, string> = {}) => ({
   dir,
   positional,
@@ -350,11 +350,15 @@ describe('pages: any config component is edited by its data', () => {
       id: 5,
       path: '2',
       baseModified: 'T',
-      data: {
-        slides: [
-          { title: 'Durable lamp', image: 'https://shared.test/a.png' },
-          { title: 'Side', image: 'https://shared.test/a.png' },
-        ],
+      block: {
+        type: 'config',
+        component: 'carousel',
+        data: {
+          slides: [
+            { title: 'Durable lamp', image: 'https://shared.test/a.png' },
+            { title: 'Side', image: 'https://shared.test/a.png' },
+          ],
+        },
       },
     });
   });

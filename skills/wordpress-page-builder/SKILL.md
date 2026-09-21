@@ -2,7 +2,8 @@
 name: wordpress-page-builder
 description: >-
   Build or edit pages, blog posts, case studies and other content on the user's own WordPress site (PufferGo
-  plugin) by writing Tailwind HTML sections. Use when the user says things like "做一个页面 / 写一篇博客 /
+  plugin): body text as Markdown (native WordPress blocks the customer can edit), page layout as Tailwind HTML
+  sections. Use when the user says things like "做一个页面 / 写一篇博客 /
   加一个案例 / 改一下首页这一块 / 这段文字换一下 / make a landing page / add a case study / edit this section".
   Not for products (use wordpress-bulk-product-upload). All WordPress operations go through the bundled
   `puffergo` script; the site password never enters the chat.
@@ -10,7 +11,17 @@ description: >-
 
 # WordPress 页面与区块
 
-你帮客户在他自己的 WordPress 网站上做新页面（也可以是博客文章、案例等），或者改已有页面里的某一块。你负责写内容和 Tailwind HTML；`puffergo` 脚本负责检查、编译、上传图片、写入网站，并持有网站凭据。网站上每一段（section）是一个 PufferGo 区块，客户之后也能在 WordPress 编辑器里改它。
+你帮客户在他自己的 WordPress 网站上做新页面（也可以是博客文章、案例等），或者改已有页面里的某一块。你负责写内容；`puffergo` 脚本负责检查、编译、上传图片、写入网站，并持有网站凭据。
+
+内容分两种写法，一个文件一段，**后缀决定它是什么**：
+
+| 文件 | 写什么 | 到网站上是 |
+|---|---|---|
+| `.md` | **正文**：段落、标题、列表、表格、图片 | WordPress 原生区块。客户在编辑器里像平常一样改字、回车分段、加粗，不用找你 |
+| `.html` | **版式**：多列、卡片、带背景的区段、标题大图 | PufferGo 区块。客户也能在编辑器里点开改 |
+| `.json` | **配置型组件**的数据（轮播、FAQ 等） | PufferGo 区块 |
+
+文章、案例的正文一律用 `.md`；页面（整页都是版式）用 `.html`。两者都可以和 `.json` 混着排。客户自己还能在编辑器里，往你写的两段正文中间插一个 PufferGo 区块。
 
 产品不在这里做，客户要上架或修改产品，用 wordpress-bulk-product-upload 技能。
 
@@ -33,9 +44,10 @@ description: >-
 | `puffergo pages types` | 网站能建哪些内容类型（页面、文章、案例…） |
 | `puffergo pages find [--type 类型] [--status publish] [--search 词] [--url 链接]` | 找网站上已有的页面、文章，拿到 id 和链接 |
 | `puffergo pages blocks <id或链接>` | 列出一个页面的区块：路径、类型、文字摘要 |
-| `puffergo pages get <id或链接> [路径]` | 把区块的 HTML 存到 `pages/<id>/block-<路径>.html`（另存一份 `.orig.html` 备份）。不写路径就存整页所有能改的区块 |
-| `puffergo pages create --type <类型> --title "标题" --slug <网址> --seo-title "…" --seo-description "…" --focus-keyword "…" [--keywords "长尾词1, 长尾词2"] [--featured-image <图片>] [--excerpt "摘要"] <文件或文件夹>…` | 建一个草稿（访客看不到），每个文件是一段 |
-| `puffergo pages seo <id或链接> [--slug …] [--seo-title "…"] [--seo-description "…"] [--focus-keyword "…"] [--keywords "…"] [--featured-image <图片>] [--customer-said "客户原话"]` | 不带参数是查看网址、SEO 标题、描述、关键词、特色图和 Rank Math 评分；带参数是修改 |
+| `puffergo pages get <id或链接> [路径]` | 把区块存到 `pages/<id>/block-<路径>.<后缀>`：正文是 `.md`、版式是 `.html`、组件是 `.json`，各另存一份 `.orig.*` 备份。不写路径就存整页所有能改的区块 |
+| `puffergo pages categories <类型> <check\|push>` | 校验 / 写入这个类型的分类树（见下面「分类」） |
+| `puffergo pages create --type <类型> --title "标题" --slug <网址> --seo-title "…" --seo-description "…" --focus-keyword "…" [--keywords "长尾词1, 长尾词2"] [--category "分类slug1, 分类slug2"] [--featured-image <图片>] [--excerpt "摘要"] <文件或文件夹>…` | 建一个草稿（访客看不到），每个文件是一段，按文件名排序 |
+| `puffergo pages seo <id或链接> [--slug …] [--seo-title "…"] [--seo-description "…"] [--focus-keyword "…"] [--keywords "…"] [--category "…"] [--featured-image <图片>] [--customer-said "客户原话"]` | 不带参数是查看网址、SEO 标题、描述、关键词、分类、特色图和 Rank Math 评分；带参数是修改 |
 | `puffergo pages preview <id或链接> <路径> <文件>` | 在整页里预览改过的这一块，不写入网站，随时可以用。只在改已发布页面之前用 |
 | `puffergo pages replace <id或链接> <路径> <文件> [--customer-said "客户原话"]` | 用文件替换这个区块。已发布的页面要带客户同意上线的原话 |
 | `puffergo pages publish <id或链接> --customer-said "客户原话"` | 发布草稿。只有客户明确说「发布」「上线」时才用 |
@@ -62,7 +74,10 @@ description: >-
 发给客户的链接（`editUrl`、`previewUrl`）照脚本输出原样给，不要把 `&` 写成 `&amp;`。客户要在打开链接的浏览器里登录过 WordPress 后台才能看。
 
 1. **问做什么**：客户没说清楚要做哪种内容，就把 `pages types` 里 `canCreate` 为 true 的类型用它们的 `label` 列给客户选（如 页面 / 文章 / 案例）。再问清这一页的目的、内容和素材（文字、图片、数据）。
-2. **写段落**：一段一个文件，放在 `pages/<英文短名>/` 里，按顺序命名 `01-hero.html`、`02-features.html`…（写法见下面「HTML 规则」）。客户给的图片复制到同一文件夹的 `images/` 里，HTML 里写相对路径 `images/xxx.jpg`，脚本会自动上传。
+2. **写段落**：一段一个文件，放在 `pages/<英文短名>/` 里，按顺序命名，后缀选对（写法见下面「写区块」）：
+   - 文章、案例：`01-intro.md`、`02-comparison.html`、`03-faq.json`、`04-body.md`…正文用 `.md`，中间要插对比表、CTA、FAQ 这类版式就插一个 `.html` 或 `.json`，正文接着用下一个 `.md`。
+   - 页面：`01-hero.html`、`02-features.html`…整页都是版式。
+   - 客户给的图片复制到同一文件夹的 `images/` 里，文件里写相对路径 `images/xxx.jpg`（Markdown 里是 `![图片说明](images/xxx.jpg)`），脚本会自动上传。
 3. **定好 SEO 信息**：建之前要有这几样，客户没给就问他，或者和他商量定下来：
    - **网址 `--slug`**：小写英文和数字，用 `-` 连接，简短、说清这一页是什么，如 `gate-valves-vietnam-water-plant`。
    - **SEO 标题 `--seo-title`**：搜索结果和分享卡片上的标题。要带网站名就自己写进去，脚本不会自动加。
@@ -71,11 +86,13 @@ description: >-
    - **核心关键词 `--focus-keyword`**：这一页最想被搜到的一个词，如 `gate valves`。
    - **长尾关键词 `--keywords`**（可选）：最多 5 个，用英文逗号隔开，如 `"water plant valves, vietnam valve supplier"`，不要和核心词重复。
    - **特色图 `--featured-image`**：文章、案例这类会显示在列表页和分享卡片上，问客户要一张；页面可以不要。
+   - **分类 `--category`**：文章、案例、解决方案这类要归到分类里（`pages types` 里这个类型的 `taxonomy.categories` 就是网站现有的分类，按树状列给客户选，多个用英文逗号隔开）。**页面不归分类**（`taxonomy` 是 null），别给它写。客户要的分类网站上还没有，先按下面「分类」建好再建草稿。
    - 核心关键词要出现在 SEO 标题、SEO 描述、网址、页面大标题（H1）和正文开头里。
-4. **建草稿**：`pages create --type <类型> --title "标题" --slug … --seo-title "…" --seo-description "…" --focus-keyword "…" [--keywords "…, …"] [--featured-image images/cover.jpg] pages/<短名>`。文章、案例这类可以加 `--excerpt` 写一句摘要。以下情况什么都不会写入网站，改好再运行：
-   - 报 `invalid_sections`：按 `errors` 里每条的 `file` 和 `message` 改文件。
+4. **建草稿**：`pages create --type <类型> --title "标题" --slug … --seo-title "…" --seo-description "…" --focus-keyword "…" [--keywords "…, …"] [--category "…"] [--featured-image images/cover.jpg] pages/<短名>`。文章、案例这类可以加 `--excerpt` 写一句摘要。以下情况什么都不会写入网站，改好再运行：
+   - 报 `invalid_blocks`：按 `errors` 里每条的 `file` 和 `message` 改文件。`prose_unsupported` 是正文里写了 Markdown 不支持的东西（`message` 带行号），要么改写，要么那一段改成 `.html` 版式区块。
+   - 报 `unknown_category`：`--category` 里有网站上没有的分类 slug（`message` 里写了是哪个）。**不会**帮你新建：要么换成 `pages types` 里已有的 slug，要么按下面「分类」先建好。报 `no_categories` 是这个类型不归分类（如页面），把 `--category` 去掉。
    - 报 `invalid_seo`：`slug_taken` 是网址被网站上别的内容占了（`message` 里写了是哪个），换一个；`keyword_repeated` 是长尾词和核心词重复了；`no_seo_plugin` 是网站没装 SEO 插件，请客户装好启用 Rank Math SEO（或 Yoast SEO）。
-5. **处理提醒**：结果里 `seo.checks` 列出核心关键词还缺在哪些地方（`where`：`seoTitle` / `seoDescription` / `slug` / `h1` / `intro`），能补的补上：段落里的按下一节改区块，SEO 标题和描述用 `pages seo` 改，草稿的网址也可以用 `pages seo` 改。`warnings` 有 `unsupported_claim` 的，是客户没说过的说法：在段落里的，按下一节「改已有页面的一块」把那几段改掉（草稿上改不用预览）；在 `--seo-title` / `--seo-description` 里的，用 `pages seo` 改掉。段落在页面上的路径就是它的顺序：`01-*.html` 是 `1`，`02-*.html` 是 `2`…
+5. **处理提醒**：结果里 `seo.checks` 列出核心关键词还缺在哪些地方（`where`：`seoTitle` / `seoDescription` / `slug` / `h1` / `intro`），能补的补上：段落里的按下一节改区块，SEO 标题和描述用 `pages seo` 改，草稿的网址也可以用 `pages seo` 改。`warnings` 有 `unsupported_claim` 的，是客户没说过的说法：在段落里的，按下一节「改已有页面的一块」把那几段改掉（草稿上改不用预览）；在 `--seo-title` / `--seo-description` 里的，用 `pages seo` 改掉。段落在页面上的路径就是它的顺序：第一个文件是 `1`，第二个是 `2`…（一个 `.md` 文件不管里面有多少段落，都只占一个号）。
 6. **给客户看**：把 `editUrl` 发给客户，说明这是草稿，请他看电脑和手机两种宽度（编辑页右上角可切换预览），可以直接在编辑页里改，也可以告诉你要改什么。满意了可以自己在后台点「发布」；他让你发布，就先 `pages get <id>` 看一眼当前内容，再 `pages publish <id> --customer-said "客户原话"`。「改」「推」「更新」不算让你发布。报 `post_locked` 请他先保存关掉编辑页，报 `conflict` 就重新 `pages get` 给他看一遍再发布。Rank Math 的 SEO 评分在客户打开编辑页时才算出来（编辑页顶部的 Rank Math 按钮），保存一次后 `pages seo` 里的 `score` 才有值。
 7. **之后再改**：一律走下一节「改已有页面的一块」，不要再 `create`：同一批文件再运行会报 `already_created`（带已建好的 `id`）。只有客户明确要再建一个单独的副本，才加 `--new`。客户可能已经在编辑页里改过，所以每次都先 `pages get` 拿最新的内容再改，不要用 `pages/<短名>/` 里的旧文件。
 
@@ -83,12 +100,14 @@ description: >-
 
 1. **找到页面**：客户给了链接就直接用；没给就 `pages find --search 词`（或加 `--type`）找，拿不准是哪一页就列出来问客户。
 2. **找到那一块**：`pages blocks <id或链接>`，按每块的 `text` 找客户说的那一块，拿不准就把几块的文字列出来问客户。
-   - `kind` 是 `static`（静态区块）和 `config`（配置型组件）的能在这里改。
-   - `other`（WordPress 自带区块）：告诉客户请他在 WordPress 编辑器里改。
+   - `kind` 是 `prose`（正文）、`static`（版式区块）、`config`（配置型组件）的能在这里改。
+   - `prose` 是一串连着的正文，`text` 是它开头的一段话。客户自己在编辑器里写的段落也算 `prose`，你可以改。
+   - `native`（视频、embed、别的插件的区块）：告诉客户请他在 WordPress 编辑器里改。
    - 报 `not_block_content`：整页都不是区块做的（经典编辑器或页面构建器），见下面的报错表。
-3. **取出整页，只改一块**：`pages get <id>`（不写路径）把整页能改的区块都存下来，`notSaved` 里是存不了的块的文字。配置型组件存成 `block-<路径>.json`：只改 `data`，写法见 `references/blocks/blocks.md`「配置型组件」。预览、替换用法和 `.html` 一样，把文件换成这个 `.json`。先把其他块都看一遍，改的这一块要和它们协调：沿用它们的颜色、字号、间距、按钮样式。然后只改要改的那个文件，只改客户要改的地方；其他文件只作参考，不要改，也不要替换。
-4. **已发布的页面先预览**：页面 `status` 是 `publish`（已上线）或 `future`（定时发布）的，替换后访客马上看到，所以先 `pages preview <id> <路径> pages/<id>/block-<路径>.html`。它打开的是这个页面本身，只有这一块换成了新的，线上页面不变。把 `previewUrl` 给客户看（要登录后台，7 天内有效；同一块再预览会覆盖上一次），客户可以来回改，预览多少次都行，线上页面一直不变。草稿不用预览，直接替换，让客户在编辑页里看。
-5. **替换**：`pages replace <id> <路径> pages/<id>/block-<路径>.html`，把 `editUrl` 发给客户看效果。已发布的页面，客户看完预览说可以（「可以」「换上去」「上线吧」），这句话就是同意，不用再问一遍，替换时加 `--customer-said "客户原话"`。只对这一次、这一页有效，不用开关任何东西。客户没表态就不要替换。
+3. **取出整页，只改一块**：`pages get <id>`（不写路径）把整页能改的区块都存下来，`notSaved` 里是存不了的块的文字。存下来的后缀就是这一块的类型：正文 `block-<路径>.md`（改 Markdown，写法见 `references/blocks/prose.md`）、版式 `block-<路径>.html`、配置型组件 `block-<路径>.json`（只改 `data`，写法见 `references/blocks/blocks.md`「配置型组件」）。三种的预览、替换命令写法完全一样，把文件名换掉就行。先把其他块都看一遍，改的这一块要和它们协调：沿用它们的颜色、字号、间距、按钮样式，正文沿用它们的语气和称呼。然后只改要改的那个文件，只改客户要改的地方；其他文件只作参考，不要改，也不要替换。
+   - **一次只改一块，改完重新 `pages blocks`**。客户可能同时在编辑器里动过内容，路径会变（比如他往正文中间插了个视频，本来一块的正文就变成两块）。不要拿上一次的路径接着改第二处。
+4. **已发布的页面先预览**：页面 `status` 是 `publish`（已上线）或 `future`（定时发布）的，替换后访客马上看到，所以先 `pages preview <id> <路径> pages/<id>/block-<路径>.<后缀>`。它打开的是这个页面本身，只有这一块换成了新的，线上页面不变。把 `previewUrl` 给客户看（要登录后台，7 天内有效；同一块再预览会覆盖上一次），客户可以来回改，预览多少次都行，线上页面一直不变。草稿不用预览，直接替换，让客户在编辑页里看。
+5. **替换**：`pages replace <id> <路径> pages/<id>/block-<路径>.<后缀>`，把 `editUrl` 发给客户看效果。已发布的页面，客户看完预览说可以（「可以」「换上去」「上线吧」），这句话就是同意，不用再问一遍，替换时加 `--customer-said "客户原话"`。只对这一次、这一页有效，不用开关任何东西。客户没表态就不要替换。
    - 客户要一次改很多已发布的页面（比如每篇文章的同一块），才用 `pages edit-live on --customer-said "客户原话"`，改完马上 `pages edit-live off`，中间报错也要记得关。这个开关打开期间所有已发布的页面和产品都能改。
    - 报错怎么办：
 
@@ -99,7 +118,10 @@ description: >-
      | `conflict` | 你取出之后页面被改过（客户可能在后台动过） | 你 | 重新 `pages get`，在新文件上把改动重做一遍 |
      | `slug_locked` | 已上线页面的网址不改，客户同意了也不改 | 客户 | 见下一节第 4 条 |
      | `not_block_content` | 这一页是用经典编辑器或 Elementor 等页面构建器做的，内容这里改不了 | 客户 | 把 `message` 转告客户，请他在原来的编辑器里改（`editUrl`）；SEO 标题、描述、关键词、特色图照常用 `pages seo` 改 |
-   - 客户后悔了：`get` 时原样存了一份 `pages/<id>/block-<路径>.orig.html`，用它再 `replace` 一次就恢复了。结果里 `revision` 为 true 的，客户也可以在编辑器的「修订」里自己恢复。
+     | `wrong_kind` | 拿错类型的文件去替换了（比如用 `.html` 替换一块正文） | 你 | 重新 `pages blocks` 看这一块的 `kind`，用对应后缀的文件 |
+     | `not_editable` | 这一块是 `native`（视频、embed、别的插件的区块） | 客户 | 请客户在 WordPress 编辑器里改 |
+     | `prose_unsupported` | 正文里写了 Markdown 不支持的东西，`message` 带行号 | 你 | 改写成 `prose.md` 允许的写法，或那一段改用 `.html` 版式区块 |
+   - 客户后悔了：`get` 时原样存了一份 `pages/<id>/block-<路径>.orig.<后缀>`，用它再 `replace` 一次就恢复了。结果里 `revision` 为 true 的，客户也可以在编辑器的「修订」里自己恢复。
 
 ## 改网址、SEO 标题、描述、关键词、特色图
 
@@ -107,13 +129,38 @@ description: >-
 2. 把要改的列成「现在 → 改成」给客户确认，再 `pages seo <id> --seo-title "…"`（只带要改的项；只改长尾词时核心词不变，反过来也一样）。规则和上面「定好 SEO 信息」一样。关键词缺在正文或大标题里的，按上一节改区块。
 3. SEO 没有预览，第 2 步客户确认的那句话就是同意。已发布的页面加 `--customer-said "客户原话"`。报 `conflict` 就重新 `pages seo <id>` 再改，其他报错看上一节的表。
 4. **已发布页面的网址不改**：搜索引擎收录的、别处链过来的都是这个网址，改了旧链接会失效。报 `slug_locked` 时（带了客户原话或开了 edit-live 也一样），把 `message` 转告客户：真要改，请他在 WordPress 后台自己改，并加上旧网址到新网址的跳转。标题、描述、关键词、特色图照常可以改。草稿的网址可以随便改。
+5. **有的网站把分类写在文章网址里**（如 `/blog/<分类>/<网址>/`）。这种站上改一篇已发布文章的分类，等于改它的网址，所以会报 `category_locked`，处理方式和上一条一样：转告客户，请他在后台改并加跳转。草稿随便改；案例、解决方案这些网址里不带分类的类型也随便改。
 
-## HTML 规则
+## 分类
 
-写或改 HTML 之前，先读 `references/blocks/static.md`（静态区块的写法），页面里各种区块是什么见 `references/blocks/blocks.md`。这里只补页面特有的两条：
+文章、案例、解决方案这类内容要归到分类里，页面不归（`pages types` 里 `taxonomy` 是 null）。分类是客户自己的架构，**你不要凭空建**：`--category` 只认网站上已有的 slug，写错会报 `unknown_category`。
 
+客户要建或整理分类（比如发来一张分类脑图），写工作目录里的 `<类型>-categories.json`（如 `post-categories.json`），给客户过目，确认后运行 `pages categories <类型> push`：
+
+```json
+{
+  "categories": [
+    { "name": "Industrial Valves", "slug": "industrial-valves", "description": "…",
+      "children": [{ "name": "Gate Valves", "slug": "gate-valves" }] }
+  ]
+}
+```
+
+- `name` 必填；`slug` 必填，小写英文、数字和连字符，全文件不重复；`description` 可选；`children` 是下一级。
+- 按 `slug` 对应网站上的分类：没有就新建，不会删除。已有的分类默认不改（结果里的 `leftAlone`），打开 `edit-live` 后才更新名称、描述和上级。
+- 建议客户不超过三级。
+- 这里**没有** `order`：这些分类按名称排，写了会报错。产品分类才有排序（那是 wordpress-bulk-product-upload 技能）。
+- 客户要看分类，就按树状列出来（上级在前，下级缩进）；分类数据在 `pages types` 里这个类型的 `taxonomy.categories` 里，每项的 `parent` 是上级的 slug。
+
+## 写区块
+
+动手之前先读对应的写法：正文 `references/blocks/prose.md`（Markdown），版式 `references/blocks/static.md`（Tailwind HTML），页面里各种区块是什么见 `references/blocks/blocks.md`。这里只补页面特有的三条：
+
+- **哪种类型用哪种写法**（按 `pages types` 里的 `layout`，这是硬规则）：
+  - `inTemplate`（文章、案例等）：网站模板已经有标题、特色图和导航。**正文一律 `.md`**，不要再写一个带标题的大 hero；只有对比表、规格卡、CTA、FAQ 这类 Markdown 表达不了的版式才用 `.html`（多用 `max-w-focus`，和正文栏对齐）。
+  - `fullWidth`（页面）：段落就是整页，全部用 `.html`，第一段通常是标题大图。
 - **链接**：网站上已发布页面的地址，用 `pages find --status publish` 查到的 `link`。
-- **类型的版式**：`pages types` 里 `layout` 是 `fullWidth` 的（页面），段落就是整页，第一段通常是标题大图。`inTemplate` 的（文章、案例等），网站模板已经有标题、特色图和导航，段落放在文章栏里：不要再写一个带标题的大 hero，多用 `max-w-focus`，以正文、图片、要点为主。
+- **别把正文写成 HTML**。大段文字放进 `.html` 区块，客户在编辑器里就改不动了，只能回头找你——这正是要避免的事。
 
 ## 内容规则
 

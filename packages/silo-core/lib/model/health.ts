@@ -85,7 +85,6 @@ export function healthCheck(ws: SiloWorkspace): HealthIssue[] {
   const overlay = keywordOverlay(ws);
 
   const graphNodeById = new Map(graph.nodes.map(n => [n.id, n]));
-  const contentLabel = (id: string): string => graphNodeById.get(id)?.label ?? id;
 
   // ---- 🔴 关键词自噬 (one issue per contested core term, all competitors bundled) ----
   const cannibalByTerm = new Map<string, Set<string>>();

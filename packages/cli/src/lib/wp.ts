@@ -8,7 +8,8 @@
 import { WpClient, type WpConnection } from '@puffergo/silo-core';
 import { nodeNetwork } from '../adapters/nodeNetwork';
 import { readWorkspace } from '../adapters/fileStore';
-import { resolveCredential, GLOBAL_CREDENTIALS } from '../adapters/credentials';
+import { resolveCredential } from '../adapters/credentials';
+import { NotLoggedInError } from './site';
 
 export interface Connected {
   client: WpClient;
@@ -29,12 +30,9 @@ export async function connect(dir: string, opts: ConnectOptions = {}): Promise<C
   const siteUrl = ws?.profile?.url;
 
   const resolved = await resolveCredential(dir, siteUrl, opts.configPath);
-  if (!resolved) {
-    throw new Error(
-      `未找到凭据。请在 ${GLOBAL_CREDENTIALS} 配置站点账号（或用 --config 指定文件）。` +
-        (siteUrl ? ` 站点：${siteUrl}` : ''),
-    );
-  }
+  // The same error the products and pages groups raise, so `not_logged_in` means one thing everywhere and the
+  // Skill's answer is always the same: run `puffergo login <site>`.
+  if (!resolved) throw new NotLoggedInError(siteUrl ?? '');
   const { config } = resolved;
   const baseConn: WpConnection = {
     siteUrl: config.siteUrl,

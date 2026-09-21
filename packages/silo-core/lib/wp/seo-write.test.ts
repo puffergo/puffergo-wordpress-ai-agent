@@ -31,7 +31,7 @@ const seo = {
 const NO_ROUTE = { status: 404, json: { code: 'rest_no_route', message: 'No route' } };
 
 describe('SEO write (what a post / term gets)', () => {
-  it('through the PufferGo plugin: trimmed title, description, 1 core + up to 4 long-tail keywords', async () => {
+  it('through the PufferGo plugin: trimmed title, description, 1 core + up to 5 long-tail keywords', async () => {
     const { calls, client } = site();
     await client.writeSeo(12, seo);
     expect(calls).toHaveLength(1);
@@ -41,7 +41,7 @@ describe('SEO write (what a post / term gets)', () => {
       id: 12,
       title: 'Gate Valves',
       description: 'Valves for water plants.',
-      keywords: ['gate valve', 'a', 'b', 'c', 'd'],
+      keywords: ['gate valve', 'a', 'b', 'c', 'd', 'e'],
     });
   });
 
@@ -55,7 +55,7 @@ describe('SEO write (what a post / term gets)', () => {
       meta: {
         rank_math_title: 'Gate Valves',
         rank_math_description: 'Valves for water plants.',
-        rank_math_focus_keyword: 'gate valve, a, b, c, d',
+        rank_math_focus_keyword: 'gate valve, a, b, c, d, e',
       },
     });
   });
@@ -90,10 +90,10 @@ describe('SEO write (what a post / term gets)', () => {
 });
 
 describe('SEO limits', () => {
-  it('title 30–60, description 120–160, 1 core + 4 long-tail keywords', () => {
+  it('title 30–60, description 120–160, 1 core + 5 long-tail keywords', () => {
     expect([limits.TITLE_MIN, limits.TITLE_MAX, limits.DESC_MIN, limits.DESC_MAX]).toEqual([30, 60, 120, 160]);
-    expect([limits.CORE_KEYWORDS_MAX, limits.LONGTAIL_KEYWORDS_MAX, limits.FOCUS_KEYWORDS_MAX]).toEqual([1, 4, 5]);
-    expect(focusKeywordString(seo)).toBe('gate valve, a, b, c, d');
+    expect([limits.CORE_KEYWORDS_MAX, limits.LONGTAIL_KEYWORDS_MAX, limits.FOCUS_KEYWORDS_MAX]).toEqual([1, 5, 6]);
+    expect(focusKeywordString(seo)).toBe('gate valve, a, b, c, d, e');
   });
 
   it("adopts the limits the site's PufferGo plugin publishes", async () => {
@@ -105,7 +105,7 @@ describe('SEO limits', () => {
             titleRecommended: [30, 60],
             descriptionRecommended: [120, 160],
             coreKeywordsMax: 1,
-            longTailKeywordsMax: 5,
+            longTailKeywordsMax: 3,
           },
         },
       },
@@ -113,14 +113,14 @@ describe('SEO limits', () => {
     const published = await client.fetchSeoLimits();
     limits.applySeoLimits(published);
     try {
-      expect(limits.FOCUS_KEYWORDS_MAX).toBe(6);
-      expect(focusKeywordString(seo)).toBe('gate valve, a, b, c, d, e');
+      expect(limits.FOCUS_KEYWORDS_MAX).toBe(4);
+      expect(focusKeywordString(seo)).toBe('gate valve, a, b, c');
     } finally {
       limits.applySeoLimits({
         titleRecommended: [30, 60],
         descriptionRecommended: [120, 160],
         coreKeywordsMax: 1,
-        longTailKeywordsMax: 4,
+        longTailKeywordsMax: 5,
       });
     }
     expect(await site({ '/puffergo/v1/seo-limits': NO_ROUTE }).client.fetchSeoLimits()).toBeNull();

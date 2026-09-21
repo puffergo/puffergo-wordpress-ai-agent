@@ -8,10 +8,11 @@ import { AgentHttpError, type AgentClient } from './agentClient';
 import type { Components } from './configData';
 
 /** The product-file shape this CLI understands. A newer plugin needs a newer Skill/CLI. */
-export const SUPPORTED_SCHEMA_VERSION = 5;
+export const SUPPORTED_SCHEMA_VERSION = 6;
 /** An older plugin would misread what this CLI sends (`seo` came in version 3; a component's data as its own
- *  configData in 5). */
-export const MIN_SCHEMA_VERSION = 5;
+ *  configData in 5; body text as a `prose` block, and `blocks` / `block` in place of `sections` / `html` / `data`,
+ *  in 6). */
+export const MIN_SCHEMA_VERSION = 6;
 
 export interface TradeField {
   /** Where the value sits in a product file: `price`, `moq`, `leadTime`, or `trade.<key>`. */

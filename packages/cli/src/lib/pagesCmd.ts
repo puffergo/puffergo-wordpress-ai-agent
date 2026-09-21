@@ -1,13 +1,14 @@
 /**
- * `puffergo pages …` — write Tailwind HTML sections into pages, posts and other content as PufferGo blocks,
- * through the plugin's generic content abilities (list-post-types / find-posts / get-blocks / preview-blocks /
- * create-post / replace-block / update-seo). The plugin checks the width standard and compiles each section; this side
- * reads the section files, uploads the local images they reference, and keeps each post's baseModified so a
- * replace never overwrites an edit made in wp-admin in the meantime.
+ * `puffergo pages …` — write a post's blocks (body text as Markdown, Tailwind sections as HTML, components as
+ * data) into pages, posts and other content, through the plugin's generic content abilities (list-post-types /
+ * find-posts / get-blocks / preview-blocks / create-post / replace-block / update-seo). The plugin turns Markdown
+ * into core WordPress blocks and compiles each section; this side reads the block files (see contentBlocks.ts),
+ * uploads the local images they reference, and keeps each post's baseModified so a replace never overwrites an
+ * edit made in wp-admin in the meantime.
  */
 
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 import { AgentHttpError, type AgentClient, type SeoInput } from './agentClient';
 import { claimWarning } from './claims';
@@ -23,7 +24,6 @@ import {
   isLive,
   liveLockedMessage,
   customerSaid,
-  CodedError,
   UsageError,
   type CmdCtx,
   type Out,
@@ -32,7 +32,9 @@ import { readUploadsCache, writeUploadsCache } from './productFiles';
 import { siteState } from './workdirState';
 import { editLiveAllowed } from './site';
 import { resolveUpload } from './uploadImage';
-import { MissingImageError, uploadHtmlImages } from './htmlImages';
+import { blockFiles, blockWarnings, blocksFromFiles, withFileNames, FileError } from './contentBlocks';
+import { readCategoriesFile, syncCategories, categoriesFileFor } from './categories';
+import type { ContentBlock } from './productTypes';
 
 interface PostSummary {
   id: number;
@@ -42,19 +44,24 @@ interface PostSummary {
   baseModified: string;
   link: string;
   editUrl: string;
+  /** The category slugs it is filed under; null for a type filed nowhere (a page). */
+  categories: string[] | null;
 }
 
 interface BlockInfo {
   path: string;
   name: string;
-  kind: 'static' | 'config' | 'other';
+  kind: 'prose' | 'static' | 'config' | 'native';
   scopeId?: string;
   text?: string;
   innerBlocks?: BlockInfo[];
 }
 
-/** Editable here: a static block by its HTML, a config component by its data. */
-const editable = (b: BlockInfo) => b.kind === 'static' || b.kind === 'config';
+/** Editable here: body text as Markdown, a static block as HTML, a config component as its data. */
+const editable = (b: BlockInfo) => b.kind === 'prose' || b.kind === 'static' || b.kind === 'config';
+
+/** The file `get` saves a block in, and `replace` reads it back from: one suffix per kind. */
+const SUFFIX_OF_KIND = { prose: '.md', static: '.html', config: '.json' } as const;
 
 /** What `get` saves for a config component: `schema` says what each field is; only `data` is sent back. */
 interface ComponentFile {
@@ -116,9 +123,6 @@ async function componentInput(
 /** Every command runs through the shared error mapping, with this module's own `client`. */
 const run = (ctx: CmdCtx, body: Parameters<typeof runWith>[2]): Promise<Out> => runWith(client, ctx, body);
 
-/** A section file or image the command can't use; the code tells the AI what to fix. */
-class FileError extends CodedError {}
-
 // ---------------------------------------------------------------------------
 // What the commands remember per site: each post's baseModified (between `get`/`blocks` and `replace`),
 // and which set of section files already became which post (so `create` twice doesn't make a duplicate).
@@ -136,80 +140,23 @@ async function rememberBase(dir: string, siteUrl: string, post: { id: number; ba
 }
 
 // ---------------------------------------------------------------------------
-// Section files + their local images
+// Block files → blocks (contentBlocks.ts), with this module's component reader
 // ---------------------------------------------------------------------------
 
-/** Files and folders → .html files in order; a folder contributes its .html files sorted by name (01-hero.html…),
- *  leaving out the `.orig.html` copies `get` keeps. */
-export async function sectionFiles(dir: string, args: string[]): Promise<string[]> {
-  if (!args.length) throw new UsageError('Give the section .html files, or a folder of them.');
-  const out: string[] = [];
-  for (const a of args) {
-    const p = resolve(dir, a);
-    if (!existsSync(p)) throw new FileError('file_not_found', `Not found: ${a}`);
-    if ((await stat(p)).isDirectory()) {
-      const names = (await readdir(p))
-        .filter(n => n.toLowerCase().endsWith('.html') && !n.endsWith('.orig.html'))
-        .sort();
-      if (!names.length) throw new FileError('file_not_found', `No .html files in ${a}`);
-      out.push(...names.map(n => join(p, n)));
-    } else out.push(p);
-  }
-  return out;
-}
-
-/** Upload each local image a section references (once per file, reusing earlier uploads) and point it at the site. */
-async function withUploadedImages(
+/** The blocks of these files, a `.json` one read through componentInput (schema, images, claims). */
+async function blocksOf(
   c: AgentClient,
   ctx: CmdCtx,
   files: string[],
-): Promise<{ sections: string[]; uploaded: string[] }> {
-  const cache = await readUploadsCache(ctx.dir, c.siteUrl);
-  const uploaded: string[] = [];
-  const sections: string[] = [];
-  try {
-    for (const file of files) {
-      try {
-        const up = await uploadHtmlImages(c, cache, await readFile(file, 'utf8'), dirname(file));
-        uploaded.push(...up.uploaded.map(abs => relative(ctx.dir, abs)));
-        sections.push(up.html);
-      } catch (e) {
-        if (!(e instanceof MissingImageError)) throw e;
-        throw new FileError(
-          'image_not_found',
-          `${relative(ctx.dir, file)} uses the image "${e.ref}", which isn't there. Paths are relative to the .html file.`,
-        );
-      }
-    }
-  } finally {
-    await writeUploadsCache(ctx.dir, c.siteUrl, cache);
-  }
-  return { sections, uploaded };
-}
-
-/** Marketing words the customer likely never said, per file (the text a visitor reads, tags and attributes aside).
- *  A block taken with `get` is compared with its `.orig.html` copy, so only words the edit added are flagged. */
-export async function sectionWarnings(dir: string, files: string[], sections: string[]): Promise<unknown[]> {
-  const text = (html: string) => html.replace(/<[^>]*>/g, ' ');
-  const out: unknown[] = [];
-  for (const [i, html] of sections.entries()) {
-    const orig = files[i].replace(/\.html$/i, '.orig.html');
-    const before = existsSync(orig) ? text(await readFile(orig, 'utf8')) : '';
-    const w = claimWarning(relative(dir, files[i]), text(html), before);
-    if (w) out.push(w);
-  }
-  return out;
-}
-
-/** Name section errors by file, so the AI knows which file to fix. */
-function withFileNames(out: Out, files: string[], dir: string): Out {
-  if (!Array.isArray(out.errors)) return out;
-  return {
-    ...out,
-    errors: out.errors.map((e: { section?: number }) =>
-      e.section ? { file: relative(dir, files[e.section - 1] ?? ''), ...e } : e,
-    ),
-  };
+): Promise<{ blocks: ContentBlock[]; uploaded: string[]; warnings: unknown[] }> {
+  const componentWarnings: unknown[] = [];
+  const { blocks, uploaded } = await blocksFromFiles(c, ctx, files, async file => {
+    const { data, uploaded: up, warnings } = await componentInput(c, ctx, file);
+    componentWarnings.push(...warnings);
+    const component = JSON.parse(await readFile(file, 'utf8')).component as string | undefined;
+    return { component, data, uploaded: up };
+  });
+  return { blocks, uploaded, warnings: [...(await blockWarnings(ctx.dir, files, blocks)), ...componentWarnings] };
 }
 
 // ---------------------------------------------------------------------------
@@ -285,8 +232,11 @@ function flatten(blocks: BlockInfo[]): BlockInfo[] {
   return blocks.flatMap(b => [b, ...flatten(b.innerBlocks ?? [])]);
 }
 
-/** Saves a block's HTML to `pages/<id>/block-<path>.html` for the AI to edit (plus an untouched `.orig.html`), then
- *  `replace` sends it back. Without a path, every static block of the page is saved, so the AI can match the rest. */
+/**
+ * Saves a block to `pages/<id>/block-<path>.<suffix>` for the AI to edit (plus an untouched `.orig.<suffix>`),
+ * then `replace` sends it back: body text as `.md`, a section as `.html`, a component as `.json`. Without a
+ * path, every editable block of the page is saved, so the AI can match the rest.
+ */
 export function cmdGet(ctx: CmdCtx): Promise<Out> {
   return run(ctx, async c => {
     const id = await resolvePostId(c, ctx.positional[0]);
@@ -306,49 +256,62 @@ export function cmdGet(ctx: CmdCtx): Promise<Out> {
     for (const path of paths) {
       const res = await c.getBlocks<
         PostSummary & {
-          block: BlockInfo & { html: string; component?: string; guide?: string; schema?: unknown; data?: unknown };
+          block: BlockInfo & {
+            html?: string;
+            markdown?: string;
+            component?: string;
+            guide?: string;
+            schema?: unknown;
+            data?: unknown;
+          };
         }
       >(id, path);
       base = res;
       const { block } = res;
-      if (block.kind === 'config' && block.data) {
-        // A config component: its data, how to fill it and the schema saying what each field is.
-        const { component, guide, schema, data } = block;
-        const json = JSON.stringify({ component, guide, schema, data }, null, 2) + '\n';
-        const file = join('pages', String(id), `block-${path}.json`);
-        await mkdir(join(ctx.dir, 'pages', String(id)), { recursive: true });
-        await writeFile(join(ctx.dir, file), json, 'utf8');
-        await writeFile(join(ctx.dir, 'pages', String(id), `block-${path}.orig.json`), json, 'utf8');
-        saved.push({ path, file, text: block.text });
-        continue;
-      }
-      if (block.kind !== 'static') {
+      // What goes in the file, by kind: the body's Markdown, the section's HTML, or the component's data
+      // together with how to fill it and the schema saying what each field is.
+      const content =
+        block.kind === 'prose'
+          ? (block.markdown ?? '')
+          : block.kind === 'static'
+            ? (block.html ?? '')
+            : block.data
+              ? JSON.stringify(
+                  { component: block.component, guide: block.guide, schema: block.schema, data: block.data },
+                  null,
+                  2,
+                ) + '\n'
+              : null;
+      if (content === null) {
         if (!want) continue; // Reading the whole page: listed in notSaved.
         await rememberBase(ctx.dir, c.siteUrl, res);
         return {
           ok: false,
-          code: 'not_static',
+          code: 'not_editable',
           fix: 'user',
           message:
             block.kind === 'config'
               ? 'This component has no data to edit here; the customer edits it in the WordPress editor.'
-              : 'Only PufferGo Tailwind blocks can be edited here.',
+              : 'Only body text, PufferGo Tailwind blocks and components can be edited here.',
           block: { path: block.path, name: block.name, text: block.text },
         };
       }
-      const file = join('pages', String(id), `block-${path}.html`);
+      const suffix = SUFFIX_OF_KIND[block.kind as keyof typeof SUFFIX_OF_KIND];
+      const file = join('pages', String(id), `block-${path}${suffix}`);
       await mkdir(join(ctx.dir, 'pages', String(id)), { recursive: true });
-      await writeFile(join(ctx.dir, file), block.html, 'utf8');
+      // Ends with a newline, as an editor would leave it; the trailing one is dropped again when it is sent.
+      const text = content.endsWith('\n') ? content : content + '\n';
+      await writeFile(join(ctx.dir, file), text, 'utf8');
       // The block as it was on the site, to put back with `replace` if the customer changes their mind.
-      await writeFile(join(ctx.dir, 'pages', String(id), `block-${path}.orig.html`), block.html, 'utf8');
+      await writeFile(join(ctx.dir, 'pages', String(id), `block-${path}.orig${suffix}`), text, 'utf8');
       saved.push({ path, file, text: block.text });
     }
     if (!base)
       return {
         ok: false,
-        code: 'no_static_blocks',
+        code: 'no_editable_blocks',
         fix: 'user',
-        message: 'This page has no PufferGo Tailwind blocks or components to edit here.',
+        message: 'This page has no body text, PufferGo Tailwind blocks or components to edit here.',
       };
     await rememberBase(ctx.dir, c.siteUrl, base);
     const head = { ok: true, id, title: base.title, status: base.status };
@@ -357,7 +320,7 @@ export function cmdGet(ctx: CmdCtx): Promise<Out> {
         ...head,
         path: want,
         file: saved[0].file,
-        original: saved[0].file.replace(/\.(html|json)$/, '.orig.$1'),
+        original: saved[0].file.replace(/\.(md|html|json)$/, '.orig.$1'),
         text: saved[0].text,
       };
     }
@@ -374,52 +337,25 @@ const IN_PAGE_NOTE =
   'Opened in the browser: the whole page, with this block changed; the live page is unchanged. The customer must be logged in to wp-admin to see it; the link works for 7 days, until the block is previewed again or replaced.';
 
 /**
- * `preview <files|folder…>`: new sections on their own page in wp-admin.
+ * `preview <files|folder…>`: new blocks on their own page in wp-admin.
  * `preview <id|link> <path> <file>`: the edited block in place on the post's own page, every other block as it is now.
  */
 export function cmdPreview(ctx: CmdCtx): Promise<Out> {
   return run(ctx, async c => {
     const [target, path, fileArg, ...rest] = ctx.positional;
     const inPage = !!fileArg && !rest.length && BLOCK_PATH.test(path ?? '');
-    if (inPage && fileArg.toLowerCase().endsWith('.json')) {
-      const file = resolve(ctx.dir, fileArg);
-      const { data, uploaded, warnings } = await componentInput(c, ctx, file);
-      try {
-        const res = await c.previewBlocks<{ previewUrl: string }>([], undefined, {
-          id: await resolvePostId(c, target),
-          path: path!,
-          data,
-        });
-        openBrowser(res.previewUrl);
-        return {
-          ok: true,
-          previewUrl: res.previewUrl,
-          sections: [relative(ctx.dir, file)],
-          uploaded,
-          warnings,
-          note: IN_PAGE_NOTE,
-        };
-      } catch (e) {
-        if (e instanceof AgentHttpError) return withFileNames(abilityError(e), [file], ctx.dir);
-        throw e;
-      }
-    }
-    const files = await sectionFiles(ctx.dir, inPage ? [fileArg] : ctx.positional);
+    const files = await blockFiles(ctx.dir, inPage ? [fileArg] : ctx.positional);
     const at = inPage ? { id: await resolvePostId(c, target), path: path! } : undefined;
-    const { sections, uploaded } = await withUploadedImages(c, ctx, files);
+    const { blocks, uploaded, warnings } = await blocksOf(c, ctx, files);
     try {
-      const res = await c.previewBlocks<{ previewUrl: string; expiresIn: number }>(
-        sections,
-        ctx.flags.get('title'),
-        at,
-      );
+      const res = await c.previewBlocks<{ previewUrl: string; expiresIn: number }>(blocks, ctx.flags.get('title'), at);
       openBrowser(res.previewUrl);
       return {
         ok: true,
         previewUrl: res.previewUrl,
-        sections: files.map(f => relative(ctx.dir, f)),
+        blocks: files.map(f => relative(ctx.dir, f)),
         uploaded,
-        warnings: await sectionWarnings(ctx.dir, files, sections),
+        warnings,
         note: at
           ? IN_PAGE_NOTE
           : 'Opened in the browser. The customer must be logged in to wp-admin to see it; the link works for 7 days.',
@@ -452,7 +388,7 @@ export function cmdCreate(ctx: CmdCtx): Promise<Out> {
         message: `Give ${missing.join(', ')}: every new page gets its address (slug), the SEO title and description search results and shared links show, and the core keyword it should rank for (long-tail ones with --keywords "a, b"). Ask the customer, or agree them with the customer, then run create again.`,
       };
     }
-    const files = await sectionFiles(ctx.dir, ctx.positional);
+    const files = await blockFiles(ctx.dir, ctx.positional);
     const key = files.map(f => relative(ctx.dir, f)).join('|');
     const earlier = (await created.read(ctx.dir, c.siteUrl))[key];
     if (earlier && ctx.flags.get('new') !== 'true') {
@@ -464,7 +400,8 @@ export function cmdCreate(ctx: CmdCtx): Promise<Out> {
         message: `These files were already made into post ${earlier}. To change it, edit its blocks (\`pages blocks ${earlier}\`, then get / replace). Only if the customer wants one more separate copy, run create again with --new.`,
       };
     }
-    const { sections, uploaded } = await withUploadedImages(c, ctx, files);
+    const { blocks, uploaded, warnings } = await blocksOf(c, ctx, files);
+    const categories = categoryFlag(ctx);
     const featured = await featuredImage(c, ctx);
     if (featured?.uploaded) uploaded.push(featured.uploaded);
     try {
@@ -472,10 +409,11 @@ export function cmdCreate(ctx: CmdCtx): Promise<Out> {
       const post = await c.createPost<PostSummary & { blocks: number; seo: unknown }>({
         type,
         title,
-        sections,
+        blocks,
         ...(excerpt ? { excerpt } : {}),
         ...(seoInput(seo) as SeoInput),
         ...(featured ? { featuredImage: featured.id } : {}),
+        ...(categories ? { categories } : {}),
       });
       await rememberBase(ctx.dir, c.siteUrl, post);
       await created.remember(ctx.dir, c.siteUrl, key, post.id);
@@ -488,8 +426,9 @@ export function cmdCreate(ctx: CmdCtx): Promise<Out> {
         previewUrl: post.link,
         editUrl: post.editUrl,
         seo: post.seo,
+        categories: post.categories,
         uploaded,
-        warnings: [...(await sectionWarnings(ctx.dir, files, sections)), ...seoWarnings(seo)],
+        warnings: [...warnings, ...seoWarnings(seo)],
       };
     } catch (e) {
       if (e instanceof AgentHttpError) return withFileNames(abilityError(e), files, ctx.dir);
@@ -522,20 +461,13 @@ export function cmdReplace(ctx: CmdCtx): Promise<Out> {
         message: liveLockedMessage('page', 'pages'),
       };
     }
-    const component = fileArg.toLowerCase().endsWith('.json');
-    const files = component ? [resolve(ctx.dir, fileArg)] : await sectionFiles(ctx.dir, [fileArg]);
-    const { input, uploaded, warnings } = component
-      ? await componentInput(c, ctx, files[0]).then(r => ({ ...r, input: { data: r.data } }))
-      : await withUploadedImages(c, ctx, files).then(async r => ({
-          input: { html: r.sections[0] },
-          uploaded: r.uploaded,
-          warnings: await sectionWarnings(ctx.dir, files, r.sections),
-        }));
+    const files = await blockFiles(ctx.dir, [fileArg]);
+    const { blocks, uploaded, warnings } = await blocksOf(c, ctx, files);
     try {
       const updated = await c.replaceBlock<PostSummary & { revision: boolean }>({
         id,
         path,
-        ...input,
+        block: blocks[0],
         baseModified: base,
       });
       await rememberBase(ctx.dir, c.siteUrl, updated);
@@ -599,6 +531,81 @@ function seoFlags(ctx: CmdCtx): SeoFields {
     if (v && v !== 'true') out[k] = v;
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Categories: the one taxonomy a type is filed under (a page is filed nowhere)
+// ---------------------------------------------------------------------------
+
+interface Taxonomy {
+  slug: string;
+  label: string;
+  restBase: string;
+  categories: { name: string; slug: string; parent: string }[];
+}
+
+/** `--category "a, b"`: the slugs, or undefined when the flag is absent (leaving the post's own filing alone). */
+function categoryFlag(ctx: CmdCtx): string[] | undefined {
+  const raw = ctx.flags.get('category');
+  if (!raw || raw === 'true') return undefined;
+  return raw
+    .split(',')
+    .map(t => t.trim())
+    .filter(Boolean);
+}
+
+/** The taxonomy a type is filed under, as `list-post-types` gives it; null when it is filed nowhere. */
+async function taxonomyOf(c: AgentClient, type: string): Promise<Taxonomy | null> {
+  const { items } = await c.postTypes<{ items: { type: string; taxonomy: Taxonomy | null }[] }>();
+  const found = items.find(i => i.type === type);
+  if (!found) throw new UsageError(`No content type "${type}" on this site. Run \`puffergo pages types\` to see them.`);
+  return found.taxonomy;
+}
+
+/**
+ * `pages categories <type> check | push` — the type's category tree, from `<type>-categories.json`, written the
+ * same way and through the same sync as the product one (see categories.ts). Its slugs are what `create` and
+ * `seo` file a post under, so this runs first and the customer looks the tree over before anything is filed.
+ */
+export function cmdPageCategories(ctx: CmdCtx): Promise<Out> {
+  return run(ctx, async c => {
+    const [type, sub] = ctx.positional;
+    if (!type || (sub !== 'check' && sub !== 'push'))
+      throw new UsageError('usage: puffergo pages categories <type> <check | push>');
+    const tax = await taxonomyOf(c, type);
+    if (!tax)
+      return {
+        ok: false,
+        code: 'no_categories',
+        fix: 'ai',
+        message: `Content of type "${type}" is not filed under categories on this site, so it has no tree to write. Pages are filed nowhere; blog posts, case studies and solutions are.`,
+      };
+    const file = categoriesFileFor(type);
+    const tree = await readCategoriesFile(ctx.dir, file);
+    if (tree === null)
+      return {
+        ok: false,
+        code: 'no_file',
+        fix: 'ai',
+        message: `No ${file} in the work folder. Write the customer's ${tax.label} tree there as { "categories": [ { "name": "…", "slug": "…", "children": [ … ] } ] }, show it to them, then run this again.`,
+      };
+    try {
+      return {
+        taxonomy: tax.slug,
+        ...(await syncCategories(c, {
+          tree,
+          restBase: tax.restBase,
+          file,
+          push: sub === 'push',
+          editLive: await editLiveAllowed(ctx.dir, c.siteUrl),
+          editLiveHint: 'pages edit-live on --customer-said "…"',
+        })),
+      };
+    } catch (e) {
+      if (e instanceof SyntaxError) return { ok: false, code: 'invalid_json', message: `${file}: ${e.message}` };
+      throw e;
+    }
+  });
 }
 
 /** Marketing words in the SEO title / description the customer likely never said (compared with the old text, if any). */
@@ -666,11 +673,20 @@ export function cmdSeo(ctx: CmdCtx): Promise<Out> {
   return run(ctx, async c => {
     const id = await resolvePostId(c, ctx.positional[0]);
     const seo = seoFlags(ctx);
+    const categories = categoryFlag(ctx);
     const wantsImage = !!ctx.flags.get('featured-image');
-    if (!Object.keys(seo).length && !wantsImage) {
+    if (!Object.keys(seo).length && !wantsImage && !categories) {
       const post = await c.getBlocks<PostSummary & { seo: PostSeo }>(id);
       await rememberBase(ctx.dir, c.siteUrl, post);
-      return { ok: true, id, title: post.title, status: post.status, link: post.link, seo: post.seo };
+      return {
+        ok: true,
+        id,
+        title: post.title,
+        status: post.status,
+        link: post.link,
+        seo: post.seo,
+        categories: post.categories,
+      };
     }
 
     const base = await baseOf(ctx.dir, c.siteUrl, id);
@@ -707,6 +723,7 @@ export function cmdSeo(ctx: CmdCtx): Promise<Out> {
         baseModified: base,
         ...seoInput(seo),
         ...(featured ? { featuredImage: featured.id } : {}),
+        ...(categories ? { categories } : {}),
       });
       await rememberBase(ctx.dir, c.siteUrl, updated);
       const before: SeoFields = {
@@ -720,6 +737,7 @@ export function cmdSeo(ctx: CmdCtx): Promise<Out> {
         link: updated.link,
         editUrl: updated.editUrl,
         seo: updated.seo,
+        categories: updated.categories,
         before: post.seo,
         ...(featured?.uploaded ? { uploaded: [featured.uploaded] } : {}),
         warnings: seoWarnings(seo, before),

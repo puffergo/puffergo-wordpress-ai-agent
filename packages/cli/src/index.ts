@@ -51,7 +51,7 @@ import {
   cmdCategories,
   cmdImages,
 } from './lib/productsCmd';
-import { cmdEditLive } from './lib/siteCmd';
+import { cmdEditLive, siteErrorOutput } from './lib/siteCmd';
 import { cmdLogin, cmdLoginStatus, cmdLoginWait } from './lib/loginCmd';
 import {
   cmdTypes,
@@ -63,6 +63,7 @@ import {
   cmdReplace,
   cmdSeo,
   cmdPublish as cmdPagesPublish,
+  cmdPageCategories,
 } from './lib/pagesCmd';
 
 // ---- tiny arg parsing -------------------------------------------------------
@@ -90,14 +91,19 @@ const configPath = flags.get('config') ?? process.env.PUFFERGO_CONFIG;
 const log = (s = ''): void => {
   process.stdout.write(s + '\n');
 };
-const die = (s: string): never => {
-  process.stderr.write(`✖ ${s}\n`);
+/**
+ * Fail with a code the AI can branch on, in the same `{ok:false, code, message}` shape the products and pages
+ * groups print. The silo commands print human text when they succeed (the Skill reads it out to the customer);
+ * only failures are structured, because those are what the AI has to react to.
+ */
+const die = (code: string, message: string): never => {
+  emit({ ok: false, code, message });
   process.exit(1);
 };
 
 async function loadWs(): Promise<SiloWorkspace> {
   const ws = await readWorkspace(dir);
-  if (!ws) die(`未找到工作区（先运行 silo init）：${dir}`);
+  if (!ws) die('no_workspace', `未找到工作区（先运行 silo init）：${dir}`);
   applySeoLimits(ws!.seoLimits); // the site's SEO limits from the last pull (push caps keywords by them)
   return ws!;
 }
@@ -118,10 +124,10 @@ function printHealth(issues: HealthIssue[]): void {
 async function cmdInit(): Promise<void> {
   const name = flags.get('name');
   const url = flags.get('url');
-  if (!name || !url) die('用法：silo init --name "站点名" --url "https://example.com" [--tagline "定位"]');
+  if (!name || !url) die('usage', '用法：silo init --name "站点名" --url "https://example.com" [--tagline "定位"]');
   const existing = await readWorkspace(dir);
   if (existing && flags.get('force') !== 'true') {
-    die('工作区已存在（加 --force 覆盖）');
+    die('workspace_exists', '工作区已存在（加 --force 覆盖）');
   }
   const ws = emptyWorkspace({ name: name!, url: url!, tagline: flags.get('tagline') });
   await writeWorkspace(dir, ws);
@@ -130,21 +136,21 @@ async function cmdInit(): Promise<void> {
 
 async function cmdPlan(): Promise<void> {
   const file = positional[0];
-  if (!file) die('用法：silo plan <plan.json>');
+  if (!file) die('usage', '用法：silo plan <plan.json>');
   let raw: string;
   try {
     raw = await readFile(file!, 'utf8');
   } catch {
-    die(`未找到 plan 文件：${file}`);
+    die('file_not_found', `未找到 plan 文件：${file}`);
   }
   let plan: Plan;
   try {
     plan = JSON.parse(raw!) as Plan;
   } catch (e) {
-    die(`plan 文件不是合法 JSON：${e instanceof Error ? e.message : String(e)}`);
+    die('invalid_json', `plan 文件不是合法 JSON：${e instanceof Error ? e.message : String(e)}`);
   }
-  let ws = (await readWorkspace(dir)) ?? (plan!.profile ? emptyWorkspace(plan!.profile) : null);
-  if (!ws) die('无工作区且 plan 未含 profile：先 silo init 或在 plan 里加 profile');
+  const ws = (await readWorkspace(dir)) ?? (plan!.profile ? emptyWorkspace(plan!.profile) : null);
+  if (!ws) die('no_profile', '无工作区且 plan 未含 profile：先 silo init 或在 plan 里加 profile');
 
   const res = applyPlan(ws!, plan!);
   await writeWorkspace(dir, res.ws);
@@ -176,7 +182,8 @@ async function cmdPush(): Promise<void> {
   let targets: string[];
   if (positional.length) {
     const m = matchTargets(positional, ws, bodies, dir);
-    if (m.unknown.length) die(`找不到这些笔记：${m.unknown.join('、')}（写笔记文件名、slug 或 WordPress 文章 id）`);
+    if (m.unknown.length)
+      die('note_not_found', `找不到这些笔记：${m.unknown.join('、')}（写笔记文件名、slug 或 WordPress 文章 id）`);
     // A named note that hasn't changed isn't pushed again, unless --force.
     const changed = new Set(changedIds(ws, bodies, synced));
     const same = m.ids.filter(id => !force && !changed.has(id));
@@ -287,7 +294,7 @@ async function cmdPull(): Promise<void> {
     onlyIds = positional.map(t => {
       if (/^\d+$/.test(t)) return Number(t);
       const id = ws.contents.find(c => c.id === matchTargets([t], ws, before, dir).ids[0])?.wpPostId;
-      return id ?? die(`找不到：${t}（写 WordPress 文章 id，编辑页地址里 post= 后面的数字）`);
+      return id ?? die('post_not_found', `找不到：${t}（写 WordPress 文章 id，编辑页地址里 post= 后面的数字）`);
     });
   }
   log(`拉取类型：${types.join(', ')}${onlyIds ? `，只拉 ${onlyIds.join(', ')}` : ''}`);
@@ -419,7 +426,7 @@ async function products(): Promise<void> {
 }
 
 const PAGES_USAGE =
-  'puffergo pages <types|find [--type t] [--status publish] [--search q] [--url link]|blocks <id|link>|get <id|link> [path]|preview <files|folder…> [--title t]|preview <id|link> <path> <file>|create --type <type> --title "<title>" --slug <slug> --seo-title "…" --seo-description "…" --focus-keyword "…" [--keywords "a, b"] [--featured-image <file>] [--excerpt "…"] [--new] <files|folder…>|replace <id|link> <path> <file> [--customer-said "<customer words>"]|seo <id|link> [--slug s] [--seo-title "…"] [--seo-description "…"] [--focus-keyword "…"] [--keywords "a, b"] [--featured-image <file>] [--customer-said "<customer words>"]|publish <id|link> --customer-said "<customer words>"|edit-live [on --customer-said "<customer words>"|off]> [--dir <workdir>] [--site <url>]';
+  'puffergo pages <types|find [--type t] [--status publish] [--search q] [--url link]|blocks <id|link>|get <id|link> [path]|preview <files|folder…> [--title t]|preview <id|link> <path> <file>|categories <type> <check|push>|create --type <type> --title "<title>" --slug <slug> --seo-title "…" --seo-description "…" --focus-keyword "…" [--keywords "a, b"] [--category "a, b"] [--featured-image <file>] [--excerpt "…"] [--new] <files|folder…>|replace <id|link> <path> <file> [--customer-said "<customer words>"]|seo <id|link> [--slug s] [--seo-title "…"] [--seo-description "…"] [--focus-keyword "…"] [--keywords "a, b"] [--category "a, b"] [--featured-image <file>] [--customer-said "<customer words>"]|publish <id|link> --customer-said "<customer words>"|edit-live [on --customer-said "<customer words>"|off]> [--dir <workdir>] [--site <url>]';
 
 async function pages(): Promise<void> {
   const ctx = { dir, flags, positional };
@@ -442,6 +449,8 @@ async function pages(): Promise<void> {
       return emit(await cmdSeo(ctx));
     case 'publish':
       return emit(await cmdPagesPublish(ctx));
+    case 'categories':
+      return emit(await cmdPageCategories(ctx));
     case 'edit-live':
       return emit(await cmdEditLive(ctx));
     default:
@@ -466,7 +475,6 @@ const run =
           : main;
 
 run().catch(e => {
-  if (group === 'products' || group === 'pages' || group === 'login') {
-    emit({ ok: false, code: 'error', message: e instanceof Error ? e.message : String(e) });
-  } else die(e instanceof Error ? e.message : String(e));
+  const shared = siteErrorOutput(e);
+  emit(shared ?? { ok: false, code: 'error', message: e instanceof Error ? e.message : String(e) });
 });

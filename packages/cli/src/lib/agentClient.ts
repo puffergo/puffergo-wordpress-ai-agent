@@ -6,6 +6,7 @@
  */
 
 import type { SiloConfig } from '../adapters/credentials';
+import type { ContentBlock } from './productTypes';
 
 /** The plugin's product post type (PufferGo_Product_CPT::CPT_SLUG). */
 export const PRODUCT_TYPE = 'puffergo_product';
@@ -100,22 +101,21 @@ export class AgentClient {
     return this.read('get-blocks', { id, path });
   }
 
-  /** With `inPage`, the one section is previewed in place of that block on the post's own page. */
-  /** With inPage.data (a component's data) in place of sections, that component block is previewed in its page. */
+  /** With `inPage`, the one block is previewed in place of that block on the post's own page. */
   previewBlocks<T = unknown>(
-    sections: string[],
+    blocks: ContentBlock[],
     title?: string,
-    inPage?: { id: number; path: string; data?: unknown },
+    inPage?: { id: number; path: string },
   ): Promise<T> {
     return this.write('preview-blocks', {
-      ...(sections.length ? { sections } : {}),
+      ...(blocks.length ? { blocks } : {}),
       ...(title ? { title } : {}),
       ...(inPage ?? {}),
     });
   }
 
   createPost<T = unknown>(
-    input: { type: string; title: string; excerpt?: string; sections: string[] } & SeoInput,
+    input: { type: string; title: string; excerpt?: string; blocks: ContentBlock[] } & SeoInput,
   ): Promise<T> {
     return this.write('create-post', input);
   }
@@ -128,10 +128,13 @@ export class AgentClient {
     return this.write('update-seo', input);
   }
 
-  /** A static block takes its new html; a component block its new data. */
-  replaceBlock<T = unknown>(
-    input: { id: number; path: string; baseModified: string } & ({ html: string } | { data: unknown }),
-  ): Promise<T> {
+  /** The block that takes its place: body text as Markdown, a static block as HTML, a component as its data. */
+  replaceBlock<T = unknown>(input: {
+    id: number;
+    path: string;
+    baseModified: string;
+    block: ContentBlock;
+  }): Promise<T> {
     return this.write('replace-block', input);
   }
 
@@ -157,12 +160,13 @@ export class AgentClient {
   }
 
   /** Product category terms via WordPress's own `/wp/v2/puffergo_product_cat` route; `lang` filters under Polylang. */
-  async listCategoryTerms<T = unknown>(lang = ''): Promise<T[]> {
+  /** @param restBase The taxonomy's own route: `puffergo_product_cat`, `categories`, `docs_category`… */
+  async listCategoryTerms<T = unknown>(restBase: string, lang = ''): Promise<T[]> {
     const out: T[] = [];
     for (let page = 1; ; page++) {
       const batch = await this.call<T[]>(
         'GET',
-        `/puffergo_product_cat?per_page=100&page=${page}&hide_empty=false&context=edit${lang ? `&lang=${encodeURIComponent(lang)}` : ''}`,
+        `/${restBase}?per_page=100&page=${page}&hide_empty=false&context=edit${lang ? `&lang=${encodeURIComponent(lang)}` : ''}`,
         undefined,
         this.wpBase,
       );
@@ -171,8 +175,8 @@ export class AgentClient {
     }
   }
 
-  saveCategoryTerm<T = unknown>(id: number | null, body: Record<string, unknown>): Promise<T> {
-    return this.call('POST', `/puffergo_product_cat${id ? `/${id}` : ''}`, body, this.wpBase);
+  saveCategoryTerm<T = unknown>(restBase: string, id: number | null, body: Record<string, unknown>): Promise<T> {
+    return this.call('POST', `/${restBase}${id ? `/${id}` : ''}`, body, this.wpBase);
   }
 
   private get wpBase(): string {

@@ -24,9 +24,12 @@
 
 - Node.js 18 or newer (the agent installs it if missing).
 - A WordPress site you administer.
-- **Product upload** needs the PufferGo WordPress plugin, which provides the product type and the validation endpoints.
-- **Page builder** needs the PufferGo WordPress plugin (Tailwind blocks and the content endpoints).
+- **Product upload** needs the PufferGo WordPress plugin **0.35.0 or newer**, which provides the product type and the validation endpoints.
+- **Page builder** needs the PufferGo WordPress plugin **0.35.0 or newer** (Tailwind blocks and the content endpoints).
 - **SEO silo** works on WordPress with Rank Math for the SEO fields; importing existing keywords needs the PufferGo plugin.
+
+An older plugin answers with a content format this CLI no longer speaks, and every command stops with
+`update_plugin` — update the plugin on the site first.
 
 ## Install a skill
 

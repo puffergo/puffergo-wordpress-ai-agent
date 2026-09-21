@@ -255,9 +255,10 @@ describe('radialPlacement — sector allocation', () => {
   });
 
   it('does not depend on the order edges happen to arrive in', () => {
-    const { pillars: _p, ...g } = siloGraph(3);
-    const shuffled: LinkGraph = { nodes: [...g.nodes], edges: [...g.edges].reverse() };
-    expect(radialPlacement(shuffled).positions).toEqual(radialPlacement(g as LinkGraph).positions);
+    const { nodes, edges } = siloGraph(3);
+    const g: LinkGraph = { nodes, edges };
+    const shuffled: LinkGraph = { nodes: [...nodes], edges: [...edges].reverse() };
+    expect(radialPlacement(shuffled).positions).toEqual(radialPlacement(g).positions);
   });
 });
 

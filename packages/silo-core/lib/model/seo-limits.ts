@@ -5,8 +5,11 @@
  *
  * The PufferGo plugin is the source of truth: it publishes its limits (GET /puffergo/v1/seo-limits, and on
  * every /seo-meta read), and `applySeoLimits` adopts them. The values below are the defaults for a site
- * without the plugin, where Rank Math's own UI caps focus keywords at 5 (1 core + 4 long-tail); the plugin
- * raises that to 6 (1 core + 5 long-tail).
+ * without the plugin, and are deliberately the SAME numbers the plugin publishes — 1 core + 5 long-tail — so
+ * a page targets the same keywords on any site and nobody has to ask which kind of site this is. We offer the
+ * 6th keyword either way; on a site without the plugin, Rank Math's own UI shows only the first 5 of them
+ * (the plugin raises that ceiling through the rank_math/focus_keyword/maxtags filter), which costs nothing:
+ * the keyword is stored, it just isn't scored there.
  *
  * Length limits are DISPLAY WIDTHS (seoWidth): a Chinese / Japanese / Korean or full-width character counts 2,
  * others 1 — a proxy for Google's pixel truncation that holds for every language, the same measure as the
@@ -24,7 +27,7 @@ export let DESC_MAX = 160;
 /** Exactly one core (primary) focus keyword per page. */
 export let CORE_KEYWORDS_MAX = 1;
 /** Secondary long-tail focus keywords. */
-export let LONGTAIL_KEYWORDS_MAX = 4;
+export let LONGTAIL_KEYWORDS_MAX = 5;
 /** Hard ceiling on total focus keywords written (core + long-tail). */
 export let FOCUS_KEYWORDS_MAX = CORE_KEYWORDS_MAX + LONGTAIL_KEYWORDS_MAX;
 

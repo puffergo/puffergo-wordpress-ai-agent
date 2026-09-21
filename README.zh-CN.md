@@ -24,9 +24,11 @@
 
 - Node.js 18 或更新版本（没有的话 AI 会自己装）。
 - 一个你有管理员权限的 WordPress 网站。
-- **上架产品**需要安装 PufferGo WordPress 插件（提供产品类型和校验接口）。
-- **建页面**需要安装 PufferGo WordPress 插件（提供 Tailwind 区块和内容接口）。
+- **上架产品**需要安装 PufferGo WordPress 插件 **0.35.0 或更新版本**（提供产品类型和校验接口）。
+- **建页面**需要安装 PufferGo WordPress 插件 **0.35.0 或更新版本**（提供 Tailwind 区块和内容接口）。
 - **SEO Silo** 需要 Rank Math 写 SEO 字段；导入已有关键词需要 PufferGo 插件。
+
+插件版本过旧时，它给出的内容格式这个 CLI 已经不再支持，每条命令都会以 `update_plugin` 停下——请先在网站上把插件升级。
 
 ## 安装 Skill
 

@@ -59,14 +59,18 @@ const decodeEntities = (s: string): string =>
 
 /** A human-readable note name from a title ('' when the title has nothing usable). */
 export function titleToFileName(title: string): string {
-  return decodeEntities(title ?? '')
-    .replace(/[\\/:*?"<>|#^[\]]/g, ch => FILENAME_CHAR_MAP[ch] ?? '-')
-    .replace(/[\x00-\x1f\u200B-\u200D\uFEFF]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/^\.+/, '')
-    .slice(0, 120)
-    .trim();
+  return (
+    decodeEntities(title ?? '')
+      .replace(/[\\/:*?"<>|#^[\]]/g, ch => FILENAME_CHAR_MAP[ch] ?? '-')
+      // Control characters and zero-width marks have no place in a file name; matching them is the point here.
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\x00-\x1f\u200B-\u200D\uFEFF]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/^\.+/, '')
+      .slice(0, 120)
+      .trim()
+  );
 }
 
 /** Basename used when the title one is unusable or already taken by a different note: slug, else id. */

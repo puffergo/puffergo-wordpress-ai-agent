@@ -82,10 +82,10 @@ describe('getNodePath', () => {
 });
 
 describe('focusKeywordString', () => {
-  it('caps at 1 core + 4 long-tail = 5 total (Rank Math ceiling), dropping the overflow', () => {
-    const seo = { ...emptySeo(), coreKeywords: ['c1', 'c2'], longTailKeywords: ['l1', 'l2', 'l3', 'l4', 'l5'] };
+  it('caps at 1 core + 5 long-tail = 6 total, dropping the overflow', () => {
+    const seo = { ...emptySeo(), coreKeywords: ['c1', 'c2'], longTailKeywords: ['l1', 'l2', 'l3', 'l4', 'l5', 'l6'] };
     const parts = focusKeywordString(seo).split(', ');
-    expect(parts).toEqual(['c1', 'l1', 'l2', 'l3', 'l4']);
+    expect(parts).toEqual(['c1', 'l1', 'l2', 'l3', 'l4', 'l5']);
   });
 
   it('trims, drops blanks, and returns "" when there is nothing to write', () => {

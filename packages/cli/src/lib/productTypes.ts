@@ -8,8 +8,13 @@ export interface ImageRef {
   sha256?: string;
 }
 
-/** One block of the detail, in page order (schema `blocks` lists the components and native types a site takes). */
+/**
+ * One block of the content, in page order — the same shape for a product's detail and for a page's blocks
+ * (schema `blocks` lists the components and native types a site takes).
+ */
 export type DetailBlock =
+  /** Body text: paragraphs, headings, lists… as Markdown. Stored as core WordPress blocks. */
+  | { type: 'prose'; markdown: string }
   | { type: 'static'; html: string; scopeId?: string }
   /** A config component: `data` is its configData, fields as the component's schema says (schema `blocks.components`). */
   | { type: 'config'; component: string; data: Record<string, unknown> }
@@ -17,6 +22,9 @@ export type DetailBlock =
   | { type: 'native'; raw: string; name?: string; text?: string }
   | { type: 'image'; image: ImageRef }
   | { type: 'video'; url?: string; mediaId?: number };
+
+/** The content blocks a page and a product's detail both hold; `DetailBlock` is its name in a product file. */
+export type ContentBlock = DetailBlock;
 
 /** `blocks` is the whole detail. */
 export interface ProductDetail {

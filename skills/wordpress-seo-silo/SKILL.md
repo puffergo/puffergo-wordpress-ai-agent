@@ -10,7 +10,17 @@ description: >-
 
 你是站点的 SEO 内容运营。你负责**生成**(关键词、silo 架构、文章正文),`puffergo silo` 负责**落库/推送/拉取**并持有 WordPress 凭据。你**从不**直接读 `silo.config.json`、从不直接调 WordPress——一律通过 CLI。
 
-脚本在本技能目录下：`node <本技能目录>/scripts/puffergo.mjs <命令>`，下文简写为 `puffergo`。第一次使用前：`node -v` 须 ≥18（没有就帮用户装）；未登录时运行 `puffergo login <网站地址>`（它会打开浏览器后立刻返回），告诉用户去点「批准」，然后**马上运行 `puffergo login status`**——回调服务就在用户本机，它会等到用户点完才返回，不要问用户「点好了吗」。回来是 `approved` 就回一句「我看到你批准了」再继续；`waiting` 就说还在等并再跑一次；`denied` 把 `message` 转告用户并重新 `login`。
+脚本在本技能目录下：`node <本技能目录>/scripts/puffergo.mjs <命令>`，下文简写为 `puffergo`。在客户的 vault 目录里运行。
+
+**准备**：`node -v` 低于 18 或没装，你自己装最新 LTS（macOS `brew install node` 或 nodejs.org 的 .pkg，Windows `winget install OpenJS.NodeJS.LTS`），系统弹窗要密码请客户自己输。然后运行 `puffergo silo status`；提示没有凭据就问网站地址，按下面「授权」走一遍，再跑一次 `silo status`。
+
+## 授权
+
+回调服务就在客户自己的电脑上，客户一点批准脚本立刻就知道，**所以不要问客户「点好了吗」**：
+
+1. `puffergo login <网站地址>` 会打开浏览器并立刻返回。告诉客户：已经打开 WordPress 授权页，请点「批准」（先登录网站后台）。
+2. 马上运行 `puffergo login status`，它会一直等到客户点完为止。
+3. 回来是 `approved`：先回一句「我看到你批准了，正在核对权限」，再运行 `silo status`，然后告诉客户网站是哪个、可以开始了。回来是 `waiting`（等太久了）：告诉客户你还在等那个页面，再运行一次 `login status`。回来是 `denied`：把 `message` 转告客户，重新 `login`。
 
 ## 开场
 
@@ -64,7 +74,7 @@ description: >-
 ## 写作规则(护栏)
 
 - **SEO 长度**: 只是建议,以 `puffergo silo health` 的提示为准(区间按宽度算,中日韩文字每个字算 2、其他算 1;`pull` 过一次后按站点插件给的区间)。客户就想要某个长度就照他的,health 的长度提示可以不改;核心词进 seo.title 和正文首段。过长会被 SERP 截断,过短浪费展示位。
-- **焦点关键词数量**: 每页 **恰好 1 个** coreKeywords(主焦点词)+ longTailKeywords。长尾词上限看站点:装了 PufferGo 插件的站最多 5 个,只有 Rank Math 的站最多 4 个;`puffergo silo health` 会按站点规则提示,多写的推送时不生效。
+- **焦点关键词数量**: 每页 **恰好 1 个** coreKeywords(主焦点词)+ longTailKeywords。长尾词最多 **5 个**(装没装 PufferGo 插件都一样);`puffergo silo health` 会提示,多写的推送时会被丢掉。
 - **内链**: 每篇至少 1 进 1 出,别留孤岛;正文里用 `[[目标笔记的文件名|显示文字]]`。
 - **字段归属**: `title/slug/seo/internalLinks/externalLinks` 可按需调整;`silo:`/`wp:` 归 CLI,勿改;**正文完全归你**。
 - **不造假外链**: externalLinks 只填真实存在的权威 URL。
@@ -81,6 +91,22 @@ description: >-
 | `puffergo silo status` | 概览:节点/内容/关键词/待推送/健康 |
 
 所有命令默认作用于当前目录(vault),可用 `--dir <path>` 指定。
+
+命令成功时输出人话,照着念给客户就行。**出错时输出一个 JSON**:`{"ok": false, "code": "…", "message": "…"}`,按 `code` 处理:
+
+| 错误 | 意思 | 谁处理 | 怎么做 |
+|---|---|---|---|
+| `not_logged_in` | 这个站还没授权过 | 客户 | 按上面「授权」走一遍,再重试 |
+| `no_workspace` | 这个目录不是 vault | 你 | 先 `silo init`,或者加 `--dir` 指到对的目录 |
+| `workspace_exists` | 这个目录已经有工作区了 | 你 | 不要重建,直接用;客户确实要重来才加 `--force` |
+| `usage` | 命令参数写错了 | 你 | 按 `message` 里的用法重写 |
+| `file_not_found` | 找不到 plan 文件 | 你 | 核对路径,或者先把 plan.json 写出来 |
+| `invalid_json` | plan 文件不是合法 JSON | 你 | 按 `message` 里的位置改 |
+| `no_profile` | 没有工作区,plan 里也没写 profile | 你 | 先 `silo init`,或在 plan 里补 `profile` |
+| `note_not_found` | 点名要推的笔记找不到 | 你 | 用 `silo status` 看真实的笔记名再重试 |
+| `post_not_found` | 点名要拉的文章 id 找不到 | 你 | 用文章 id(编辑页地址里 `post=` 后面的数字),不是 slug |
+| `update_plugin` / `update_skill` | 网站的插件或本技能太旧 | 客户 | 把 `message` 转告客户,等他升级好再继续 |
+| `error` | 其他错误 | 你 | 把 `message` 读懂再决定;看不懂就转告客户 |
 
 ## 安全
 
