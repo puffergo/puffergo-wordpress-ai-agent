@@ -21,10 +21,12 @@
 | `silo pull [--types post,page]` | 从 WP 拉回内容,更新工作区并刷新 `.md` | ❌ |
 | `silo health` | 健康检查(孤岛页/自噬/缺 SEO/关键词超限/标题描述长度…) | ❌ |
 | `silo status` | 概览:节点/内容/关键词/待推送/健康问题数 | ❌ |
+| `silo view [--no-open] [--out <path>]` | 生成只读预览页(关系图 + 结构树)并用系统默认浏览器打开。默认写到临时目录(不进 vault,避免随同步/Git 走);`--out` 指定留存路径,`--no-open` 只写文件 | ❌ |
 | `silo migrate-config` | 把旧版 vault 内 `silo.config.json` 迁到 `~/.puffergo/credentials.json` 并删除 vault 副本 | ❌ |
 
 ### 通用选项
 - `--dir <path>` — 指定 vault 目录(默认当前目录)。
+- `--site <域名>` — vault 连了多个站点时指定操作哪个(默认读 `.silo/state.json` 的活动站点)。
 - `--config <path>` / 环境变量 `PUFFERGO_CONFIG` — 指定凭据文件(默认 `~/.puffergo/credentials.json`)。
 
 ## 凭据(一次性,在 vault 之外)

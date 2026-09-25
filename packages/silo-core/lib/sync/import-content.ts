@@ -49,11 +49,45 @@ export interface ImportResult {
   seoProvider: string | null;
 }
 
-const stripHtml = (s: string): string =>
-  s
-    .replace(/<[^>]*>/g, '')
-    .replace(/&amp;/g, '&')
-    .trim();
+/** The named entities WordPress actually emits in `*.rendered` (it numeric-encodes the rest). */
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  nbsp: '\u00a0',
+  hellip: '…',
+  mdash: '—',
+  ndash: '–',
+  laquo: '«',
+  raquo: '»',
+  lsquo: '\u2018',
+  rsquo: '\u2019',
+  ldquo: '\u201c',
+  rdquo: '\u201d',
+};
+
+/**
+ * Decode HTML entities. WordPress hands back `title.rendered` with special characters encoded — an
+ * en dash becomes `&#8211;`, a non-breaking space `&nbsp;` — so a title stored without decoding shows
+ * up literally as "首页 &#8211; 中文" everywhere the title is displayed or pushed back.
+ *
+ * Done in ONE pass rather than chained replaces, so an already-escaped entity is not decoded twice
+ * (`&amp;#8211;` must yield the text `&#8211;`, not an en dash).
+ */
+export function decodeEntities(s: string): string {
+  return s.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (whole, body: string) => {
+    if (body[0] === '#') {
+      const code = body[1] === 'x' || body[1] === 'X' ? parseInt(body.slice(2), 16) : parseInt(body.slice(1), 10);
+      // Reject non-characters and anything out of range rather than emitting U+FFFD.
+      return Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
+    }
+    return NAMED_ENTITIES[body.toLowerCase()] ?? whole;
+  });
+}
+
+const stripHtml = (s: string): string => decodeEntities(s.replace(/<[^>]*>/g, '')).trim();
 
 /** Read Rank Math keywords/title/description out of a post's REST-exposed meta (present only when the
  *  site registers them via show_in_rest). Returns null when nothing usable is there. */

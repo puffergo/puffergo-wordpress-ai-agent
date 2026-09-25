@@ -32,13 +32,14 @@ import {
   type HealthIssue,
 } from '@puffergo/silo-core';
 import { dirname } from 'node:path';
-import { readWorkspace, writeWorkspace } from './adapters/fileStore';
+import { readWorkspace, writeWorkspace, listSites, resolveSite } from './adapters/fileStore';
 import { migrateLegacyConfig, GLOBAL_CREDENTIALS } from './adapters/credentials';
 import { wpAssetUploader } from './adapters/assetUploader';
 import { connect } from './lib/wp';
 import { applyPlan, type Plan } from './lib/plan';
 import { scanVault, scaffoldVault, applyFrontmatterEdits, updateNoteBody } from './lib/vault';
 import { readSynced, writeSynced, changedIds, matchTargets, recordSynced, isEdited } from './lib/siloSync';
+import { writePreview } from './lib/previewCmd';
 import {
   cmdSchema,
   cmdListProducts,
@@ -101,9 +102,26 @@ const die = (code: string, message: string): never => {
   process.exit(1);
 };
 
+/** The site a multi-site vault should act on: `--site <domain>`, else whatever `state.json` says. */
+const wantedSite = flags.get('site');
+
+/**
+ * Load the vault's workspace, telling the agent apart the three ways this can fail. The distinction
+ * matters: `no_workspace` sends it to `silo init`, and doing that in a vault that HAS content (just
+ * not the site it asked for) would drop an empty workspace beside real, already-pushed work.
+ */
 async function loadWs(): Promise<SiloWorkspace> {
-  const ws = await readWorkspace(dir);
-  if (!ws) die('no_workspace', `未找到工作区（先运行 silo init）：${dir}`);
+  const ws = await readWorkspace(dir, wantedSite);
+  if (!ws) {
+    const sites = await listSites(dir);
+    if (sites.length && wantedSite && !(await resolveSite(dir, wantedSite))) {
+      die('site_not_found', `这个 vault 里没有站点「${wantedSite}」。已连接的站点：${sites.join('、')}`);
+    }
+    if (sites.length > 1) {
+      die('site_required', `这个 vault 连了多个站点，用 --site 指定一个：${sites.join('、')}`);
+    }
+    die('no_workspace', `未找到工作区（先运行 silo init）：${dir}`);
+  }
   applySeoLimits(ws!.seoLimits); // the site's SEO limits from the last pull (push caps keywords by them)
   return ws!;
 }
@@ -125,9 +143,17 @@ async function cmdInit(): Promise<void> {
   const name = flags.get('name');
   const url = flags.get('url');
   if (!name || !url) die('usage', '用法：silo init --name "站点名" --url "https://example.com" [--tagline "定位"]');
-  const existing = await readWorkspace(dir);
+  // Guard on the VAULT, not just on the site being initialised: a vault using the per-site layout
+  // already holds real work, and `init` there would write an empty workspace beside it.
+  const sites = await listSites(dir);
+  const existing = sites.length > 0 || (await readWorkspace(dir, wantedSite));
   if (existing && flags.get('force') !== 'true') {
-    die('workspace_exists', '工作区已存在（加 --force 覆盖）');
+    die(
+      'workspace_exists',
+      sites.length
+        ? `这个 vault 已经有工作区了（已连接：${sites.join('、')}），不要重建;直接用,或用 --site 指定站点`
+        : '工作区已存在（加 --force 覆盖）',
+    );
   }
   const ws = emptyWorkspace({ name: name!, url: url!, tagline: flags.get('tagline') });
   await writeWorkspace(dir, ws);
@@ -360,6 +386,25 @@ async function cmdStatus(): Promise<void> {
   log(`健康问题 ${issues.length}（${issues.filter(i => i.severity === 'critical').length} 严重）`);
 }
 
+async function cmdView(): Promise<void> {
+  const ws = await loadWs();
+  let res;
+  try {
+    res = await writePreview(ws, dir, flags.get('no-open') === 'true', flags.get('out'));
+  } catch (e) {
+    if (e instanceof Error && e.message === 'preview_bundle_missing') {
+      die('error', '找不到预览页资源（preview.js）。本技能可能没装全，请重新安装本技能。');
+    }
+    throw e;
+  }
+  log(`✓ 已生成预览页：${res.file}`);
+  log(
+    res.opened
+      ? '已在你的默认浏览器里打开。左上角可切换「总览」关系图和「结构」树；这是只读预览，改内容和发布还是回到命令行。'
+      : '请手动打开上面这个文件查看（只读预览）。',
+  );
+}
+
 async function main(): Promise<void> {
   switch (cmd) {
     case 'init':
@@ -374,10 +419,12 @@ async function main(): Promise<void> {
       return cmdHealth();
     case 'status':
       return cmdStatus();
+    case 'view':
+      return cmdView();
     case 'migrate-config':
       return cmdMigrateConfig();
     default:
-      log('puffergo silo <init|plan|push|pull|health|status|migrate-config> [--dir <vault>] [--config <path>]');
+      log('puffergo silo <init|plan|push|pull|health|status|view|migrate-config> [--dir <vault>] [--config <path>]');
       log('puffergo login <siteUrl>');
       log('puffergo login status [--wait <seconds>]');
       log(PRODUCTS_USAGE);

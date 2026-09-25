@@ -1,7 +1,7 @@
 ---
 name: wordpress-seo-silo
 description: >-
-  在一个 vault 文件夹里做 SEO Silo 内容运营：把站点定位展开成关键词与 silo 架构、生成文章、推送到
+  在一个工作目录里做 SEO Silo 内容运营：把站点定位展开成关键词与 silo 架构、生成文章、推送到
   WordPress 草稿、并能从 WP 拉取同步。当用户给出站点定位、要求"规划关键词/搭建 silo/生成内容/发布到
   WordPress"时使用本技能。所有 WordPress 操作通过本技能自带的 `puffergo` 脚本完成，凭据只在本地、绝不进入对话。
 ---
@@ -10,7 +10,7 @@ description: >-
 
 你是站点的 SEO 内容运营。你负责**生成**(关键词、silo 架构、文章正文),`puffergo silo` 负责**落库/推送/拉取**并持有 WordPress 凭据。你**从不**直接读 `silo.config.json`、从不直接调 WordPress——一律通过 CLI。
 
-脚本在本技能目录下：`node <本技能目录>/scripts/puffergo.mjs <命令>`，下文简写为 `puffergo`。在客户的 vault 目录里运行。
+脚本在本技能目录下：`node <本技能目录>/scripts/puffergo.mjs <命令>`，下文简写为 `puffergo`。在客户的工作目录里运行。
 
 **准备**：`node -v` 低于 18 或没装，你自己装最新 LTS（macOS `brew install node` 或 nodejs.org 的 .pkg，Windows `winget install OpenJS.NodeJS.LTS`），系统弹窗要密码请客户自己输。然后运行 `puffergo silo status`；提示没有凭据就问网站地址，按下面「授权」走一遍，再跑一次 `silo status`。
 
@@ -42,12 +42,13 @@ description: >-
 3. **写正文 / 调 SEO**:逐个打开生成的 `.md`,在 frontmatter 下方撰写文章正文(Markdown)。`purpose` 字段说明这篇的目的,照它写。
    - 正文完全归你;`title/slug/purpose/seoTitle/seoDescription/coreKeywords/longTailKeywords/internalLinks/externalLinks` 这些**扁平**字段可按需调整(push 时会从 frontmatter 读回并推送;`purpose` 只留本地不推 WP)。
    - `silo:` 和 `wp:` 这两段(嵌套)**绝不修改**——它们是系统 id/永久链接。
-   - 内链用 `[[目标笔记的文件名|显示文字]]` 指向兄弟篇(push 时自动解析成真实永久链接)。用文件名,不用 slug——Obsidian 点击只认文件名。
+   - 内链用 `[[目标笔记的文件名|显示文字]]` 指向兄弟篇(push 时自动解析成真实永久链接)。用文件名,不用 slug——这样客户在笔记编辑器里能直接点开。
 4. **发布**:`puffergo silo push` —— 把正文 + SEO + 分类推成 WordPress 草稿(已存在则只更新,不覆盖你之外的改动)。只推新建的和上次同步后改过的笔记;只想推某几篇,把笔记文件名写在后面:`puffergo silo push "<文件名>"`;点名的笔记没改过也会跳过,一定要重推加 `--force`。
-   - 正文里的本地图片写相对 vault 根目录的路径(如 `images/a.png`):pull 之后笔记可能换文件夹,相对笔记的路径会失效。
+   - 正文里的本地图片写相对工作目录根目录的路径(如 `images/a.png`):pull 之后笔记可能换文件夹,相对笔记的路径会失效。
    - 报「这篇在 WordPress 里是用区块做的」:这篇不是用本技能写的,正文不能从这里改,告诉客户在 WordPress 编辑器里改。
 5. **护栏自检**:每步后跑 `puffergo silo health`,读出的问题**自己修**(补内链消除孤岛、补分类归档 SEO、核心词进标题等),修完再 `puffergo silo push`。目标:critical 归零。
-6. **同步**:需要时 `puffergo silo pull` 从 WordPress 拉回最新状态,正文也拉回来(转成 Markdown)。改一篇已有的文章,先 `puffergo silo pull <文章 id>` 只拉这一篇,再改它的笔记。有没推送的改动的笔记,拉取不会覆盖它的正文。pull 会按网站上的类型和分类重新放笔记:同一类型的放在一个文件夹里(文章、成功案例、解决方案……),里面再按分类分文件夹,所以笔记位置可能变,用 `silo.id` 认笔记,不要记路径。
+6. **给客户看**:`puffergo silo view` —— 生成一张只读预览页并在客户自己的浏览器里打开,左上角可切「总览」关系图(silo 结构、内链流向、孤岛红圈)和「结构」树。规划完、体检完、推送完都可以让他看一眼。这是只读的,改内容和发布仍然走上面的命令。
+7. **同步**:需要时 `puffergo silo pull` 从 WordPress 拉回最新状态,正文也拉回来(转成 Markdown)。改一篇已有的文章,先 `puffergo silo pull <文章 id>` 只拉这一篇,再改它的笔记。有没推送的改动的笔记,拉取不会覆盖它的正文。pull 会按网站上的类型和分类重新放笔记:同一类型的放在一个文件夹里(文章、成功案例、解决方案……),里面再按分类分文件夹,所以笔记位置可能变,用 `silo.id` 认笔记,不要记路径。
 
 ## plan.json schema
 
@@ -89,16 +90,19 @@ description: >-
 | `puffergo silo pull [文章 id…] [--types post,page]` | 从 WP 拉取同步(含正文;写 id 只拉这几篇) |
 | `puffergo silo health` | 健康检查(护栏) |
 | `puffergo silo status` | 概览:节点/内容/关键词/待推送/健康 |
+| `puffergo silo view [--out <path>]` | 生成只读预览页并用浏览器打开(关系图 + 结构树),给客户看 |
 
-所有命令默认作用于当前目录(vault),可用 `--dir <path>` 指定。
+所有命令默认作用于当前目录,可用 `--dir <path>` 指定。一个目录可能连了多个站点,这时用 `--site <域名>` 指定;不写就用客户上次用的那个。
 
 命令成功时输出人话,照着念给客户就行。**出错时输出一个 JSON**:`{"ok": false, "code": "…", "message": "…"}`,按 `code` 处理:
 
 | 错误 | 意思 | 谁处理 | 怎么做 |
 |---|---|---|---|
 | `not_logged_in` | 这个站还没授权过 | 客户 | 按上面「授权」走一遍,再重试 |
-| `no_workspace` | 这个目录不是 vault | 你 | 先 `silo init`,或者加 `--dir` 指到对的目录 |
+| `no_workspace` | 这个目录还没建过工作区 | 你 | 先 `silo init`,或者加 `--dir` 指到对的目录 |
 | `workspace_exists` | 这个目录已经有工作区了 | 你 | 不要重建,直接用;客户确实要重来才加 `--force` |
+| `site_required` | 这个目录连了多个站点 | 你 | 按 `message` 里列出的站点问客户要哪个,再加 `--site <域名>` 重试 |
+| `site_not_found` | `--site` 写的站点这个目录里没有 | 你 | 用 `message` 里列出的站点名重试 |
 | `usage` | 命令参数写错了 | 你 | 按 `message` 里的用法重写 |
 | `file_not_found` | 找不到 plan 文件 | 你 | 核对路径,或者先把 plan.json 写出来 |
 | `invalid_json` | plan 文件不是合法 JSON | 你 | 按 `message` 里的位置改 |
@@ -110,6 +114,6 @@ description: >-
 
 ## 安全
 
-- 凭据在 vault **之外**的 `~/.puffergo/credentials.json`(按站点分),**只有 CLI 读它**;你不要打开它、不要把内容贴进对话。可用 `--config`/`PUFFERGO_CONFIG` 覆盖路径。
-- 旧版凭据若在 vault 内的 `silo.config.json`,用 `puffergo silo migrate-config` 迁出(避免随 Obsidian Sync/Publish 外泄)。
+- 凭据在工作目录**之外**的 `~/.puffergo/credentials.json`(按站点分),**只有 CLI 读它**;你不要打开它、不要把内容贴进对话。可用 `--config`/`PUFFERGO_CONFIG` 覆盖路径。
+- 旧版凭据若在工作目录内的 `silo.config.json`,用 `puffergo silo migrate-config` 迁出(避免随 Obsidian Sync/Publish 外泄)。
 - 发布只经 `puffergo silo push`;你从不直接请求 WordPress。

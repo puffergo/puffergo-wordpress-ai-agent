@@ -5152,7 +5152,7 @@ var require_style_parser = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.hyphenate = exports.parse = void 0;
-    function parse(value) {
+    function parse2(value) {
       const styles = [];
       let i = 0;
       let parenDepth = 0;
@@ -5206,7 +5206,7 @@ var require_style_parser = __commonJS({
       }
       return styles;
     }
-    exports.parse = parse;
+    exports.parse = parse2;
     function hyphenate(value) {
       return value.replace(/[a-z][A-Z]/g, (v) => {
         return v.charAt(0) + "-" + v.charAt(1);
@@ -5220,7 +5220,7 @@ var require_style_parser = __commonJS({
 var require_CSSStyleDeclaration = __commonJS({
   "../../node_modules/.pnpm/@mixmark-io+domino@2.2.0/node_modules/@mixmark-io/domino/lib/CSSStyleDeclaration.js"(exports, module) {
     "use strict";
-    var { parse } = require_style_parser();
+    var { parse: parse2 } = require_style_parser();
     module.exports = function(elt) {
       const style = new CSSStyleDeclaration(elt);
       const handler = {
@@ -5256,7 +5256,7 @@ var require_CSSStyleDeclaration = __commonJS({
       if (!value) {
         return result;
       }
-      const styleValues = parse(value);
+      const styleValues = parse2(value);
       if (styleValues.length < 2) {
         return result;
       }
@@ -17310,14 +17310,14 @@ var require_turndown_cjs = __commonJS({
         } else if (node.nodeType === 1) {
           replacement = replacementForNode.call(self, node);
         }
-        return join13(output, replacement);
+        return join14(output, replacement);
       }, "");
     }
     function postProcess(output) {
       var self = this;
       this.rules.forEach(function(rule) {
         if (typeof rule.append === "function") {
-          output = join13(output, rule.append(self.options));
+          output = join14(output, rule.append(self.options));
         }
       });
       return output.replace(/^[\t\r\n]+/, "").replace(/[\t\r\n\s]+$/, "");
@@ -17329,7 +17329,7 @@ var require_turndown_cjs = __commonJS({
       if (whitespace.leading || whitespace.trailing) content = content.trim();
       return whitespace.leading + rule.replacement(content, node, this.options) + whitespace.trailing;
     }
-    function join13(output, replacement) {
+    function join14(output, replacement) {
       var s1 = trimTrailingNewlines(output);
       var s2 = trimLeadingNewlines(replacement);
       var nls = Math.max(output.length - s1.length, replacement.length - s2.length);
@@ -24573,7 +24573,7 @@ var require_public_api = __commonJS({
       }
       return doc;
     }
-    function parse(src, reviver, options2) {
+    function parse2(src, reviver, options2) {
       let _reviver = void 0;
       if (typeof reviver === "function") {
         _reviver = reviver;
@@ -24614,7 +24614,7 @@ var require_public_api = __commonJS({
         return value.toString(options2);
       return new Document.Document(value, _replacer, options2).toString(options2);
     }
-    exports.parse = parse;
+    exports.parse = parse2;
     exports.parseAllDocuments = parseAllDocuments;
     exports.parseDocument = parseDocument;
     exports.stringify = stringify;
@@ -24701,7 +24701,7 @@ function isCallbackRequest(params) {
 }
 function runAuthorizeServer(siteUrl, onListening, opts = {}) {
   const { appName = "PufferGo", timeoutMs = 5 * 60 * 1e3, resultPage = DEFAULT_RESULT_PAGE } = opts;
-  return new Promise((resolve9, reject) => {
+  return new Promise((resolve10, reject) => {
     let settled = false;
     const server = http.createServer((req, res) => {
       const url = new URL(req.url ?? "/", "http://127.0.0.1");
@@ -24721,7 +24721,7 @@ function runAuthorizeServer(siteUrl, onListening, opts = {}) {
       settled = true;
       clearTimeout(timer);
       server.close();
-      resolve9(value);
+      resolve10(value);
     };
     server.on("error", (err) => {
       if (settled) return;
@@ -24749,10 +24749,11 @@ div{text-align:center}</style></head><body><div>${ok ? "\u2705 \u5DF2\u6388\u674
 });
 
 // src/index.ts
-import { readFile as readFile16 } from "node:fs/promises";
+import { readFile as readFile17 } from "node:fs/promises";
 
 // ../silo-core/lib/model/types.ts
 var SILO_WORKSPACE_VERSION = 3;
+var LOCAL_SITE_KEY = "__local__";
 
 // ../silo-core/lib/model/factory.ts
 var newId = (prefix) => `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
@@ -24829,6 +24830,18 @@ function reconcileKeywords(ws) {
     byKey.set(key, { id: newId("k"), term: u.display, source: asSource(u.cloud, u.local) });
   }
   return Array.from(byKey.values());
+}
+
+// ../silo-core/lib/model/migrate.ts
+function siteKey(url) {
+  const raw = (url ?? "").trim();
+  if (!raw) return LOCAL_SITE_KEY;
+  try {
+    const host = new URL(raw.includes("://") ? raw : `https://${raw}`).host.toLowerCase();
+    return host.replace(/^www\./, "") || LOCAL_SITE_KEY;
+  } catch {
+    return raw.toLowerCase().replace(/^www\./, "") || LOCAL_SITE_KEY;
+  }
 }
 
 // ../silo-core/lib/wp/parse-links.ts
@@ -27915,7 +27928,7 @@ var Marked = class {
     return _Parser.parse(tokens, options2 ?? this.defaults);
   }
   parseMarkdown(blockType) {
-    const parse = (src, options2) => {
+    const parse2 = (src, options2) => {
       const origOpt = { ...options2 };
       const opt = { ...this.defaults, ...origOpt };
       const throwError = this.onError(!!opt.silent, !!opt.async);
@@ -27957,7 +27970,7 @@ var Marked = class {
         return throwError(e);
       }
     };
-    return parse;
+    return parse2;
   }
   onError(silent, async) {
     return (e) => {
@@ -28380,7 +28393,33 @@ async function resolvePlacementTerm(client2, ws, nodeId, tax) {
 }
 
 // ../silo-core/lib/sync/import-content.ts
-var stripHtml = (s) => s.replace(/<[^>]*>/g, "").replace(/&amp;/g, "&").trim();
+var NAMED_ENTITIES = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: "\xA0",
+  hellip: "\u2026",
+  mdash: "\u2014",
+  ndash: "\u2013",
+  laquo: "\xAB",
+  raquo: "\xBB",
+  lsquo: "\u2018",
+  rsquo: "\u2019",
+  ldquo: "\u201C",
+  rdquo: "\u201D"
+};
+function decodeEntities2(s) {
+  return s.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (whole, body) => {
+    if (body[0] === "#") {
+      const code = body[1] === "x" || body[1] === "X" ? parseInt(body.slice(2), 16) : parseInt(body.slice(1), 10);
+      return Number.isFinite(code) && code > 0 && code <= 1114111 ? String.fromCodePoint(code) : whole;
+    }
+    return NAMED_ENTITIES[body.toLowerCase()] ?? whole;
+  });
+}
+var stripHtml = (s) => decodeEntities2(s.replace(/<[^>]*>/g, "")).trim();
 function seoFromMeta(meta) {
   if (!meta) return null;
   const fk = typeof meta.rank_math_focus_keyword === "string" ? meta.rank_math_focus_keyword : "";
@@ -28719,24 +28758,62 @@ async function importFromWp(client2, ws, postTypes, opts = {}) {
 }
 
 // src/index.ts
-import { dirname as dirname7 } from "node:path";
+import { dirname as dirname8 } from "node:path";
 
 // src/adapters/fileStore.ts
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, readdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, dirname } from "node:path";
-var WORKSPACE_FILE = join(".silo", "workspace.json");
+var SILO_DIR = ".silo";
+var WORKSPACE_FILE = join(SILO_DIR, "workspace.json");
+var SITES_DIR = join(SILO_DIR, "sites");
+var STATE_FILE = join(SILO_DIR, "state.json");
 var workspacePath = (dir2) => join(dir2, WORKSPACE_FILE);
-async function readWorkspace(dir2) {
-  const p = workspacePath(dir2);
-  if (!existsSync(p)) return null;
+var sitePath = (dir2, key) => join(dir2, SITES_DIR, `${key}.json`);
+var parse = async (p) => {
   try {
     return JSON.parse(await readFile(p, "utf8"));
   } catch {
     return null;
   }
+};
+async function listSites(dir2) {
+  const d = join(dir2, SITES_DIR);
+  if (!existsSync(d)) return [];
+  try {
+    return (await readdir(d)).filter((f) => f.endsWith(".json")).map((f) => f.slice(0, -".json".length));
+  } catch {
+    return [];
+  }
+}
+async function resolveSite(dir2, wanted) {
+  const keys = await listSites(dir2);
+  if (!keys.length) return null;
+  if (wanted) {
+    const key = siteKey(wanted);
+    return keys.includes(key) ? key : null;
+  }
+  const state = await parse(join(dir2, STATE_FILE));
+  if (state?.activeDomain && keys.includes(state.activeDomain)) return state.activeDomain;
+  return keys.length === 1 ? keys[0] : null;
+}
+var usesSitesLayout = async (dir2) => (await listSites(dir2)).length > 0;
+async function readWorkspace(dir2, site) {
+  const key = await resolveSite(dir2, site);
+  if (key) return parse(sitePath(dir2, key));
+  if (await usesSitesLayout(dir2)) return null;
+  const p = workspacePath(dir2);
+  return existsSync(p) ? parse(p) : null;
 }
 async function writeWorkspace(dir2, ws) {
+  if (await usesSitesLayout(dir2)) {
+    const key = siteKey(ws.connection?.siteUrl ?? ws.profile?.url);
+    const p2 = sitePath(dir2, key);
+    await mkdir(dirname(p2), { recursive: true });
+    await writeFile(p2, JSON.stringify(ws, null, 2), "utf8");
+    await writeFile(join(dir2, STATE_FILE), JSON.stringify({ activeDomain: key }, null, 2), "utf8");
+    return;
+  }
   const p = workspacePath(dir2);
   await mkdir(dirname(p), { recursive: true });
   await writeFile(p, JSON.stringify(ws, null, 2), "utf8");
@@ -28909,7 +28986,7 @@ var NotLoggedInError = class extends Error {
   }
   code = "not_logged_in";
 };
-async function resolveSite(dir2, siteFlag) {
+async function resolveSite2(dir2, siteFlag) {
   let siteUrl = siteFlag;
   if (!siteUrl) {
     const cfg = await readWorkdirConfig(dir2);
@@ -29043,7 +29120,7 @@ function applyPlan(ws, plan) {
 }
 
 // src/lib/vault.ts
-import { readFile as readFile5, writeFile as writeFile4, mkdir as mkdir4, readdir, rename } from "node:fs/promises";
+import { readFile as readFile5, writeFile as writeFile4, mkdir as mkdir4, readdir as readdir2, rename } from "node:fs/promises";
 import { existsSync as existsSync5 } from "node:fs";
 import { join as join4, dirname as dirname3, basename as basename2 } from "node:path";
 function contentDir(dir2, ws, content) {
@@ -29096,7 +29173,7 @@ ${newBody}`, "utf8");
 async function scanVault(dir2) {
   const out = /* @__PURE__ */ new Map();
   async function walk(d) {
-    for (const ent of await readdir(d, { withFileTypes: true })) {
+    for (const ent of await readdir2(d, { withFileTypes: true })) {
       if (ent.name.startsWith(".")) continue;
       const full = join4(d, ent.name);
       if (ent.isDirectory()) await walk(full);
@@ -29162,9 +29239,83 @@ function recordSynced(synced, before, after, syncedIds) {
   return out;
 }
 
+// src/lib/previewCmd.ts
+import { writeFile as writeFile6, mkdir as mkdir6, readFile as readFile7 } from "node:fs/promises";
+import { existsSync as existsSync7 } from "node:fs";
+import { spawn } from "node:child_process";
+import { basename as basename4, dirname as dirname4, join as join6, resolve as resolve3 } from "node:path";
+import { tmpdir } from "node:os";
+import { createHash as createHash2 } from "node:crypto";
+import { fileURLToPath } from "node:url";
+var previewPath = (dir2) => {
+  const abs = resolve3(dir2);
+  const hash = createHash2("sha1").update(abs).digest("hex").slice(0, 8);
+  const safe = basename4(abs).replace(/[^\w.-]+/g, "-").slice(0, 40) || "vault";
+  return join6(tmpdir(), "puffergo-silo-preview", `${safe}-${hash}.html`);
+};
+function bundleDir() {
+  const here = dirname4(fileURLToPath(import.meta.url));
+  const candidates = [
+    here,
+    join6(here, "preview"),
+    // dev: running from packages/silo-cli/src/lib via tsx
+    resolve3(here, "..", "..", "..", "..", "dist", "silo-preview")
+  ];
+  return candidates.find((d) => existsSync7(join6(d, "preview.js"))) ?? null;
+}
+function inlineJson(value) {
+  return JSON.stringify(value).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
+}
+function renderPreviewHtml(ws, sourceLabel, js, css) {
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${escapeHtml(ws.profile?.name || "Silo")} \xB7 Silo \u9884\u89C8</title>
+<style>${css}</style>
+</head>
+<body style="margin:0">
+<div id="app-container"></div>
+<script>window.__SILO_PREVIEW__=${inlineJson({ workspace: ws, sourceLabel })};</script>
+<script>${js}</script>
+</body>
+</html>
+`;
+}
+var escapeHtml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+function openInBrowser(file) {
+  const cmd2 = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
+  try {
+    const child = spawn(cmd2, [file], {
+      stdio: "ignore",
+      detached: true,
+      ...process.platform === "win32" ? { shell: true } : {}
+    });
+    child.unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function writePreview(ws, dir2, noOpen, outPath) {
+  const bundle = bundleDir();
+  if (!bundle) {
+    throw new Error("preview_bundle_missing");
+  }
+  const [js, css] = await Promise.all([
+    readFile7(join6(bundle, "preview.js"), "utf8"),
+    readFile7(join6(bundle, "preview.css"), "utf8").catch(() => "")
+  ]);
+  const file = outPath ? resolve3(outPath) : previewPath(dir2);
+  await mkdir6(dirname4(file), { recursive: true });
+  await writeFile6(file, renderPreviewHtml(ws, basename4(resolve3(dir2)) || dir2, js, css), "utf8");
+  return { file, opened: noOpen ? false : openInBrowser(file) };
+}
+
 // src/lib/productsCmd.ts
-import { resolve as resolve5, join as join9, relative } from "node:path";
-import { readFile as readFile12, readdir as readdir3, stat as stat2 } from "node:fs/promises";
+import { resolve as resolve6, join as join10, relative } from "node:path";
+import { readFile as readFile13, readdir as readdir4, stat as stat2 } from "node:fs/promises";
 
 // src/lib/imageSniff.ts
 var MAX_BYTES = 10 * 1024 * 1024;
@@ -29462,7 +29613,7 @@ function isEmptyValue(v) {
 
 // src/lib/siteCmd.ts
 async function client(ctx) {
-  const cred = await resolveSite(ctx.dir, ctx.flags.get("site"));
+  const cred = await resolveSite2(ctx.dir, ctx.flags.get("site"));
   const c = new AgentClient(cred.config);
   await loadSiteSchema(c);
   return c;
@@ -29541,7 +29692,7 @@ function liveLockedMessage(kind, group2) {
 async function cmdEditLive(ctx) {
   const sub = ctx.positional[0];
   try {
-    const cred = await resolveSite(ctx.dir, ctx.flags.get("site"));
+    const cred = await resolveSite2(ctx.dir, ctx.flags.get("site"));
     const siteUrl = cred.config.siteUrl;
     const cfg = await readWorkdirConfig(ctx.dir) ?? { siteUrl };
     if (cfg.siteUrl !== siteUrl)
@@ -29583,26 +29734,26 @@ async function cmdEditLive(ctx) {
 }
 
 // src/lib/productFiles.ts
-import { readFile as readFile8, writeFile as writeFile7, readdir as readdir2, mkdir as mkdir7 } from "node:fs/promises";
-import { existsSync as existsSync8 } from "node:fs";
+import { readFile as readFile9, writeFile as writeFile8, readdir as readdir3, mkdir as mkdir8 } from "node:fs/promises";
+import { existsSync as existsSync9 } from "node:fs";
 
 // src/lib/workdirState.ts
-import { existsSync as existsSync7 } from "node:fs";
-import { mkdir as mkdir6, readFile as readFile7, writeFile as writeFile6 } from "node:fs/promises";
-import { join as join6 } from "node:path";
+import { existsSync as existsSync8 } from "node:fs";
+import { mkdir as mkdir7, readFile as readFile8, writeFile as writeFile7 } from "node:fs/promises";
+import { join as join7 } from "node:path";
 function siteState(fileName) {
-  const path = (dir2) => join6(dir2, ".puffergo", fileName);
+  const path = (dir2) => join7(dir2, ".puffergo", fileName);
   const readAll = async (dir2) => {
-    if (!existsSync7(path(dir2))) return {};
+    if (!existsSync8(path(dir2))) return {};
     try {
-      return JSON.parse(await readFile7(path(dir2), "utf8"));
+      return JSON.parse(await readFile8(path(dir2), "utf8"));
     } catch {
       return {};
     }
   };
   const writeAll = async (dir2, all) => {
-    await mkdir6(join6(dir2, ".puffergo"), { recursive: true });
-    await writeFile6(path(dir2), JSON.stringify(all, null, 2) + "\n", "utf8");
+    await mkdir7(join7(dir2, ".puffergo"), { recursive: true });
+    await writeFile7(path(dir2), JSON.stringify(all, null, 2) + "\n", "utf8");
   };
   return {
     async read(dir2, siteUrl) {
@@ -29622,27 +29773,27 @@ function siteState(fileName) {
 }
 
 // src/lib/productFiles.ts
-import { join as join7 } from "node:path";
+import { join as join8 } from "node:path";
 function productsDir(dir2) {
-  return join7(dir2, "products");
+  return join8(dir2, "products");
 }
 function productFilePath(dir2, key) {
-  return join7(productsDir(dir2), `${key}.json`);
+  return join8(productsDir(dir2), `${key}.json`);
 }
 async function loadProducts(dir2, only) {
   const dirPath = productsDir(dir2);
-  if (!existsSync8(dirPath)) return [];
+  if (!existsSync9(dirPath)) return [];
   let files;
   if (only && only.length) {
     files = only.map((k) => `${k}.json`);
   } else {
-    files = (await readdir2(dirPath)).filter((f) => f.endsWith(".json"));
+    files = (await readdir3(dirPath)).filter((f) => f.endsWith(".json"));
   }
   const out = [];
   for (const f of files) {
-    const path = join7(dirPath, f);
-    if (!existsSync8(path)) continue;
-    const raw = await readFile8(path, "utf8");
+    const path = join8(dirPath, f);
+    if (!existsSync9(path)) continue;
+    const raw = await readFile9(path, "utf8");
     const fileKey = f.replace(/\.json$/, "");
     try {
       out.push({ fileKey, path, product: JSON.parse(raw) });
@@ -29653,8 +29804,8 @@ async function loadProducts(dir2, only) {
   return out;
 }
 async function writeProduct(dir2, key, product) {
-  await mkdir7(productsDir(dir2), { recursive: true });
-  await writeFile7(productFilePath(dir2, key), JSON.stringify(product, null, 2) + "\n", "utf8");
+  await mkdir8(productsDir(dir2), { recursive: true });
+  await writeFile8(productFilePath(dir2, key), JSON.stringify(product, null, 2) + "\n", "utf8");
 }
 var uploadsState = siteState("uploads.json");
 async function readUploadsCache(dir2, siteUrl) {
@@ -29665,9 +29816,9 @@ async function writeUploadsCache(dir2, siteUrl, cache2) {
 }
 
 // src/lib/localCheck.ts
-import { stat, readFile as readFile9 } from "node:fs/promises";
-import { existsSync as existsSync9 } from "node:fs";
-import { resolve as resolve3 } from "node:path";
+import { stat, readFile as readFile10 } from "node:fs/promises";
+import { existsSync as existsSync10 } from "node:fs";
+import { resolve as resolve4 } from "node:path";
 
 // src/lib/detailBlocks.ts
 function detailBlocks(product, ident) {
@@ -29927,8 +30078,8 @@ async function localCheckProduct(product, baseDir, images, components) {
   ];
   for (const { path, place, file } of locals) {
     const ref = { file };
-    const abs = resolve3(baseDir, ref.file);
-    if (!existsSync9(abs)) {
+    const abs = resolve4(baseDir, ref.file);
+    if (!existsSync10(abs)) {
       errors.push({ path, code: "not_found", message: `File not found: ${ref.file}`, fix: "ai" });
       continue;
     }
@@ -29942,7 +30093,7 @@ async function localCheckProduct(product, baseDir, images, components) {
       });
       continue;
     }
-    const bytes = await readFile9(abs);
+    const bytes = await readFile10(abs);
     const { format, width, height } = sniffImage(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength));
     if (!format) {
       errors.push({
@@ -29981,14 +30132,14 @@ async function localCheckProduct(product, baseDir, images, components) {
 }
 
 // src/lib/uploadImage.ts
-import { createHash as createHash2 } from "node:crypto";
-import { readFile as readFile10 } from "node:fs/promises";
-import { basename as basename4 } from "node:path";
+import { createHash as createHash3 } from "node:crypto";
+import { readFile as readFile11 } from "node:fs/promises";
+import { basename as basename5 } from "node:path";
 function sha256Hex(bytes) {
-  return createHash2("sha256").update(bytes).digest("hex");
+  return createHash3("sha256").update(bytes).digest("hex");
 }
 async function resolveUpload(client2, cache2, absPath) {
-  const bytes = await readFile10(absPath);
+  const bytes = await readFile11(absPath);
   const sha256 = sha256Hex(bytes);
   const cached = cache2[sha256];
   if (cached) return { mediaId: cached.mediaId, url: cached.url, sha256, reused: true };
@@ -29997,7 +30148,7 @@ async function resolveUpload(client2, cache2, absPath) {
     cache2[sha256] = { mediaId: lookup.mediaId, url: lookup.url ?? "" };
     return { mediaId: lookup.mediaId, url: lookup.url ?? "", sha256, reused: true };
   }
-  const filename = basename4(absPath);
+  const filename = basename5(absPath);
   const format = sniffImage(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)).format ?? "jpeg";
   const mime = `image/${format}`;
   const { id, url } = await client2.uploadMedia(new Uint8Array(bytes), filename, mime);
@@ -30084,8 +30235,8 @@ function sampleReference(remote, schema) {
 }
 
 // src/lib/htmlImages.ts
-import { existsSync as existsSync10 } from "node:fs";
-import { isAbsolute, resolve as resolve4 } from "node:path";
+import { existsSync as existsSync11 } from "node:fs";
+import { isAbsolute, resolve as resolve5 } from "node:path";
 var LOCAL_REF = /(\bsrc\s*=\s*["']|url\(\s*["']?)(?!https?:|\/\/|data:|\/|#)([^"')\s]+)/gi;
 function localImageRefs(html2) {
   return [...new Set([...html2.matchAll(LOCAL_REF)].map((m) => m[2]))];
@@ -30101,8 +30252,8 @@ async function uploadHtmlImages(c, cache2, html2, baseDir) {
   const uploaded = [];
   let reused = 0;
   for (const ref of localImageRefs(html2)) {
-    const abs = isAbsolute(ref) ? ref : resolve4(baseDir, decodeURI(ref));
-    if (!existsSync10(abs)) throw new MissingImageError(ref);
+    const abs = isAbsolute(ref) ? ref : resolve5(baseDir, decodeURI(ref));
+    if (!existsSync11(abs)) throw new MissingImageError(ref);
     const up = await resolveUpload(c, cache2, abs);
     if (up.reused) reused++;
     else uploaded.push(abs);
@@ -30116,9 +30267,9 @@ async function uploadHtmlImages(c, cache2, html2, baseDir) {
 }
 
 // src/lib/categories.ts
-import { readFile as readFile11 } from "node:fs/promises";
-import { existsSync as existsSync11 } from "node:fs";
-import { join as join8 } from "node:path";
+import { readFile as readFile12 } from "node:fs/promises";
+import { existsSync as existsSync12 } from "node:fs";
+import { join as join9 } from "node:path";
 var CAT_ORDER_META = "_puffergo_cat_order";
 function remoteOrder(term) {
   const raw = term.meta?.[CAT_ORDER_META];
@@ -30132,9 +30283,9 @@ function categoriesFileFor(type) {
 var MAX_SUGGESTED_DEPTH = 3;
 var SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 async function readCategoriesFile(dir2, file = CATEGORIES_FILE) {
-  const path = join8(dir2, file);
-  if (!existsSync11(path)) return null;
-  return JSON.parse(await readFile11(path, "utf8"));
+  const path = join9(dir2, file);
+  if (!existsSync12(path)) return null;
+  return JSON.parse(await readFile12(path, "utf8"));
 }
 function planCategories(tree, remote, opts = {}) {
   const { file = CATEGORIES_FILE, order: takesOrder = true } = opts;
@@ -30509,7 +30660,7 @@ async function prepareWire(c, loaded, ctx, cache2, tpl, allowPublish) {
   for (const { ref, path: refPath } of walkImageRefs(wire)) {
     if (!ref.file) continue;
     try {
-      const abs = resolve5(ctx.dir, ref.file);
+      const abs = resolve6(ctx.dir, ref.file);
       const res = await resolveUpload(c, cache2, abs);
       if (res.reused) reused++;
       else uploaded++;
@@ -30528,7 +30679,7 @@ async function prepareWire(c, loaded, ctx, cache2, tpl, allowPublish) {
   for (const leaf of walkConfigImages(wire, identOf(product))) {
     if (!isLocalImage(leaf.value)) continue;
     try {
-      const res = await resolveUpload(c, cache2, resolve5(ctx.dir, leaf.value));
+      const res = await resolveUpload(c, cache2, resolve6(ctx.dir, leaf.value));
       if (res.reused) reused++;
       else uploaded++;
       leaf.set(res.url);
@@ -30932,14 +31083,14 @@ async function cmdImages(ctx) {
     if (!spec) return { ok: false, code: "update_plugin", message: "The site plugin is too old to give image specs." };
     const files = [];
     for (const p of ctx.positional) {
-      const abs = resolve5(ctx.dir, p);
+      const abs = resolve6(ctx.dir, p);
       const st = await stat2(abs);
-      if (st.isDirectory()) files.push(...(await readdir3(abs)).filter((n) => !n.startsWith(".")).map((n) => join9(abs, n)));
+      if (st.isDirectory()) files.push(...(await readdir4(abs)).filter((n) => !n.startsWith(".")).map((n) => join10(abs, n)));
       else files.push(abs);
     }
     const images = [];
     for (const abs of files) {
-      const bytes = await readFile12(abs);
+      const bytes = await readFile13(abs);
       const { format, width, height } = sniffImage(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength));
       if (!format || width == null || height == null) continue;
       const info = { bytes: bytes.length, width, height };
@@ -30965,21 +31116,21 @@ async function cmdImages(ctx) {
 }
 
 // src/lib/loginCmd.ts
-import { spawn } from "node:child_process";
-import { existsSync as existsSync12 } from "node:fs";
-import { readFile as readFile13, rm as rm2, writeFile as writeFile8, mkdtemp, mkdir as mkdir8 } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname as dirname4, join as join10 } from "node:path";
+import { spawn as spawn2 } from "node:child_process";
+import { existsSync as existsSync13 } from "node:fs";
+import { readFile as readFile14, rm as rm2, writeFile as writeFile9, mkdtemp, mkdir as mkdir9 } from "node:fs/promises";
+import { tmpdir as tmpdir2 } from "node:os";
+import { dirname as dirname5, join as join11 } from "node:path";
 var WAIT_MS = 10 * 60 * 1e3;
 var STATUS_WAIT_MS = 100 * 1e3;
-var LOGIN_STATE = join10(PUFFERGO_DIR, "login-state.json");
+var LOGIN_STATE = join11(PUFFERGO_DIR, "login-state.json");
 async function writeLoginState(state, path = LOGIN_STATE) {
-  await mkdir8(dirname4(path), { recursive: true });
-  await writeFile8(path, JSON.stringify(state, null, 2), "utf8");
+  await mkdir9(dirname5(path), { recursive: true });
+  await writeFile9(path, JSON.stringify(state, null, 2), "utf8");
 }
 async function readLoginState(path = LOGIN_STATE) {
   try {
-    const s = JSON.parse(await readFile13(path, "utf8"));
+    const s = JSON.parse(await readFile14(path, "utf8"));
     return s && typeof s.siteUrl === "string" && typeof s.status === "string" ? s : null;
   } catch {
     return null;
@@ -31000,7 +31151,7 @@ function openBrowser(url) {
   if (process.env.PUFFERGO_NO_BROWSER) return;
   const [cmd2, args] = process.platform === "darwin" ? ["open", [url]] : process.platform === "win32" ? ["rundll32", ["url.dll,FileProtocolHandler", url]] : ["xdg-open", [url]];
   try {
-    spawn(cmd2, args, { detached: true, stdio: "ignore" }).unref();
+    spawn2(cmd2, args, { detached: true, stdio: "ignore" }).unref();
   } catch {
   }
 }
@@ -31013,9 +31164,9 @@ async function cmdLogin(dir2, siteArg) {
     return { ok: false, code: "error", message: `Not a valid site URL: ${siteArg}` };
   }
   await writeLoginState({ siteUrl, status: "pending", startedAt: Date.now() });
-  const handshakeDir = await mkdtemp(join10(tmpdir(), "puffergo-login-"));
-  const handshake = join10(handshakeDir, "authorize-url");
-  const child = spawn(
+  const handshakeDir = await mkdtemp(join11(tmpdir2(), "puffergo-login-"));
+  const handshake = join11(handshakeDir, "authorize-url");
+  const child = spawn2(
     process.execPath,
     [...process.execArgv, process.argv[1], "__login-wait", siteUrl, handshake, dir2],
     { detached: true, stdio: "ignore" }
@@ -31024,7 +31175,7 @@ async function cmdLogin(dir2, siteArg) {
   let authorizeUrl = "";
   for (let i = 0; i < 100 && !authorizeUrl; i++) {
     await new Promise((r) => setTimeout(r, 100));
-    if (existsSync12(handshake)) authorizeUrl = (await readFile13(handshake, "utf8")).trim();
+    if (existsSync13(handshake)) authorizeUrl = (await readFile14(handshake, "utf8")).trim();
   }
   await rm2(handshakeDir, { recursive: true, force: true });
   if (!authorizeUrl) return { ok: false, code: "error", message: "Could not start the local authorization listener." };
@@ -31090,7 +31241,7 @@ async function cmdLoginWait(siteUrl, handshake, dir2) {
   const creds = await runAuthorizeServer2(
     siteUrl,
     (authorizeUrl) => {
-      void writeFile8(handshake, authorizeUrl, "utf8");
+      void writeFile9(handshake, authorizeUrl, "utf8");
     },
     { appName: "PufferGo AI", timeoutMs: WAIT_MS, resultPage: RESULT_PAGE }
   );
@@ -31105,18 +31256,18 @@ async function cmdLoginWait(siteUrl, handshake, dir2) {
 }
 
 // src/lib/pagesCmd.ts
-import { existsSync as existsSync15 } from "node:fs";
-import { mkdir as mkdir9, readFile as readFile15, writeFile as writeFile9 } from "node:fs/promises";
-import { dirname as dirname6, join as join12, relative as relative3, resolve as resolve8 } from "node:path";
+import { existsSync as existsSync16 } from "node:fs";
+import { mkdir as mkdir10, readFile as readFile16, writeFile as writeFile10 } from "node:fs/promises";
+import { dirname as dirname7, join as join13, relative as relative3, resolve as resolve9 } from "node:path";
 
 // src/lib/contentBlocks.ts
-import { existsSync as existsSync14 } from "node:fs";
-import { readFile as readFile14, readdir as readdir4, stat as stat3 } from "node:fs/promises";
-import { dirname as dirname5, join as join11, relative as relative2, resolve as resolve7 } from "node:path";
+import { existsSync as existsSync15 } from "node:fs";
+import { readFile as readFile15, readdir as readdir5, stat as stat3 } from "node:fs/promises";
+import { dirname as dirname6, join as join12, relative as relative2, resolve as resolve8 } from "node:path";
 
 // src/lib/markdownImages.ts
-import { existsSync as existsSync13 } from "node:fs";
-import { isAbsolute as isAbsolute2, resolve as resolve6 } from "node:path";
+import { existsSync as existsSync14 } from "node:fs";
+import { isAbsolute as isAbsolute2, resolve as resolve7 } from "node:path";
 var LOCAL_REF2 = /(!\[[^\]]*\]\(\s*)(?!https?:|\/\/|data:|\/|#)([^)\s]+)/g;
 function localMarkdownImageRefs(markdown) {
   return [...new Set([...markdown.matchAll(LOCAL_REF2)].map((m) => m[2]))];
@@ -31126,8 +31277,8 @@ async function uploadMarkdownImages(c, cache2, markdown, baseDir) {
   const uploaded = [];
   let reused = 0;
   for (const ref of localMarkdownImageRefs(markdown)) {
-    const abs = isAbsolute2(ref) ? ref : resolve6(baseDir, decodeURI(ref));
-    if (!existsSync13(abs)) throw new MissingImageError(ref);
+    const abs = isAbsolute2(ref) ? ref : resolve7(baseDir, decodeURI(ref));
+    if (!existsSync14(abs)) throw new MissingImageError(ref);
     const up = await resolveUpload(c, cache2, abs);
     if (up.reused) reused++;
     else uploaded.push(abs);
@@ -31158,12 +31309,12 @@ async function blockFiles(dir2, args) {
     );
   const out = [];
   for (const a of args) {
-    const p = resolve7(dir2, a);
-    if (!existsSync14(p)) throw new FileError("file_not_found", `Not found: ${a}`);
+    const p = resolve8(dir2, a);
+    if (!existsSync15(p)) throw new FileError("file_not_found", `Not found: ${a}`);
     if ((await stat3(p)).isDirectory()) {
-      const names = (await readdir4(p)).filter((n) => suffixOf(n) && !isOriginal(n)).sort();
+      const names = (await readdir5(p)).filter((n) => suffixOf(n) && !isOriginal(n)).sort();
       if (!names.length) throw new FileError("file_not_found", `No .md, .html or .json block files in ${a}`);
-      out.push(...names.map((n) => join11(p, n)));
+      out.push(...names.map((n) => join12(p, n)));
     } else {
       if (!suffixOf(p))
         throw new FileError(
@@ -31193,14 +31344,14 @@ async function blocksFromFiles(c, ctx, files, componentData) {
         });
         continue;
       }
-      const text = (await readFile14(file, "utf8")).replace(/\n+$/, "");
+      const text = (await readFile15(file, "utf8")).replace(/\n+$/, "");
       try {
         if (suffix === ".md") {
-          const up = await uploadMarkdownImages(c, cache2, text, dirname5(file));
+          const up = await uploadMarkdownImages(c, cache2, text, dirname6(file));
           uploaded.push(...up.uploaded.map((abs) => relative2(ctx.dir, abs)));
           blocks.push({ type: "prose", markdown: up.markdown });
         } else {
-          const up = await uploadHtmlImages(c, cache2, text, dirname5(file));
+          const up = await uploadHtmlImages(c, cache2, text, dirname6(file));
           uploaded.push(...up.uploaded.map((abs) => relative2(ctx.dir, abs)));
           blocks.push({ type: "static", html: up.html });
         }
@@ -31231,7 +31382,7 @@ async function blockWarnings(dir2, files, blocks) {
     if (suffix === ".json") continue;
     const orig = file.replace(new RegExp(`\\${suffix}$`, "i"), `.orig${suffix}`);
     const words = (t) => suffix === ".md" ? t : t.replace(/<[^>]*>/g, " ");
-    const before = existsSync14(orig) ? words(await readFile14(orig, "utf8")) : "";
+    const before = existsSync15(orig) ? words(await readFile15(orig, "utf8")) : "";
     const w = claimWarning(relative2(dir2, file), blockText2(block2), before);
     if (w) out.push(w);
   }
@@ -31255,7 +31406,7 @@ var editable = (b) => b.kind === "prose" || b.kind === "static" || b.kind === "c
 var SUFFIX_OF_KIND = { prose: ".md", static: ".html", config: ".json" };
 async function componentInput(c, ctx, file) {
   const name = relative3(ctx.dir, file);
-  const read = async (f) => existsSync15(f) ? JSON.parse(await readFile15(f, "utf8")) : null;
+  const read = async (f) => existsSync16(f) ? JSON.parse(await readFile16(f, "utf8")) : null;
   let cf;
   try {
     cf = await read(file);
@@ -31272,7 +31423,7 @@ async function componentInput(c, ctx, file) {
   try {
     for (const { value, set } of configImages(cf.data, cf.schema)) {
       if (!isLocalImage(value)) continue;
-      const abs = [resolve8(dirname6(file), value), resolve8(ctx.dir, value)].find((p) => existsSync15(p));
+      const abs = [resolve9(dirname7(file), value), resolve9(ctx.dir, value)].find((p) => existsSync16(p));
       if (!abs)
         throw new FileError(
           "image_not_found",
@@ -31304,7 +31455,7 @@ async function blocksOf(c, ctx, files) {
   const { blocks, uploaded } = await blocksFromFiles(c, ctx, files, async (file) => {
     const { data, uploaded: up, warnings } = await componentInput(c, ctx, file);
     componentWarnings.push(...warnings);
-    const component = JSON.parse(await readFile15(file, "utf8")).component;
+    const component = JSON.parse(await readFile16(file, "utf8")).component;
     return { component, data, uploaded: up };
   });
   return { blocks, uploaded, warnings: [...await blockWarnings(ctx.dir, files, blocks), ...componentWarnings] };
@@ -31395,11 +31546,11 @@ function cmdGet(ctx) {
         };
       }
       const suffix = SUFFIX_OF_KIND[block2.kind];
-      const file = join12("pages", String(id), `block-${path}${suffix}`);
-      await mkdir9(join12(ctx.dir, "pages", String(id)), { recursive: true });
+      const file = join13("pages", String(id), `block-${path}${suffix}`);
+      await mkdir10(join13(ctx.dir, "pages", String(id)), { recursive: true });
       const text = content.endsWith("\n") ? content : content + "\n";
-      await writeFile9(join12(ctx.dir, file), text, "utf8");
-      await writeFile9(join12(ctx.dir, "pages", String(id), `block-${path}.orig${suffix}`), text, "utf8");
+      await writeFile10(join13(ctx.dir, file), text, "utf8");
+      await writeFile10(join13(ctx.dir, "pages", String(id), `block-${path}.orig${suffix}`), text, "utf8");
       saved.push({ path, file, text: block2.text });
     }
     if (!base)
@@ -31653,8 +31804,8 @@ function seoWarnings(seo, before = {}) {
 async function featuredImage(c, ctx) {
   const arg = ctx.flags.get("featured-image");
   if (!arg) return null;
-  const abs = resolve8(ctx.dir, arg);
-  if (!existsSync15(abs)) throw new FileError("image_not_found", `The featured image "${arg}" isn't there.`);
+  const abs = resolve9(ctx.dir, arg);
+  if (!existsSync16(abs)) throw new FileError("image_not_found", `The featured image "${arg}" isn't there.`);
   const cache2 = await readUploadsCache(ctx.dir, c.siteUrl);
   try {
     const up = await resolveUpload(c, cache2, abs);
@@ -31788,9 +31939,19 @@ var die = (code, message) => {
   emit({ ok: false, code, message });
   process.exit(1);
 };
+var wantedSite = flags.get("site");
 async function loadWs() {
-  const ws = await readWorkspace(dir);
-  if (!ws) die("no_workspace", `\u672A\u627E\u5230\u5DE5\u4F5C\u533A\uFF08\u5148\u8FD0\u884C silo init\uFF09\uFF1A${dir}`);
+  const ws = await readWorkspace(dir, wantedSite);
+  if (!ws) {
+    const sites = await listSites(dir);
+    if (sites.length && wantedSite && !await resolveSite(dir, wantedSite)) {
+      die("site_not_found", `\u8FD9\u4E2A vault \u91CC\u6CA1\u6709\u7AD9\u70B9\u300C${wantedSite}\u300D\u3002\u5DF2\u8FDE\u63A5\u7684\u7AD9\u70B9\uFF1A${sites.join("\u3001")}`);
+    }
+    if (sites.length > 1) {
+      die("site_required", `\u8FD9\u4E2A vault \u8FDE\u4E86\u591A\u4E2A\u7AD9\u70B9\uFF0C\u7528 --site \u6307\u5B9A\u4E00\u4E2A\uFF1A${sites.join("\u3001")}`);
+    }
+    die("no_workspace", `\u672A\u627E\u5230\u5DE5\u4F5C\u533A\uFF08\u5148\u8FD0\u884C silo init\uFF09\uFF1A${dir}`);
+  }
   applySeoLimits(ws.seoLimits);
   return ws;
 }
@@ -31810,9 +31971,13 @@ async function cmdInit() {
   const name = flags.get("name");
   const url = flags.get("url");
   if (!name || !url) die("usage", '\u7528\u6CD5\uFF1Asilo init --name "\u7AD9\u70B9\u540D" --url "https://example.com" [--tagline "\u5B9A\u4F4D"]');
-  const existing = await readWorkspace(dir);
+  const sites = await listSites(dir);
+  const existing = sites.length > 0 || await readWorkspace(dir, wantedSite);
   if (existing && flags.get("force") !== "true") {
-    die("workspace_exists", "\u5DE5\u4F5C\u533A\u5DF2\u5B58\u5728\uFF08\u52A0 --force \u8986\u76D6\uFF09");
+    die(
+      "workspace_exists",
+      sites.length ? `\u8FD9\u4E2A vault \u5DF2\u7ECF\u6709\u5DE5\u4F5C\u533A\u4E86\uFF08\u5DF2\u8FDE\u63A5\uFF1A${sites.join("\u3001")}\uFF09\uFF0C\u4E0D\u8981\u91CD\u5EFA;\u76F4\u63A5\u7528,\u6216\u7528 --site \u6307\u5B9A\u7AD9\u70B9` : "\u5DE5\u4F5C\u533A\u5DF2\u5B58\u5728\uFF08\u52A0 --force \u8986\u76D6\uFF09"
+    );
   }
   const ws = emptyWorkspace({ name, url, tagline: flags.get("tagline") });
   await writeWorkspace(dir, ws);
@@ -31823,7 +31988,7 @@ async function cmdPlan() {
   if (!file) die("usage", "\u7528\u6CD5\uFF1Asilo plan <plan.json>");
   let raw;
   try {
-    raw = await readFile16(file, "utf8");
+    raw = await readFile17(file, "utf8");
   } catch {
     die("file_not_found", `\u672A\u627E\u5230 plan \u6587\u4EF6\uFF1A${file}`);
   }
@@ -31882,7 +32047,7 @@ async function cmdPush2() {
       resolvedBody.set(id, file.body);
       continue;
     }
-    const res = await resolveBodyAssets(file.body, wpAssetUploader(client2, [dirname7(file.path), dir]));
+    const res = await resolveBodyAssets(file.body, wpAssetUploader(client2, [dirname8(file.path), dir]));
     resolvedBody.set(id, res.md);
     if (res.uploaded) {
       await updateNoteBody(file.path, res.md);
@@ -32012,6 +32177,22 @@ async function cmdStatus() {
   const issues = healthCheck(ws);
   log(`\u5065\u5EB7\u95EE\u9898 ${issues.length}\uFF08${issues.filter((i) => i.severity === "critical").length} \u4E25\u91CD\uFF09`);
 }
+async function cmdView() {
+  const ws = await loadWs();
+  let res;
+  try {
+    res = await writePreview(ws, dir, flags.get("no-open") === "true", flags.get("out"));
+  } catch (e) {
+    if (e instanceof Error && e.message === "preview_bundle_missing") {
+      die("error", "\u627E\u4E0D\u5230\u9884\u89C8\u9875\u8D44\u6E90\uFF08preview.js\uFF09\u3002\u672C\u6280\u80FD\u53EF\u80FD\u6CA1\u88C5\u5168\uFF0C\u8BF7\u91CD\u65B0\u5B89\u88C5\u672C\u6280\u80FD\u3002");
+    }
+    throw e;
+  }
+  log(`\u2713 \u5DF2\u751F\u6210\u9884\u89C8\u9875\uFF1A${res.file}`);
+  log(
+    res.opened ? "\u5DF2\u5728\u4F60\u7684\u9ED8\u8BA4\u6D4F\u89C8\u5668\u91CC\u6253\u5F00\u3002\u5DE6\u4E0A\u89D2\u53EF\u5207\u6362\u300C\u603B\u89C8\u300D\u5173\u7CFB\u56FE\u548C\u300C\u7ED3\u6784\u300D\u6811\uFF1B\u8FD9\u662F\u53EA\u8BFB\u9884\u89C8\uFF0C\u6539\u5185\u5BB9\u548C\u53D1\u5E03\u8FD8\u662F\u56DE\u5230\u547D\u4EE4\u884C\u3002" : "\u8BF7\u624B\u52A8\u6253\u5F00\u4E0A\u9762\u8FD9\u4E2A\u6587\u4EF6\u67E5\u770B\uFF08\u53EA\u8BFB\u9884\u89C8\uFF09\u3002"
+  );
+}
 async function main() {
   switch (cmd) {
     case "init":
@@ -32026,10 +32207,12 @@ async function main() {
       return cmdHealth();
     case "status":
       return cmdStatus();
+    case "view":
+      return cmdView();
     case "migrate-config":
       return cmdMigrateConfig();
     default:
-      log("puffergo silo <init|plan|push|pull|health|status|migrate-config> [--dir <vault>] [--config <path>]");
+      log("puffergo silo <init|plan|push|pull|health|status|view|migrate-config> [--dir <vault>] [--config <path>]");
       log("puffergo login <siteUrl>");
       log("puffergo login status [--wait <seconds>]");
       log(PRODUCTS_USAGE);
