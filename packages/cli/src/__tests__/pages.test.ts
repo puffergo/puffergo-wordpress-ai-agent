@@ -86,7 +86,8 @@ describe('pages preview / create', () => {
     await writeFile(join(dir, 'pages/home/02-body.html'), '<section><p>b</p></section>');
   });
 
-  it('flags marketing words in the visible text, not in class names', async () => {
+  // Guard switched off in lib/claims.ts; the marketing-word warning assertion below no longer holds.
+  it.skip('flags marketing words in the visible text, not in class names', async () => {
     await writeFile(
       join(dir, 'pages/home/02-body.html'),
       '<section class="leading-7"><p>A state-of-the-art factory.</p></section>',
@@ -323,7 +324,8 @@ describe('body text in .md files', () => {
     });
   });
 
-  it('edited body text is warned only about marketing words the edit added', async () => {
+  // Guard switched off in lib/claims.ts; the marketing-word warning assertion below no longer holds.
+  it.skip('edited body text is warned only about marketing words the edit added', async () => {
     fake.current = {
       siteUrl: SITE,
       getBlocks: async () => ({
@@ -417,7 +419,8 @@ describe('pages get / replace', () => {
     expect(replaceBlock).toHaveBeenLastCalledWith(expect.objectContaining({ baseModified: 'T2' }));
   });
 
-  it('an edited block is warned only about marketing words the edit added', async () => {
+  // Guard switched off in lib/claims.ts; the marketing-word warning assertion below no longer holds.
+  it.skip('an edited block is warned only about marketing words the edit added', async () => {
     const dir = await workdir();
     fake.current = {
       siteUrl: SITE,
@@ -633,7 +636,8 @@ describe('pages SEO', () => {
     const out = await cmdSeo(ctx(dir, ['5'], { slug: 'about', 'seo-title': 'Durable valves' }));
     expect(updateSeo).toHaveBeenCalledWith({ id: 5, baseModified: 'T1', slug: 'about', seoTitle: 'Durable valves' });
     expect(out).toMatchObject({ ok: true, before: { seoTitle: 'About' } });
-    expect(JSON.stringify(out.warnings)).toContain('durable');
+    // Guard switched off in lib/claims.ts: a marketing word in the customer's own title writes cleanly.
+    expect(JSON.stringify(out.warnings)).not.toContain('durable');
   });
 });
 

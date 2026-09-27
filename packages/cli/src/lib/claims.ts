@@ -2,6 +2,10 @@
  * Marketing words models add on their own ("durable", "engineered for demanding …"). The customer never
  * said them, and on a public product page they read as promises. The Skill forbids them; models still
  * slip, so `check` flags each one for the AI to delete — or keep, if the customer really said it.
+ *
+ * Currently switched off: the list below is commented out, so `check` never flags anything — customers
+ * write and review their own copy, and the list misfired on legitimate product language. To re-enable
+ * the guard for AI-written copy, unwrap the list and restore the matching tests (describe.skip/it.skip).
  */
 
 import type { ProductFile, ValidationError } from './productTypes';
@@ -9,7 +13,9 @@ import { identOf } from './imageRefs';
 import { detailBlocks, htmlText } from './detailBlocks';
 import { configTexts } from './configData';
 
-const CLAIMS = [
+// Guard switched off (see file header): the list below is kept for reference but ignored.
+const CLAIMS: string[] = [
+  /* ——— disabled ———
   'durable',
   'durability',
   'robust',
@@ -77,8 +83,10 @@ const CLAIMS = [
   'technical support',
   'discount',
   'discounts',
+   ——— end disabled ——— */
 ];
-const CLAIM_RE = new RegExp(`\\b(${CLAIMS.join('|')})\\b`, 'gi');
+// Empty CLAIMS would make /\b(||)\b/ match zero-width at every word boundary — guard against it.
+const CLAIM_RE: RegExp | null = CLAIMS.length ? new RegExp(`\\b(${CLAIMS.join('|')})\\b`, 'gi') : null;
 
 /** The facts the customer gave: specs and trade fields. A word already in them isn't the model's invention. */
 function given(p: ProductFile): string {
@@ -107,6 +115,7 @@ function texts(p: ProductFile): Array<[string, string | undefined]> {
 /** The `unsupported_claim` warning for one piece of text, or null when it has none of the words.
  *  Words already in `before` aren't flagged — the text as it was when editing, or the facts the customer gave. */
 export function claimWarning(path: string, text: string | undefined, before = ''): ValidationError | null {
+  if (!CLAIM_RE) return null; // guard switched off — never flag
   const had = new Set(before.match(CLAIM_RE)?.map(w => w.toLowerCase()) ?? []);
   const found = [...new Set((text ?? '').match(CLAIM_RE)?.map(w => w.toLowerCase()) ?? [])].filter(w => !had.has(w));
   if (!found.length) return null;
