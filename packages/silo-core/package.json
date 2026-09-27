@@ -18,5 +18,5 @@
     "typescript": "5.5.4",
     "vitest": "^2.1.9"
   },
-  "license": "MIT"
+  "license": "GPL-3.0-or-later"
 }

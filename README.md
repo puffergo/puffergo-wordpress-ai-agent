@@ -72,4 +72,7 @@ Pull requests are welcome. This repo is generated from PufferGo's internal repo,
 
 ## License
 
-MIT
+GPL-3.0-or-later ([text](LICENSE)) — free to use, modify, and share, including commercially.
+The only condition: if you distribute this software (or a derivative of it) to others, you must
+do so under the same license, with source code and this copyright notice. Using it privately or
+on your own sites carries no obligations at all.

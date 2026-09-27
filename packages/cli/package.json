@@ -23,7 +23,7 @@
     "vitest": "^2.1.9",
     "esbuild": "^0.25.1"
   },
-  "license": "MIT",
+  "license": "GPL-3.0-or-later",
   "files": [
     "bin",
     "dist",
