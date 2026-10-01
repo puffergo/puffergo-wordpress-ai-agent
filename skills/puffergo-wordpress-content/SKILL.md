@@ -43,7 +43,7 @@ description: >-
 
 ## 准备
 
-先跑一次 `node -v`：18 以上就能用（脚本自己不检查版本，是你跑这一句看的）。太低或没装，把一句安装命令发给客户请他自己装（macOS `brew install node` 或 nodejs.org 的 .pkg，Windows `winget install OpenJS.NodeJS.LTS`）——**你不要替他装，也不要问他的电脑密码**；装完请他回你一声，你再跑一次 `node -v` 确认。
+Node 是你的运行环境，你自己搞定，不要拿它去问客户：跑一句 `node -v`，18 以上就能用（脚本自己不检查版本，是你跑这一句看的）。太低或没装，你自己装好（macOS `brew install node` 或 nodejs.org 的 .pkg，Windows `winget install OpenJS.NodeJS.LTS`），再跑一次 `node -v` 确认。绝大多数机器本来就有，这一步通常是一句命令带过。
 
 然后运行 `pages types`；提示未登录就问网站地址，按下面「授权」走一遍，再跑一次 `pages types`。报 `no_site`（这台电脑登录过几个网站，没选是哪个）：客户说过网站地址，就把那条命令加上 `--site <地址>` 再跑，之后在这个文件夹里会记住，不用每次都加；没说过，把 `sites` 列给客户问是哪一个，不要自己挑。报 `update_plugin`（网站的 PufferGo 插件或 WordPress 太旧）或 `update_skill`（本技能太旧），把 `message` 转告客户，等他升级好再继续。
 

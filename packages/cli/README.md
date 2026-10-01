@@ -21,8 +21,8 @@
 
 ## Requirements
 
-- Node.js 18 or newer. If it is missing or too old, the agent gives you the one-line install command — it does not install software on your machine.
 - A WordPress site you administer.
+- Node.js 18 or newer — already on almost every machine, and the agent installs it itself if yours somehow has none. Nothing you need to check.
 - **Product upload** needs the PufferGo WordPress plugin **0.35.0 or newer**, which provides the product type and the validation endpoints.
 - **Pages, posts and case studies** need the PufferGo WordPress plugin **0.36.0 or newer** (Markdown body text, Tailwind blocks and the content endpoints).
 - **SEO silo** works on WordPress with Rank Math for the SEO fields; importing existing keywords needs the PufferGo plugin.
