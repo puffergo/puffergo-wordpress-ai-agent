@@ -376,18 +376,10 @@ export function cmdCreate(ctx: CmdCtx): Promise<Out> {
         'usage: puffergo pages create --type <type> --title "<title>" [--excerpt "…"] <files|folder…>',
       );
     }
+    // The SEO flags are all optional. A draft the customer's material is worth having before its SEO is agreed,
+    // so the site creates it and says what is still missing (`seo.checks` → `missing_seo`); `pages seo <id>`
+    // fills that in later. Nothing here is gated on it.
     const seo = seoFlags(ctx);
-    const missing = (['slug', 'seoTitle', 'seoDescription', 'focusKeyword'] as const)
-      .filter(k => !seo[k])
-      .map(flagName);
-    if (missing.length) {
-      return {
-        ok: false,
-        code: 'seo_missing',
-        fix: 'ai',
-        message: `Give ${missing.join(', ')}: every new page gets its address (slug), the SEO title and description search results and shared links show, and the core keyword it should rank for (long-tail ones with --keywords "a, b"). Ask the customer, or agree them with the customer, then run create again.`,
-      };
-    }
     const files = await blockFiles(ctx.dir, ctx.positional);
     const key = files.map(f => relative(ctx.dir, f)).join('|');
     const earlier = (await created.read(ctx.dir, c.siteUrl))[key];
@@ -411,7 +403,7 @@ export function cmdCreate(ctx: CmdCtx): Promise<Out> {
         title,
         blocks,
         ...(excerpt ? { excerpt } : {}),
-        ...(seoInput(seo) as SeoInput),
+        ...seoInput(seo),
         ...(featured ? { featuredImage: featured.id } : {}),
         ...(categories ? { categories } : {}),
       });

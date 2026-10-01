@@ -141,11 +141,11 @@ describe('site resolution', () => {
   };
   const cred = { username: 'u', appPassword: 'p' };
 
-  it('--site beats workdir config beats the only site, and is remembered', async () => {
+  it('--site beats the remembered active site beats the only site, and is remembered', async () => {
     await store({ 'http://a.test': cred, 'http://b.test': cred });
     const { resolveSite } = await import('../lib/site');
-    await mkdir(join(dir, '.puffergo'));
-    await writeFile(join(dir, '.puffergo', 'config.json'), JSON.stringify({ siteUrl: 'http://b.test' }));
+    const { writeActiveDomain } = await import('../adapters/fileStore');
+    await writeActiveDomain(dir, 'http://b.test');
     expect((await resolveSite(dir, undefined)).config.siteUrl).toBe('http://b.test');
     expect((await resolveSite(dir, 'http://a.test/')).config.siteUrl).toBe('http://a.test');
     expect((await resolveSite(dir, undefined)).config.siteUrl).toBe('http://a.test');

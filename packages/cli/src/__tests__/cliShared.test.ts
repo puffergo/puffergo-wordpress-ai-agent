@@ -9,16 +9,20 @@ import { join } from 'node:path';
 import { cmdPush, cmdPreview, cmdPull, cmdCheck } from '../lib/productsCmd';
 import { siteErrorOutput, cmdEditLive } from '../lib/siteCmd';
 import { cmdReplace, cmdGet, cmdPublish as cmdPagesPublish } from '../lib/pagesCmd';
-import { NoSiteError, NotLoggedInError, writeWorkdirConfig } from '../lib/site';
+import { NoSiteError, NotLoggedInError } from '../lib/site';
+import { writeActiveDomain } from '../adapters/fileStore';
 import { SchemaVersionError, PluginOutdatedError } from '../lib/siteSchema';
 
 const SITE = 'http://shared.test';
 
 async function workdir(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'pg-shared-'));
-  // Legacy single-site credential file in the workdir: resolveSite() finds it without touching ~/.puffergo.
-  await writeFile(join(dir, 'silo.config.json'), JSON.stringify({ siteUrl: SITE, username: 'u', appPassword: 'p' }));
-  await writeWorkdirConfig(dir, { siteUrl: SITE });
+  // Point this run at its own credential store (PUFFERGO_CONFIG) so it never touches ~/.puffergo, and
+  // remember SITE as this folder's active site (what `login`/`--site` would write into state.json).
+  const store = join(dir, 'credentials.json');
+  await writeFile(store, JSON.stringify({ sites: { [SITE]: { username: 'u', appPassword: 'p' } } }));
+  process.env.PUFFERGO_CONFIG = store;
+  await writeActiveDomain(dir, SITE);
   return dir;
 }
 
@@ -51,7 +55,10 @@ const ctx = (dir: string, positional: string[] = [], flags: Record<string, strin
   flags: new Map(Object.entries(flags)),
 });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  delete process.env.PUFFERGO_CONFIG;
+});
 
 describe('site errors → command output', () => {
   it('maps each site problem to its code', () => {

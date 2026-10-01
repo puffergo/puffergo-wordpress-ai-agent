@@ -6,6 +6,7 @@
 
 import { AgentHttpError, type AgentClient } from './agentClient';
 import type { Components } from './configData';
+import { SKILL_NAME } from '../skillName';
 
 /** The product-file shape this CLI understands. A newer plugin needs a newer Skill/CLI. */
 export const SUPPORTED_SCHEMA_VERSION = 6;
@@ -34,7 +35,7 @@ export interface SiteSchema {
 export class SchemaVersionError extends Error {
   constructor(readonly siteVersion: number) {
     super(
-      `The site's PufferGo plugin uses product-file version ${siteVersion}; this Skill understands up to ${SUPPORTED_SCHEMA_VERSION}. Update the Skill (download the latest wordpress-bulk-product-upload) and try again.`,
+      `The site's PufferGo plugin uses product-file version ${siteVersion}; this Skill understands up to ${SUPPORTED_SCHEMA_VERSION}. Update the Skill (download the latest ${SKILL_NAME}) and try again.`,
     );
   }
 }

@@ -57,6 +57,35 @@ export const isFallbackPermalink = (url: string, base?: string): boolean => {
   }
 };
 
+/** Query params WordPress adds to a DRAFT's `link` to turn it into a preview. `_ppp` is a nonce that
+ *  expires, so such an address is worthless the moment it is stored. */
+const PREVIEW_PARAMS = ['preview', 'preview_id', 'preview_nonce', '_ppp'];
+
+/**
+ * The address to STORE for a post. `/wp/v2` hands a draft's `link` out as a nonce'd preview URL
+ * (`?p=123&preview=true&_ppp=<nonce>`); only the abilities expose the canonical `permalink` — and
+ * import reads the /wp/v2 surface. The ledger's `wpLink` is what internal links resolve against and
+ * what `[[wikilink]]`s are rewritten to, so storing a preview URL would write a dead, expiring address
+ * into every body that links to that draft. Strip the preview bits: a draft keeps its fallback `?p=N`
+ * (matched by id — see `isFallbackPermalink`), a published post comes back untouched. `p` is kept
+ * deliberately, it IS the address on a site without pretty permalinks. Unparseable input passes through.
+ */
+export const canonicalPostLink = (link: string): string => {
+  try {
+    const u = new URL(link);
+    let preview = false;
+    for (const param of PREVIEW_PARAMS) {
+      if (u.searchParams.has(param)) {
+        u.searchParams.delete(param);
+        preview = true;
+      }
+    }
+    return preview ? u.toString() : link;
+  } catch {
+    return link;
+  }
+};
+
 const NOFOLLOW = /\bnofollow\b/i;
 
 /**

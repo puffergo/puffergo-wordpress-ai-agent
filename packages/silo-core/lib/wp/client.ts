@@ -1,11 +1,22 @@
 /**
- * WpClient — framework-agnostic WordPress REST client over a NetworkPort. Encodes the wiring we
- * VERIFIED against a real Rank Math site, notably that Rank Math SEO fields must be
- * written via `POST /rankmath/v1/updateMeta` and are silently dropped if passed in the `/wp/v2` meta
- * object. See reference: WP REST 写 SEO 正确姿势.
+ * WpClient — the ONE WordPress client of silo-core, framework-agnostic over a NetworkPort (so the same
+ * class runs in the extension's service worker, in Obsidian's requestUrl and in node).
  *
- * Mirrors the auth approach of the extension's existing `WordPressApiClient` (Basic auth from an
- * Application Password) but decoupled from `fetch` so it also runs inside Obsidian.
+ * Two surfaces, one client:
+ *   • The PufferGo plugin's ABILITIES (`/wp-abilities/v1/abilities/puffergo/*`) own everything that
+ *     WRITES content: create-post / update-body / update-seo / publish-post, and the reads that mirror
+ *     a post (get-blocks with full=true hands back the whole body as the Markdown/HTML/config it was
+ *     written from). The plugin compiles body Markdown into core WordPress blocks — the one compiler,
+ *     in one place — so this client never turns Markdown into HTML itself.
+ *   • Plain `/wp/v2` stays for what the abilities deliberately don't cover: the media library, taxonomy
+ *     term reads/creates, content-type discovery, rendered-HTML previews and public link probes.
+ *
+ * SEO title/description/keywords for POSTS travel inside the abilities (update-seo → the plugin's
+ * provider abstraction over Rank Math/Yoast). Category ARCHIVE (term) SEO still goes through the
+ * plugin's own `/puffergo/v1/seo-meta` route — abilities address posts only.
+ *
+ * Auth is Basic (an Application Password) on every request, mirroring the extension's
+ * `WordPressApiClient` but decoupled from `fetch` so it also runs inside Obsidian.
  */
 
 import type { HttpRequest, NetworkPort } from '../ports/network';
@@ -47,32 +58,6 @@ const CONTENT_FIELDS = [
   'meta',
   'yoast_head_json',
 ];
-
-export interface PushResult {
-  /** WP post id (new or existing). */
-  id: number;
-  /** WP `modified_gmt` (UTC) after the write — captured for conflict detection (timezone-immune). */
-  modifiedGmt: string;
-  /** WP's own post status after the write (draft/publish/…). */
-  status?: string;
-  /** WP permalink after the write — surfaced so a synced note can link straight to the post. */
-  link?: string;
-}
-
-/** Options for {@link WpClient.upsertPost}. All optional — omitting `content` pushes a body-less shell
- *  (create) or a metadata-only update that PRESERVES whatever body already lives on WP. */
-export interface UpsertPostOptions {
-  /** Rendered HTML body. OMIT it in the extension (bodies live in WP/Obsidian, never here); a future
-   *  Obsidian host passes the note's HTML here to author the body through the same primitive. */
-  content?: string;
-  /** Resolved hierarchical taxonomy term ids to assign (the silo path). */
-  termIds?: number[];
-  /** REST base of the taxonomy `termIds` belong to (e.g. 'categories', 'product_cat'); it is the WP
-   *  request field name for term assignment. Required for `termIds` to be applied. */
-  taxonomyRestBase?: string;
-  /** Parent page id (page type only) — maps the Silo hierarchy onto WP's page tree. */
-  parentId?: number;
-}
 
 /** Raw WP post as pulled during import — only the fields the Silo importer reads. */
 export interface WpRawPost {
@@ -119,17 +104,134 @@ export interface SeoMetaItem {
   focusKeyword: string;
 }
 
+// ---------------------------------------------------------------------------
+// The abilities surface (puffergo/* through core's /wp-abilities/v1 REST route)
+// ---------------------------------------------------------------------------
+
+/** One body block as the abilities take and give it: prose Markdown, a static Tailwind section's HTML,
+ *  a config component's data, or a native editor block kept as read. */
+export type AbilityBlock =
+  | { type: 'prose'; markdown: string }
+  | { type: 'static'; html: string; scopeId?: string }
+  | { type: 'config'; component: string; data: Record<string, unknown> }
+  | { type: 'native'; raw: string }
+  | { type: 'image'; image: Record<string, unknown> }
+  | { type: 'video'; url?: string; mediaId?: number };
+
+/** One block as `get-blocks` describes it. With `full: true` a prose block also carries its whole
+ *  `markdown`, a static block its whole `html`, a config block its `component`+`data` and a native
+ *  block its `raw` — one read of a post's complete body. */
+export interface DescribedBlock {
+  path: string;
+  name?: string;
+  kind: 'prose' | 'static' | 'config' | 'native' | 'image' | 'video';
+  scopeId?: string;
+  /** The first 160 characters of the block's text — always present, full or not. */
+  text?: string;
+  markdown?: string;
+  html?: string;
+  component?: string;
+  data?: Record<string, unknown>;
+  raw?: string;
+  innerBlocks?: DescribedBlock[];
+}
+
+/** A post's SEO state as the abilities report it (read) and accept it (write). */
+export interface AbilitySeo {
+  slug: string | null;
+  seoTitle: string | null;
+  seoDescription: string | null;
+  focusKeyword: string | null;
+  keywords: string[];
+  featuredImage: { id: number; url: string } | null;
+  score: number | null;
+  /** The active SEO plugin ('rank-math' | 'yoast'), or null when the site has none. */
+  plugin: string | null;
+  limits?: SeoLimits;
+  /** Advice, never errors: what's missing or out of range (missing_seo, keyword_missing, too_long…). */
+  checks?: Array<{ code: string; where?: string; message?: string }>;
+}
+
+/** What every ability that touches one post returns: the post's identity + the concurrency token the
+ *  next write must carry. `permalink` is the canonical address even for a draft (no preview nonce —
+ *  safe to store and to resolve internal links against); `link` is what a human can open right now. */
+export interface AbilityPost {
+  id: number;
+  type: string;
+  title: string;
+  slug?: string;
+  status: string;
+  aiCreated?: boolean;
+  baseModified: string;
+  link: string;
+  permalink: string;
+  editUrl?: string;
+  /** Category slugs it is filed under; absent for a type filed nowhere (a page). */
+  categories?: string[] | null;
+  /** Count of body blocks (create-post / update-body results). */
+  blocks?: number;
+  seo?: AbilitySeo;
+}
+
+/** The full get-blocks read of one post (`blocks` widened from the count create/update return). */
+export interface AbilityBlocks extends Omit<AbilityPost, 'blocks'> {
+  blocks: DescribedBlock[];
+  /** Set when the post was NOT made of blocks we own (a classic-editor or page-builder post). */
+  editor?: string;
+  editorNote?: string;
+}
+
+/** One content type as `list-post-types` reports it, with its whole category tree (ids AND slugs, so a
+ *  ledger that stores term ids can push the slugs the abilities want without another round-trip). */
+export interface AbilityPostType {
+  type: string;
+  label: string;
+  singular?: string;
+  canCreate: boolean;
+  layout: 'fullWidth' | 'inTemplate';
+  taxonomy: {
+    slug: string;
+    label: string;
+    restBase: string;
+    categories: Array<{ id: number; name: string; slug: string; parent: string }>;
+  } | null;
+}
+
+/** The SEO fields a create-post / update-seo call may carry (all optional; the plugin reports what's
+ *  missing as advice in `seo.checks` instead of refusing). */
+export interface AbilitySeoInput {
+  slug?: string;
+  seoTitle?: string;
+  seoDescription?: string;
+  /** Core keyword first… */
+  focusKeyword?: string;
+  /** …then the long-tail ones. */
+  keywords?: string[];
+  featuredImage?: number;
+  /** Category SLUGS the post is filed under (the ability refuses a slug the site doesn't have). */
+  categories?: string[];
+}
+
+/** Abilities that core serves over GET (their `annotations.readonly`); everything else is a POST. */
+const READONLY_ABILITIES = new Set(['list-post-types', 'find-posts', 'get-blocks']);
+
 export class WpClient {
   private readonly base: string;
+  private readonly abilityBase: string;
   private readonly authHeader: string;
   /** type slug → discovered info (rest_base + hierarchical taxonomy rest_base). */
   private readonly typeInfo: Map<string, ContentTypeInfo>;
+  /** `${taxonomy}:${termId}` → slug, so a ledger of term ids can push the slugs abilities want
+   *  without re-fetching a term per item. Per-client: one client lives for one push/import run. */
+  private readonly termSlugCache = new Map<string, string>();
 
   constructor(
     private readonly net: NetworkPort,
     conn: WpConnection,
   ) {
-    this.base = `${conn.siteUrl.replace(/\/$/, '')}/wp-json`;
+    const site = conn.siteUrl.replace(/\/$/, '');
+    this.base = `${site}/wp-json`;
+    this.abilityBase = `${this.base}/wp-abilities/v1/abilities/puffergo`;
     // btoa exists in the extension service worker and in Obsidian's Electron renderer.
     this.authHeader = `Basic ${btoa(`${conn.username}:${conn.appPassword}`)}`;
     this.typeInfo = new Map((conn.contentTypes ?? []).map(t => [t.type, t]));
@@ -150,6 +252,116 @@ export class WpClient {
   /** REST base of the type's hierarchical taxonomy (the category-equivalent), or undefined if none. */
   taxRestBaseFor(postType: PostType): string | undefined {
     return this.typeInfo.get(postType)?.taxonomyRestBase;
+  }
+
+  private async call<T>(req: Omit<HttpRequest, 'headers'> & { headers?: Record<string, string> }): Promise<T> {
+    const res = await this.net.request({
+      ...req,
+      url: `${this.base}${req.url}`,
+      headers: { 'Content-Type': 'application/json', Authorization: this.authHeader, ...req.headers },
+    });
+    const body = res.json as (T & { code?: string; message?: string }) | undefined;
+    if (res.status < 200 || res.status >= 300) {
+      throw new WpHttpError(res.status, body?.code ?? 'wp_error', body?.message ?? `HTTP ${res.status}`, body);
+    }
+    return body as T;
+  }
+
+  // -------------------------------------------------------------------------
+  // Abilities: the plugin's content surface (WordPress ≥ 6.9 + the PufferGo plugin)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Run one `puffergo/<name>` ability through core's `/wp-abilities/v1` REST route. Readonly abilities
+   * go over GET with each input field as `input[field]=value` (core reads the raw query param, no JSON
+   * decoding); writes go over POST with `{input}` as the JSON body. A non-2xx becomes a `WpHttpError`
+   * carrying the plugin's own `{code, message, data:{status, fix, errors, baseModified}}`, so callers
+   * can branch on `code` ('conflict', 'no_seo_plugin', 'prose_unsupported', …) and `isAuthError` keeps
+   * working exactly as on the /wp/v2 surface.
+   */
+  async runAbility<T>(name: string, input: object = {}): Promise<T> {
+    let req: Omit<HttpRequest, 'headers'>;
+    if (READONLY_ABILITIES.has(name)) {
+      const q = new URLSearchParams();
+      for (const [k, v] of Object.entries(input)) {
+        if (v !== undefined && v !== '' && v !== false) q.set(`input[${k}]`, String(v));
+      }
+      const qs = q.toString();
+      req = { method: 'GET', url: `/wp-abilities/v1/abilities/puffergo/${name}/run${qs ? `?${qs}` : ''}` };
+    } else {
+      req = { method: 'POST', url: `/wp-abilities/v1/abilities/puffergo/${name}/run`, body: { input } };
+    }
+    const res = await this.call<T>(req);
+    // `call` only rejects on a non-2xx, so a 200 with no body (proxy, misrouted route, a plugin build
+    // that answers nothing) would otherwise pass as a successful write. Callers read `id` /
+    // `baseModified` off it and persist them — an empty body would silently wipe the item's identity.
+    if (res == null)
+      throw new WpHttpError(200, 'empty_response', `ability ${name} returned an empty response`, undefined);
+    return res;
+  }
+
+  /** The site's editable content types with each one's full category tree (id/name/slug/parent). */
+  listPostTypes(): Promise<{ items: AbilityPostType[] }> {
+    return this.runAbility('list-post-types');
+  }
+
+  /** Find posts by type/status/search/url, newest-modified first, 50 a page. */
+  findPosts(
+    params: {
+      type?: string;
+      status?: string;
+      search?: string;
+      url?: string;
+      page?: number;
+    } = {},
+  ): Promise<{ items: AbilityPost[]; total: number; pages: number }> {
+    return this.runAbility('find-posts', params);
+  }
+
+  /** One post's blocks + SEO + concurrency token. `full: true` makes every block carry its whole
+   *  content (prose → `markdown`, static → `html`, …) — one read of the complete body. */
+  getBlocks(id: number, opts: { path?: string; full?: boolean } = {}): Promise<AbilityBlocks> {
+    return this.runAbility('get-blocks', {
+      id,
+      ...(opts.path ? { path: opts.path } : {}),
+      ...(opts.full ? { full: true } : {}),
+    });
+  }
+
+  /** Create a draft. `blocks` may be empty — a body-less shell a later `updateBody` fills in. SEO
+   *  fields are optional; what's missing comes back as advice in `seo.checks`. */
+  createPost(
+    input: { type: string; title: string; excerpt?: string; blocks?: AbilityBlock[] } & AbilitySeoInput,
+  ): Promise<AbilityPost> {
+    return this.runAbility('create-post', input);
+  }
+
+  /** Replace the post's WHOLE body with these blocks; title/slug/SEO/categories untouched. Refused
+   *  when the post changed since `baseModified` (409 'conflict') or isn't block content (400). */
+  updateBody(input: { id: number; baseModified: string; blocks: AbilityBlock[] }): Promise<AbilityPost> {
+    return this.runAbility('update-body', input);
+  }
+
+  /** Change title/slug/SEO/categories/featured image. Same 409 'conflict' guard; a published post's
+   *  slug (and, where permalinks carry it, its category) is locked ('slug_locked' / 'category_locked'). */
+  updateSeo(input: { id: number; baseModified: string; title?: string } & AbilitySeoInput): Promise<AbilityPost> {
+    return this.runAbility('update-seo', input);
+  }
+
+  /** Publish a draft (not products). Same guards as the other writes. */
+  publishPost(input: { id: number; baseModified: string }): Promise<AbilityPost> {
+    return this.runAbility('publish-post', input);
+  }
+
+  /** A term's slug by id (cached per client) — the bridge from the ledger's term ids to the slugs the
+   *  abilities' `categories` field wants. Null when the term no longer exists on the site. */
+  async termSlug(taxRestBase: string, termId: number): Promise<string | null> {
+    const key = `${taxRestBase}:${termId}`;
+    const hit = this.termSlugCache.get(key);
+    if (hit !== undefined) return hit || null;
+    const term = await this.fetchTerm(taxRestBase, termId);
+    this.termSlugCache.set(key, term?.slug ?? '');
+    return term?.slug ?? null;
   }
 
   /**
@@ -209,19 +421,6 @@ export class WpClient {
     return out;
   }
 
-  private async call<T>(req: Omit<HttpRequest, 'headers'> & { headers?: Record<string, string> }): Promise<T> {
-    const res = await this.net.request({
-      ...req,
-      url: `${this.base}${req.url}`,
-      headers: { 'Content-Type': 'application/json', Authorization: this.authHeader, ...req.headers },
-    });
-    const body = res.json as (T & { code?: string; message?: string }) | undefined;
-    if (res.status < 200 || res.status >= 300) {
-      throw new WpHttpError(res.status, body?.code ?? 'wp_error', body?.message ?? `HTTP ${res.status}`, body);
-    }
-    return body as T;
-  }
-
   /**
    * Upload a binary asset to the WP media library (POST /wp/v2/media) and return its id + public URL.
    * The body is raw bytes; the NetworkPort adapter must pass a Uint8Array through untouched (not JSON).
@@ -272,19 +471,6 @@ export class WpClient {
     }
   }
 
-  /** Live WP `modified_gmt` (UTC) + `status` for a post — the pre-push signal used both for conflict
-   *  detection (modifiedGmt compared for inequality against the value captured at last sync) and for
-   *  warning before overwriting an already-published post. `modifiedGmt` falls back to `modified` on the
-   *  rare site that omits it. */
-  async fetchRemoteState(postType: PostType, id: number): Promise<{ modifiedGmt: string | null; status?: string }> {
-    const route = this.routeFor(postType);
-    const res = await this.call<{ modified?: string; modified_gmt?: string; status?: string }>({
-      method: 'GET',
-      url: `/wp/v2/${route}/${id}?_fields=modified,modified_gmt,status`,
-    });
-    return { modifiedGmt: res.modified_gmt ?? res.modified ?? null, status: res.status };
-  }
-
   /** Fetch ONE content item's importer fields (for single-item refresh from the cloud). Returns null
    *  when the post is gone (404). Normalizes the per-type taxonomy field into `termIds` like the list. */
   async fetchContentItem(postType: PostType, id: number): Promise<WpRawPost | null> {
@@ -307,50 +493,6 @@ export class WpClient {
     const raw = tax ? row[tax] : undefined;
     const termIds = Array.isArray(raw) ? raw.filter((n): n is number => typeof n === 'number') : [];
     return { ...row, termIds };
-  }
-
-  /**
-   * Create or update a post/page, pushing title/slug/hierarchy (and SEO is written separately). When
-   * `item.wpPostId` is set it updates in place; otherwise it CREATES a new draft.
-   *
-   * Body policy: `content` is only sent when explicitly provided. The extension always omits it, so a
-   * create yields an EMPTY draft shell (body authored later in Obsidian/WP) and an update NEVER touches
-   * the body already on WP. `status:'draft'` is only set on CREATE — an update must not silently revert
-   * a live post back to draft. Returns id + modified + status.
-   */
-  async upsertPost(item: ContentItem, opts: UpsertPostOptions = {}): Promise<PushResult> {
-    const route = this.routeFor(item.postType);
-    const payload: Record<string, unknown> = { title: item.title };
-    if (opts.content !== undefined) payload.content = opts.content;
-    if (item.slug) payload.slug = item.slug;
-    if (!item.wpPostId) payload.status = 'draft'; // CREATE only — never flip an existing post's status
-    // Assign the silo path onto the type's hierarchical taxonomy (field name = its rest_base:
-    // 'categories' for post, 'product_cat' for WooCommerce, 'puffergo_product_cat' for PufferGo, …).
-    if (opts.taxonomyRestBase && opts.termIds && opts.termIds.length) payload[opts.taxonomyRestBase] = opts.termIds;
-    if (opts.parentId) payload.parent = opts.parentId; // page hierarchy (unused today — pages pushed flat)
-
-    const path = item.wpPostId ? `/wp/v2/${route}/${item.wpPostId}` : `/wp/v2/${route}`;
-    const res = await this.call<{
-      id: number;
-      modified: string;
-      modified_gmt?: string;
-      status?: string;
-      link?: string;
-    }>({
-      method: 'POST',
-      url: path,
-      body: payload,
-    });
-    return { id: res.id, modifiedGmt: res.modified_gmt ?? res.modified, status: res.status, link: res.link };
-  }
-
-  /** A post's stored body (`content.raw`, block markup included), '' when it has none. */
-  async fetchRawContent(postType: PostType, id: number): Promise<string> {
-    const res = await this.call<{ content?: { raw?: string } }>({
-      method: 'GET',
-      url: `/wp/v2/${this.routeFor(postType)}/${id}?context=edit&_fields=content`,
-    });
-    return res.content?.raw ?? '';
   }
 
   /**
@@ -395,56 +537,28 @@ export class WpClient {
   }
 
   /**
-   * Write a post's (or a term archive's) SEO title, description and focus keywords. Blank fields are left
-   * out; nothing is sent when all are blank. `objectType` is 'post' for any post/page/CPT entry and 'term'
-   * for a taxonomy term's archive page.
-   *
-   * Goes through the PufferGo plugin (`POST /puffergo/v1/seo-meta`), which writes whichever SEO plugin the
-   * site runs (Rank Math, Yoast). A site without the PufferGo plugin falls back to Rank Math's own
-   * `POST /rankmath/v1/updateMeta` — the only route that persists Rank Math meta there.
+   * Write a taxonomy TERM's archive-page SEO (title / description / focus keywords) through the
+   * PufferGo plugin's own route — abilities address posts only, so a category archive keeps this path.
+   * Post SEO travels inside `updateSeo` (the ability) instead. Blank fields are left out; nothing is
+   * sent when all are blank. Requires the PufferGo plugin; a site without it (or without any SEO
+   * plugin) fails with the site's own error — there is no second write path.
    */
-  async writeSeo(objectId: number, seo: Seo, objectType: 'post' | 'term' = 'post'): Promise<void> {
+  async writeTermSeo(termId: number, seo: Seo): Promise<void> {
     const title = seo.title.trim();
     const description = seo.description.trim();
     const keywords = focusKeywords(seo);
     if (!title && !description && !keywords.length) return;
 
-    const res = await this.net.request({
+    await this.call({
       method: 'POST',
-      url: `${this.base}/puffergo/v1/seo-meta`,
-      headers: { 'Content-Type': 'application/json', Authorization: this.authHeader },
+      url: '/puffergo/v1/seo-meta',
       body: {
-        objectType,
-        id: objectId,
+        objectType: 'term',
+        id: termId,
         ...(title ? { title } : {}),
         ...(description ? { description } : {}),
         ...(keywords.length ? { keywords } : {}),
       },
-    });
-    const body = res.json as { code?: string; message?: string } | undefined;
-    if (res.status === 404 && body?.code === 'rest_no_route') {
-      await this.writeRankMathMeta(objectId, { title, description, keywords: keywords.join(', ') }, objectType);
-      return;
-    }
-    if (res.status < 200 || res.status >= 300) {
-      throw new WpHttpError(res.status, body?.code ?? 'wp_error', body?.message ?? `HTTP ${res.status}`, body);
-    }
-  }
-
-  /** Rank Math's own route, for sites without the PufferGo plugin. */
-  private async writeRankMathMeta(
-    objectId: number,
-    seo: { title: string; description: string; keywords: string },
-    objectType: 'post' | 'term',
-  ): Promise<void> {
-    const meta: Record<string, string> = {};
-    if (seo.title) meta.rank_math_title = seo.title;
-    if (seo.description) meta.rank_math_description = seo.description;
-    if (seo.keywords) meta.rank_math_focus_keyword = seo.keywords;
-    await this.call({
-      method: 'POST',
-      url: '/rankmath/v1/updateMeta',
-      body: { objectID: objectId, objectType, meta },
     });
   }
 
@@ -538,38 +652,63 @@ export class WpClient {
   }
 
   /**
-   * Resolve a keyword-hierarchy path to term ids in ANY hierarchical taxonomy, creating missing terms
-   * (with the correct parent) so the keyword tree mirrors the taxonomy tree. Returns the leaf term id
-   * list suitable for assignment. `taxRestBase` is the taxonomy's REST base ('categories',
-   * 'product_cat', 'puffergo_product_cat', …), so this works for post categories AND any CPT taxonomy.
+   * Resolve a keyword-hierarchy path to terms in ANY hierarchical taxonomy, creating missing terms
+   * (with the correct parent) so the keyword tree mirrors the taxonomy tree. Returns the leaf
+   * `{id, slug}` — both, because the ledger stores ids while the abilities' `categories` field takes
+   * slugs. `taxRestBase` is the taxonomy's REST base ('categories', 'product_cat', …).
    */
-  async ensureTermPath(taxRestBase: string, terms: string[], startParent = 0): Promise<number[]> {
+  async ensureTermPath(
+    taxRestBase: string,
+    terms: string[],
+    startParent = 0,
+  ): Promise<{ id: number; slug: string } | null> {
     let parent = startParent;
-    let leafId = 0;
+    let leaf: { id: number; slug: string } | null = null;
     for (const term of terms) {
       const name = term.trim();
       if (!name) continue;
-      const existing = await this.call<Array<{ id: number; name: string }>>({
-        method: 'GET',
-        url: `/wp/v2/${taxRestBase}?per_page=100&parent=${parent}&search=${encodeURIComponent(name)}&_fields=id,name`,
-      });
-      // `search` is a substring match: "SEO" also returns "SEO 技巧". Only an exact name (case-insensitive,
-      // WP returns names HTML-escaped) is the same category; anything else would file the post wrongly.
+      // `search` is a substring match, so a page of 100 can be full of near-misses. Paging until an
+      // exact name turns up (or the pages run out) is what keeps a deep taxonomy from silently FORKING:
+      // a missed match would create a second term of the same name, whose slug becomes `name-2`, and the
+      // post would be filed under that empty twin instead of the real category.
       const want = name.toLowerCase();
-      const match = existing.find(t => decodeTermName(t.name).trim().toLowerCase() === want);
+      let match: { id: number; slug: string } | undefined;
+      for (let page = 1; ; page++) {
+        let rows: Array<{ id: number; name: string; slug: string }>;
+        try {
+          rows = await this.call<Array<{ id: number; name: string; slug: string }>>({
+            method: 'GET',
+            url: `/wp/v2/${taxRestBase}?per_page=100&page=${page}&parent=${parent}&search=${encodeURIComponent(name)}&_fields=id,name,slug`,
+          });
+        } catch (e) {
+          // WP answers 400 past the last page (rest_post_invalid_page_number) — the end-of-pages signal,
+          // and what an empty taxonomy answers on page 1. Anything else is a real failure.
+          if (e instanceof WpHttpError && e.status === 400) break;
+          throw e;
+        }
+        // Only an exact name is the same category: "SEO" must not match "SEO 技巧" (case-insensitive;
+        // WP returns names HTML-escaped).
+        const hit = rows.find(t => decodeTermName(t.name).trim().toLowerCase() === want);
+        if (hit) {
+          match = { id: hit.id, slug: hit.slug };
+          break;
+        }
+        if (rows.length < 100) break;
+      }
       if (match) {
-        leafId = match.id;
+        leaf = match;
       } else {
-        const created = await this.call<{ id: number }>({
+        const created = await this.call<{ id: number; slug: string }>({
           method: 'POST',
           url: `/wp/v2/${taxRestBase}`,
           body: { name, parent },
         });
-        leafId = created.id;
+        leaf = { id: created.id, slug: created.slug };
       }
-      parent = leafId;
+      this.termSlugCache.set(`${taxRestBase}:${leaf.id}`, leaf.slug);
+      parent = leaf.id;
     }
-    return leafId ? [leafId] : [];
+    return leaf;
   }
 
   /** Fetch ONE taxonomy term (name/slug/parent + front-end archive `link`) for a single-category
@@ -602,9 +741,17 @@ export class WpClient {
         url: `${this.base}/wp/v2/${taxRestBase}?per_page=${perPage}&page=${page}&_fields=id,name,slug,parent,link`,
         headers: { 'Content-Type': 'application/json', Authorization: this.authHeader },
       });
-      // A taxonomy with zero terms answers 400 (rest_post_invalid_page_number) past the last page; treat
-      // any non-2xx as "no more terms" rather than aborting the whole import.
-      if (res.status < 200 || res.status >= 300) break;
+      // WP answers 400 past the last page (rest_post_invalid_page_number) — the normal end-of-pages
+      // signal, and also what an empty taxonomy answers on page 1. Anything else on page ONE is a real
+      // failure: 401/403 means revoked or wrong credentials, and swallowing it would import the whole
+      // site with an EMPTY category tree while reporting success (and `isAuthError` would never fire).
+      if (res.status < 200 || res.status >= 300) {
+        if (page === 1 && (res.status === 401 || res.status === 403)) {
+          const body = res.json as { code?: string; message?: string } | undefined;
+          throw new WpHttpError(res.status, body?.code ?? 'wp_error', body?.message ?? `HTTP ${res.status}`, body);
+        }
+        break;
+      }
       const rows = (res.json as WpTerm[]) ?? [];
       out.push(...rows);
       const totalPages = Number(res.headers?.['x-wp-totalpages'] ?? res.headers?.['X-WP-TotalPages'] ?? 1) || 1;

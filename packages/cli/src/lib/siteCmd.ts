@@ -10,8 +10,8 @@ import {
   NoSiteError,
   NotLoggedInError,
   editLiveAllowed,
-  readWorkdirConfig,
-  writeWorkdirConfig,
+  readSiteConfig,
+  writeSiteConfig,
 } from './site';
 import { loadSiteSchema, PluginOutdatedError, SchemaVersionError } from './siteSchema';
 
@@ -155,11 +155,8 @@ export function liveLockedMessage(kind: 'product' | 'page', group: 'products' | 
 export async function cmdEditLive(ctx: CmdCtx): Promise<unknown> {
   const sub = ctx.positional[0];
   try {
-    const cred = await resolveSite(ctx.dir, ctx.flags.get('site'));
-    const siteUrl = cred.config.siteUrl;
-    const cfg = (await readWorkdirConfig(ctx.dir)) ?? { siteUrl };
-    if (cfg.siteUrl !== siteUrl)
-      return { ok: false, code: 'other_site', message: `This work folder is for ${cfg.siteUrl}.` };
+    const { config } = await resolveSite(ctx.dir, ctx.flags.get('site'));
+    const siteUrl = config.siteUrl;
     if (sub === 'on') {
       const said = (ctx.flags.get('customer-said') ?? '').trim();
       if (!said)
@@ -170,8 +167,8 @@ export async function cmdEditLive(ctx: CmdCtx): Promise<unknown> {
           message:
             'Turn this on only when the customer asks to change published products, pages or posts, or existing categories. Pass their exact words with --customer-said.',
         };
-      await writeWorkdirConfig(ctx.dir, {
-        siteUrl,
+      await writeSiteConfig(ctx.dir, siteUrl, {
+        ...(await readSiteConfig(ctx.dir, siteUrl)),
         editLive: { on: true, customerSaid: said, at: new Date().toISOString() },
       });
       return {
@@ -181,7 +178,7 @@ export async function cmdEditLive(ctx: CmdCtx): Promise<unknown> {
       };
     }
     if (sub === 'off') {
-      await writeWorkdirConfig(ctx.dir, { siteUrl, editLive: undefined });
+      await writeSiteConfig(ctx.dir, siteUrl, { ...(await readSiteConfig(ctx.dir, siteUrl)), editLive: undefined });
       return { ok: true, editLive: false };
     }
     if (sub === undefined) return { ok: true, editLive: await editLiveAllowed(ctx.dir, siteUrl) };

@@ -15,39 +15,33 @@ export interface Connected {
   client: WpClient;
   conn: WpConnection;
   siteUrl: string;
-  /** Set when credentials were still found in the deprecated in-vault silo.config.json. */
-  legacyWarning?: string;
 }
 
 export interface ConnectOptions {
   /** Explicit credentials file path (from --config / PUFFERGO_CONFIG). */
   configPath?: string;
+  /** Act on this site even when the vault points elsewhere (--site). */
+  site?: string;
 }
 
 export async function connect(dir: string, opts: ConnectOptions = {}): Promise<Connected> {
   // The vault's site URL (used to look up its credentials in a multi-site store).
-  const ws = await readWorkspace(dir);
+  const ws = await readWorkspace(dir, opts.site);
   const siteUrl = ws?.profile?.url;
 
-  const resolved = await resolveCredential(dir, siteUrl, opts.configPath);
+  const resolved = await resolveCredential(siteUrl, opts.configPath);
   // The same error the products and pages groups raise, so `not_logged_in` means one thing everywhere and the
   // Skill's answer is always the same: run `puffergo login <site>`.
   if (!resolved) throw new NotLoggedInError(siteUrl ?? '');
-  const { config } = resolved;
   const baseConn: WpConnection = {
-    siteUrl: config.siteUrl,
-    username: config.username,
-    appPassword: config.appPassword,
+    siteUrl: resolved.siteUrl,
+    username: resolved.username,
+    appPassword: resolved.appPassword,
   };
   // Discover the site's real content types so routing + taxonomy mirroring are data-driven.
   const probe = new WpClient(nodeNetwork, baseConn);
   const contentTypes = await probe.discoverContentTypes();
   const conn: WpConnection = { ...baseConn, contentTypes };
 
-  const legacyWarning =
-    resolved.source === 'legacy-vault'
-      ? '凭据仍在 vault 内的 silo.config.json（会随笔记同步/发布外泄）。运行 `silo migrate-config` 迁到 ~/.puffergo/。'
-      : undefined;
-
-  return { client: new WpClient(nodeNetwork, conn), conn, siteUrl: config.siteUrl, legacyWarning };
+  return { client: new WpClient(nodeNetwork, conn), conn, siteUrl: resolved.siteUrl };
 }

@@ -20,7 +20,7 @@ import { readFile, rm, writeFile, mkdtemp, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { upsertCredential, PUFFERGO_DIR } from '../adapters/credentials';
-import { writeWorkdirConfig } from './site';
+import { writeActiveDomain } from '../adapters/fileStore';
 
 const WAIT_MS = 10 * 60 * 1000;
 /** How long `login status` blocks by default — under the 2-minute command timeout AI tools use. */
@@ -111,7 +111,7 @@ export async function cmdLogin(dir: string, siteArg: string | undefined): Promis
   await rm(handshakeDir, { recursive: true, force: true });
   if (!authorizeUrl) return { ok: false, code: 'error', message: 'Could not start the local authorization listener.' };
 
-  await writeWorkdirConfig(dir, { siteUrl });
+  await writeActiveDomain(dir, siteUrl);
   openBrowser(authorizeUrl);
   process.stderr.write('已在浏览器打开 WordPress 授权页：请在页面上点「批准」，完成后回到这里。\n');
   return {
@@ -198,7 +198,7 @@ export async function cmdLoginWait(siteUrl: string, handshake: string, dir: stri
   const startedAt = (await readLoginState())?.startedAt ?? Date.now();
   if (creds) {
     await upsertCredential({ siteUrl, username: creds.username, appPassword: creds.appPassword });
-    await writeWorkdirConfig(dir, { siteUrl });
+    await writeActiveDomain(dir, siteUrl);
     await writeLoginState({ siteUrl, status: 'approved', startedAt, username: creds.username });
   } else {
     await writeLoginState({ siteUrl, status: 'failed', startedAt });

@@ -13,8 +13,8 @@ import type { PostType, ContentItem, Edge, SiloWorkspace, LinkPlacement, BrokenL
 import { createContent, createNode } from '../model/factory';
 import { reconcileKeywords } from '../model/keywords';
 import { applySeoLimits, type SeoLimits } from '../model/seo-limits';
-import { parseLinks, canonicalHost, isFallbackPermalink, type RawLink } from '../wp/parse-links';
-import { wpHtmlToMarkdown } from '../content/body-codec';
+import { parseLinks, canonicalHost, canonicalPostLink, isFallbackPermalink, type RawLink } from '../wp/parse-links';
+import { restoreWikilinks } from '../content/body-codec';
 import { buildNoteLinkIndex } from '../vault/note-links';
 import type { WpClient, WpRawPost } from '../wp/client';
 
@@ -38,10 +38,13 @@ export interface ImportResult {
   rootNodeIds: string[];
   reports: DocLinkReport[];
   imported: number;
-  /** Each imported content's body, converted to vault Markdown (`wpHtmlToMarkdown`) — internal links
-   *  rewritten to `[[slug]]` using the SAME resolution this import used for its own edges, so a note's
-   *  body and its edges never disagree about what's "internal". Keyed by ContentItem id. A content
-   *  whose post had no `content.rendered` (rare — deleted between list and fetch) is simply absent. */
+  /** Each imported content's vault-Markdown body — pulled from the plugin's `get-blocks?full` (prose
+   *  comes back as the same Markdown its compiler took), with internal links rewritten to `[[slug]]`
+   *  using the SAME resolution this import used for its own edges, so a note's body and its edges never
+   *  disagree about what's "internal". Keyed by ContentItem id. Only populated when `wantBodies` was
+   *  set; a post with any non-prose block (a Tailwind section, a component, an editor block) is
+   *  deliberately absent — Markdown can't represent those, so nothing invites a body push that would
+   *  replace them. */
   bodies: Map<string, string>;
   /** Active SEO plugin as reported by the PufferGo read route ('rank-math' | 'yoast' | 'none'), or
    *  `null` when the route is absent — i.e. the PufferGo plugin isn't installed, so keywords couldn't
@@ -128,6 +131,10 @@ export interface ImportOptions {
   noteNames?: ReadonlyMap<string, string>;
   /** Import only these WP post ids (the rest of the workspace is left as it is). Default: every post. */
   onlyIds?: readonly number[];
+  /** ALSO pull each post's body Markdown (one `get-blocks?full` ability call per post). Hosts that
+   *  mirror bodies into a vault (Obsidian, CLI) set this; the extension never authors a body, so it
+   *  leaves this off and pays zero extra requests. Default false → `bodies` comes back empty. */
+  wantBodies?: boolean;
 }
 
 /** Catch-all node term for content of a type that carries no taxonomy term. */
@@ -339,7 +346,8 @@ export async function importFromWp(
       title: title || base.title,
       slug: post.slug || base.slug,
       wpPostId: post.id,
-      wpLink: post.link,
+      // Not `post.link` verbatim: for a draft that is a nonce'd preview URL (see canonicalPostLink).
+      wpLink: canonicalPostLink(post.link),
       wpStatus: post.status ?? base.wpStatus,
       lastModifiedRemote: post.modified_gmt ?? post.modified,
       dirtyAt: null, // freshly pulled from WP → in sync
@@ -353,7 +361,11 @@ export async function importFromWp(
   const byUrl = new Map<string, string>(); // canonical url -> contentId
   const canon = (u: string): string => {
     try {
-      const url = new URL(u);
+      // `siteUrl` as the base is what makes ROOT-RELATIVE hrefs resolve. A pushed body stores internal
+      // links as `/slug/` — no domain, so the body survives a domain change — and `new URL` needs a
+      // base for those. Without it every such href throws, falls into the catch and can never match the
+      // absolute permalinks indexed in byUrl: the round-trip would silently drop every internal link.
+      const url = new URL(u, siteUrl);
       return `${canonicalHost(url.toString())}${url.pathname.replace(/\/$/, '')}`.toLowerCase();
     } catch {
       return u.toLowerCase();
@@ -466,9 +478,7 @@ export async function importFromWp(
     isFallbackPermalink(url, siteUrl) ? byId(url) : byUrl.get(canon(url));
 
   // Body-side reuse of the exact same resolution edges are built from — a note's `[[wikilink]]`s and
-  // its silo edges must never disagree about what counts as "internal". Never the homepage's full themed
-  // HTML (only `parseLinks` wants that, for the nav fan-out reason documented above): the vault body is
-  // always just the article's own `content.rendered`.
+  // its silo edges must never disagree about what counts as "internal".
   const noteLinks = buildNoteLinkIndex({ ...ws, contents }, opts.noteNames);
   const resolveWikilinkName = (url: string): string | undefined => {
     const targetId = resolveInternalTarget(url);
@@ -477,9 +487,30 @@ export async function importFromWp(
   const bodies = new Map<string, string>();
 
   for (const { item, post } of imported) {
-    const bodyHtml = post.content?.rendered ?? '';
-    if (bodyHtml) bodies.set(item.id, wpHtmlToMarkdown(bodyHtml, resolveWikilinkName));
+    // 5a. The vault mirror of the body (only for hosts that asked — one ability read per post). The
+    //     plugin hands prose back as the SAME Markdown its compiler took, so the note round-trips a
+    //     push byte-for-byte; internal links (now real `[text](/url/)`) are restored to `[[note]]`.
+    //     A post with any non-prose block (a Tailwind section, a component, an editor block) is NOT
+    //     mirrored: Markdown can't represent those, and mirroring would invite a push that replaces
+    //     them — it stays body-less, so pushes of it remain meta-only (see syncContent's body policy).
+    if (opts.wantBodies) {
+      try {
+        const read = await client.getBlocks(post.id, { full: true });
+        const allProse = read.blocks.every(b => b.kind === 'prose');
+        const md = read.blocks
+          .map(b => (b.markdown ?? '').trim())
+          .filter(Boolean)
+          .join('\n\n');
+        if (allProse && md) bodies.set(item.id, restoreWikilinks(md, resolveWikilinkName));
+      } catch {
+        // A post the abilities can't read (another editor's content, permissions) simply has no
+        // mirrored body; its edges below still parse from the rendered HTML.
+      }
+    }
 
+    // 5b. Edges always parse from the rendered HTML — links live in markup, and this pass predates
+    //     (and never needs) the body mirror.
+    const bodyHtml = post.content?.rendered ?? '';
     const html = (item.id === homeDoc?.item.id && homeHtml) || bodyHtml;
     const { internal, external } = parseLinks(html, siteUrl, post.link);
     const internalUnresolved: RawLink[] = [];
@@ -637,7 +668,8 @@ export async function refreshContentFromWp(client: WpClient, item: ContentItem):
     slug: post.slug || item.slug,
     termIds: post.termIds ?? [],
     wpStatus: post.status ?? item.wpStatus,
-    wpLink: post.link,
+    // Not `post.link` verbatim: for a draft that is a nonce'd preview URL (see canonicalPostLink).
+    wpLink: canonicalPostLink(post.link),
     lastModifiedRemote: post.modified_gmt ?? post.modified,
     dirtyAt: null,
     seo: seoPatch ? { ...item.seo, ...seoPatch } : item.seo,

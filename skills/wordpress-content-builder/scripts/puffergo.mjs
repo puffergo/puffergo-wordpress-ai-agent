@@ -12361,7 +12361,7 @@ var AgentClient = class {
 };
 
 // src/skillName.ts
-var SKILL_NAME = "wordpress-bulk-product-upload";
+var SKILL_NAME = "wordpress-content-builder";
 
 // src/lib/siteSchema.ts
 var SUPPORTED_SCHEMA_VERSION = 6;

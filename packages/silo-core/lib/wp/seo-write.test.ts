@@ -30,62 +30,44 @@ const seo = {
 
 const NO_ROUTE = { status: 404, json: { code: 'rest_no_route', message: 'No route' } };
 
-describe('SEO write (what a post / term gets)', () => {
+// Post SEO travels inside the abilities (update-seo) — covered by sync-content.test.ts. What's left
+// here is the TERM path (a category archive), which the abilities don't address, plus the shared
+// limits/health surface.
+describe('term SEO write (a category archive)', () => {
   it('through the PufferGo plugin: trimmed title, description, 1 core + up to 5 long-tail keywords', async () => {
     const { calls, client } = site();
-    await client.writeSeo(12, seo);
+    await client.writeTermSeo(7, seo);
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({ method: 'POST', url: '/puffergo/v1/seo-meta' });
     expect(calls[0].body).toEqual({
-      objectType: 'post',
-      id: 12,
+      objectType: 'term',
+      id: 7,
       title: 'Gate Valves',
       description: 'Valves for water plants.',
       keywords: ['gate valve', 'a', 'b', 'c', 'd', 'e'],
     });
   });
 
-  it("without the PufferGo plugin: the same values through Rank Math's own route", async () => {
-    const { calls, client } = site({ '/puffergo/v1/seo-meta': NO_ROUTE });
-    await client.writeSeo(12, seo);
-    const rm = calls.find(c => c.url === '/rankmath/v1/updateMeta');
-    expect(rm?.body).toEqual({
-      objectID: 12,
-      objectType: 'post',
-      meta: {
-        rank_math_title: 'Gate Valves',
-        rank_math_description: 'Valves for water plants.',
-        rank_math_focus_keyword: 'gate valve, a, b, c, d, e',
-      },
-    });
-  });
-
   it('leaves out blank fields, and sends nothing when all are blank', async () => {
     const { calls, client } = site();
-    await client.writeSeo(12, { title: ' ', description: 'D', coreKeywords: [], longTailKeywords: [] });
-    expect(calls[0].body).toEqual({ objectType: 'post', id: 12, description: 'D' });
+    await client.writeTermSeo(12, { title: ' ', description: 'D', coreKeywords: [], longTailKeywords: [] });
+    expect(calls[0].body).toEqual({ objectType: 'term', id: 12, description: 'D' });
     const empty = site();
-    await empty.client.writeSeo(12, { title: '', description: '', coreKeywords: [], longTailKeywords: [] });
+    await empty.client.writeTermSeo(12, { title: '', description: '', coreKeywords: [], longTailKeywords: [] });
     expect(empty.calls).toHaveLength(0);
   });
 
-  it('writes a category archive as a term', async () => {
-    const { calls, client } = site();
-    await client.writeSeo(7, { title: 'Valves', description: '', coreKeywords: [], longTailKeywords: [] }, 'term');
-    expect(calls[0].body).toEqual({ objectType: 'term', id: 7, title: 'Valves' });
+  it('fails with the site error when the plugin is absent — there is no second write path', async () => {
+    const { calls, client } = site({ '/puffergo/v1/seo-meta': NO_ROUTE });
+    await expect(client.writeTermSeo(12, seo)).rejects.toMatchObject({ message: 'No route' });
+    expect(calls.map(c => c.url)).not.toContain('/rankmath/v1/updateMeta');
   });
 
-  it('fails with the site error when nothing can store SEO', async () => {
-    const { client } = site({ '/puffergo/v1/seo-meta': NO_ROUTE, '/rankmath/v1/updateMeta': NO_ROUTE });
-    await expect(client.writeSeo(12, seo)).rejects.toMatchObject({ message: 'No route' });
-  });
-
-  it('reports a plugin error (e.g. no SEO plugin) instead of falling back', async () => {
-    const { calls, client } = site({
+  it('reports a plugin error (e.g. no SEO plugin) as-is', async () => {
+    const { client } = site({
       '/puffergo/v1/seo-meta': { status: 409, json: { code: 'no_seo_plugin', message: 'No SEO plugin' } },
     });
-    await expect(client.writeSeo(12, seo)).rejects.toMatchObject({ message: 'No SEO plugin' });
-    expect(calls.map(c => c.url)).not.toContain('/rankmath/v1/updateMeta');
+    await expect(client.writeTermSeo(12, seo)).rejects.toMatchObject({ message: 'No SEO plugin' });
   });
 });
 

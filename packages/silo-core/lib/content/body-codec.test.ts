@@ -1,18 +1,19 @@
 /**
- * Unit tests for the body codec — the push-side Markdown→WP-HTML transform and its link resolver.
+ * Unit tests for the body codec — the push/pull Markdown-side wikilink transforms and the shared
+ * asset pass. (No HTML is produced or parsed anymore: the plugin compiles Markdown to blocks.)
  */
 
 import { describe, expect, it } from 'vitest';
 import { emptyWorkspace, createContent } from '../model/factory';
 import {
   buildLinkResolver,
-  markdownToWpHtml,
+  resolveWikilinks,
+  restoreWikilinks,
   rootRelativePermalink,
   isLocalAssetRef,
   extractLocalImageRefs,
   rewriteImageRefs,
   resolveBodyAssets,
-  wpHtmlToMarkdown,
   type AssetUploader,
 } from './body-codec';
 import type { SiloWorkspace } from '../model/types';
@@ -59,46 +60,39 @@ describe('buildLinkResolver', () => {
   });
 });
 
-describe('markdownToWpHtml', () => {
+describe('resolveWikilinks (push)', () => {
   const resolver = buildLinkResolver(
     wsWith([createContent('n', 'Guide', 'post', { slug: 'guide', wpLink: 'https://x.com/guide' })]),
   );
 
-  it('rewrites a resolvable [[slug]] to a real, root-relative anchor (no domain)', () => {
-    const { html, unresolved } = markdownToWpHtml('See [[guide]] here.', resolver);
-    expect(html).toContain('href="/guide"');
-    expect(html).not.toContain('x.com'); // domain must not leak into in-content links
-    expect(html).toContain('>guide</a>');
+  it('rewrites a resolvable [[slug]] to a real, root-relative Markdown link (no domain)', () => {
+    const { md, unresolved } = resolveWikilinks('See [[guide]] here.', resolver);
+    expect(md).toBe('See [guide](/guide) here.');
+    expect(md).not.toContain('x.com'); // domain must not leak into in-content links
     expect(unresolved).toEqual([]);
   });
 
   it('rewrites a [[note name|text]] link (the form Obsidian can click through)', () => {
-    const { html } = markdownToWpHtml('Read the [[Guide|full guide]].', resolver);
-    expect(html).toContain('href="/guide"');
-    expect(html).toContain('>full guide</a>');
+    expect(resolveWikilinks('Read the [[Guide|full guide]].', resolver).md).toBe('Read the [full guide](/guide).');
   });
 
   it('honors a [[slug|alias]] display text', () => {
-    const { html } = markdownToWpHtml('Read the [[guide|full guide]].', resolver);
-    expect(html).toContain('href="/guide"');
-    expect(html).toContain('>full guide</a>');
+    expect(resolveWikilinks('Read the [[guide|full guide]].', resolver).md).toBe('Read the [full guide](/guide).');
   });
 
   it('degrades an unresolved [[slug]] to plain text and reports it', () => {
-    const { html, unresolved } = markdownToWpHtml('Missing [[nope]].', resolver);
-    expect(html).not.toContain('<a');
-    expect(html).toContain('nope');
+    const { md, unresolved } = resolveWikilinks('Missing [[nope]].', resolver);
+    expect(md).toBe('Missing nope.');
     expect(unresolved).toEqual(['nope']);
   });
 
   it('returns empty string for a blank body (→ shell push, no overwrite)', () => {
-    expect(markdownToWpHtml('   \n', resolver)).toEqual({ html: '', unresolved: [] });
+    expect(resolveWikilinks('   \n', resolver)).toEqual({ md: '', unresolved: [] });
   });
 
-  it('still renders ordinary markdown (headings, lists)', () => {
-    const { html } = markdownToWpHtml('## Title\n\n- one\n- two', resolver);
-    expect(html).toContain('<h2>Title</h2>');
-    expect(html).toContain('<li>one</li>');
+  it('leaves ordinary markdown (headings, lists) untouched for the plugin compiler', () => {
+    const src = '## Title\n\n- one\n- two';
+    expect(resolveWikilinks(src, resolver).md).toBe(src);
   });
 });
 
@@ -159,52 +153,36 @@ describe('asset handling', () => {
   });
 });
 
-describe('wpHtmlToMarkdown', () => {
-  it('converts common block/inline HTML to Markdown', () => {
-    const html = '<h2>Title</h2><p>Body <strong>bold</strong> and <em>italic</em>.</p><ul><li>a</li><li>b</li></ul>';
-    const md = wpHtmlToMarkdown(html, () => undefined);
-    expect(md).toContain('## Title');
-    expect(md).toContain('**bold**');
-    expect(md).toContain('_italic_');
-    expect(md).toContain('-   a');
-  });
-
+describe('restoreWikilinks (pull)', () => {
   it('rewrites a resolved internal link to [[slug]], leaving an unresolved one as a plain link', () => {
-    const html =
-      '<p>See <a href="/how-it-works/">how it works</a> and <a href="https://other.com/x">elsewhere</a>.</p>';
-    const md = wpHtmlToMarkdown(html, url => (url === '/how-it-works/' ? 'how-it-works' : undefined));
-    expect(md).toContain('[[how-it-works|how it works]]');
-    expect(md).toContain('[elsewhere](https://other.com/x)');
+    const md = 'See [how it works](/how-it-works/) and [elsewhere](https://other.com/x).';
+    const out = restoreWikilinks(md, url => (url === '/how-it-works/' ? 'how-it-works' : undefined));
+    expect(out).toContain('[[how-it-works|how it works]]');
+    expect(out).toContain('[elsewhere](https://other.com/x)');
   });
 
   it('omits the alias when the link text already equals the slug', () => {
-    const html = '<p><a href="/x/">how-it-works</a></p>';
-    const md = wpHtmlToMarkdown(html, () => 'how-it-works');
-    expect(md.trim()).toBe('[[how-it-works]]');
+    const out = restoreWikilinks('[how-it-works](/x/)', () => 'how-it-works');
+    expect(out.trim()).toBe('[[how-it-works]]');
   });
 
-  it('returns empty for empty/whitespace-only input (no shell round-trip through turndown)', () => {
-    expect(wpHtmlToMarkdown('', () => undefined)).toBe('');
-    expect(wpHtmlToMarkdown('   \n  ', () => undefined)).toBe('');
+  it('never touches an image, however local its path', () => {
+    const md = '![alt](./diagram.png)\n![x](https://cdn/x.png)';
+    expect(restoreWikilinks(md, () => 'anything')).toBe(md);
   });
 
-  it('drops <script>/<style> entirely instead of leaking their raw JS/CSS as plain text', () => {
-    const html = '<p>Real text.</p><script>alert(1)</script><style>.a{color:red}</style><noscript>no js</noscript>';
-    const md = wpHtmlToMarkdown(html, () => undefined);
-    expect(md.trim()).toBe('Real text.');
+  it('returns empty for empty/whitespace-only input', () => {
+    expect(restoreWikilinks('', () => undefined)).toBe('');
+    expect(restoreWikilinks('   \n  ', () => undefined)).toBe('');
   });
 
-  it('ignores a stray style="" attribute on an ordinary element (attributes never leak)', () => {
-    const html = '<p style="color:red;font-weight:bold">Styled but plain.</p>';
-    const md = wpHtmlToMarkdown(html, () => undefined);
-    expect(md).not.toContain('style=');
-    expect(md).not.toContain('color:red');
-    expect(md.trim()).toBe('Styled but plain.');
+  it('leaves headings, lists and emphasis alone — prose the plugin handed back as-is', () => {
+    const md = '## Title\n\n- one **bold**\n- two _italic_';
+    expect(restoreWikilinks(md, () => undefined)).toBe(md);
   });
 
-  it('does not corrupt anchor text that itself contains parentheses', () => {
-    const html = '<p><a href="/x/">see (details)</a></p>';
-    const md = wpHtmlToMarkdown(html, () => undefined);
-    expect(md).toContain('[see (details)](/x/)');
+  it('keeps a link whose text contains parentheses intact', () => {
+    const md = '[see (details)](/x/)';
+    expect(restoreWikilinks(md, url => (url === '/x/' ? 'x-note' : undefined))).toBe('[[x-note|see (details)]]');
   });
 });

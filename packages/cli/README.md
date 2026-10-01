@@ -15,8 +15,7 @@
 | | |
 |---|---|
 | `skills/wordpress-bulk-product-upload` | Agent Skill: turn product photos and notes into product pages (title, specs, price/MOQ/lead time, gallery, image-and-text detail sections), push as drafts, edit later, publish on request. |
-| `skills/wordpress-page-builder` | Agent Skill: build pages, posts and case studies as drafts from Tailwind sections, with SEO title, description and keywords; edit one section of an existing page after a preview; change SEO fields. |
-| `skills/wordpress-seo-silo` | Agent Skill: expand a site's positioning into keywords and a pillar/cluster silo, write the articles, push them as WordPress drafts with Rank Math titles, keywords and internal links, and run an SEO health check. |
+| `skills/wordpress-content-builder` | Agent Skill: build pages, posts and case studies as drafts (Markdown body text plus Tailwind layout sections), with SEO title, description and keywords; edit one section of an existing page after a preview; change SEO fields. When the site runs a content strategy, also the whole SEO silo — expand the positioning into keywords and a pillar/cluster architecture, write the articles in a local vault, push them as drafts with Rank Math titles, keywords and internal links, pull back from WordPress and run an SEO health check. |
 | `packages/cli` | The `puffergo` command every skill runs (bundled into each skill as `scripts/puffergo.mjs`, Node 18+, no dependencies). |
 | `packages/silo-core` | `@puffergo/silo-core`: the silo data model, WordPress REST client, sync and health check. |
 

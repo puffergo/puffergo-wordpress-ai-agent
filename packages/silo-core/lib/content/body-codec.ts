@@ -1,16 +1,20 @@
 /**
  * body-codec — the GLUE LAYER that translates a content's body between the vault/authoring form
- * (Markdown with Obsidian `[[wikilink]]` references) and the WordPress form (HTML with real `<a href>`
- * permalinks). Platform-agnostic and pure: the extension, the Obsidian plugin, the CLI and the web host
- * all push/pull bodies through the SAME codec, so link/asset handling stays identical everywhere.
+ * (Markdown with Obsidian `[[wikilink]]` references) and the WordPress form. Platform-agnostic and
+ * pure: the extension, the Obsidian plugin, the CLI and the web host all push/pull bodies through the
+ * SAME codec, so link/asset handling stays identical everywhere.
  *
- * Two directions:
- *   • PUSH (up):  markdownToWpHtml — resolve `[[target]]` to the target's live permalink, then Markdown→HTML.
- *   • PULL (down): wpHtmlToMarkdown — HTML→Markdown (via turndown), rewriting any `<a href>` the caller's
- *     resolver recognizes as an internal link back into `[[note name|text]]`. What a target may be and
- *     which name gets written is `lib/vault/note-links.ts`'s rule (Obsidian resolves clicks by file name). Which links are "internal" (import's
- *     own canonicalized/id-fallback-aware matching, not just a raw string match) is the caller's job —
- *     see `import-content.ts`'s own resolver built around `resolveInternalTarget`.
+ * The WordPress side is MARKDOWN too — the PufferGo plugin owns the one Markdown→blocks compiler (see
+ * `class-puffergo-prose-codec.php`) and hands prose back as Markdown on `get-blocks?full`. So this codec
+ * never produces or parses HTML: it only resolves `[[wikilink]]`s to real links on the way up and back
+ * on the way down. Both directions are pure string passes over Markdown.
+ *
+ *   • PUSH (up):   resolveWikilinks — rewrite each `[[target]]` to a real `[text](permalink)` Markdown
+ *                  link (root-relative, so the body never hard-codes the domain). A target with no
+ *                  permalink yet degrades to its plain text and is reported in `unresolved`.
+ *   • PULL (down): restoreWikilinks — rewrite each internal `[text](url)` back to `[[note name|text]]`.
+ *                  What counts as "internal" is the caller's job (import's canonicalized/id-fallback
+ *                  matching), passed in as `resolveInternalLink`.
  *
  * ASSET handling (images) is centralized here too so it behaves identically on every platform: a local
  * image reference (`![alt](path)` or Obsidian `![[path]]`) is uploaded to WP media and rewritten to the
@@ -18,8 +22,6 @@
  * injected as an `AssetUploader` port; the extract/rewrite/orchestration around it is pure and lives here.
  */
 
-import { marked } from 'marked';
-import TurndownService from 'turndown';
 import type { SiloWorkspace } from '../model/types';
 import { buildNoteLinkIndex, formatWikilink } from '../vault/note-links';
 
@@ -144,19 +146,20 @@ export function buildLinkResolver(ws: SiloWorkspace, noteNames?: ReadonlyMap<str
 const WIKILINK_RE = /\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|([^\]]+))?\]\]/g;
 
 /**
- * PUSH transform: Markdown body (vault form) → WordPress HTML.
- * Each `[[target]]` is rewritten to a real Markdown link `[text](permalink)` when the target has a
- * permalink, so WP receives a proper `<a href>`. Targets not yet pushed can't be linked this run — they
- * degrade to their plain anchor text and are reported in `unresolved` (the caller can re-push after the
- * target exists; the vault Markdown keeps the `[[target]]`, so the next push links it). Returns '' for an
- * empty body (→ shell push, never overwrites the WP body).
+ * PUSH transform: resolve every `[[target]]` in a Markdown body to a real Markdown link
+ * `[text](permalink)`, so the plugin's compiler receives a proper link it turns into a core `<a>` block.
+ * The body STAYS Markdown — the plugin owns the one Markdown→blocks compilation. Targets not yet pushed
+ * can't be linked this run: they degrade to their plain anchor text and are reported in `unresolved`
+ * (the caller re-pushes after the target exists; the vault Markdown keeps the `[[target]]`, so the next
+ * push links it). Returns the input trimmed; '' for an empty body (→ shell push, never overwrites the
+ * WP body). Pure.
  */
-export function markdownToWpHtml(md: string, resolver: LinkResolver): { html: string; unresolved: string[] } {
+export function resolveWikilinks(md: string, resolver: LinkResolver): { md: string; unresolved: string[] } {
   const trimmed = md.trim();
-  if (!trimmed) return { html: '', unresolved: [] };
+  if (!trimmed) return { md: '', unresolved: [] };
 
   const unresolved: string[] = [];
-  const withLinks = trimmed.replace(WIKILINK_RE, (_m, rawTarget: string, alias?: string) => {
+  const resolved = trimmed.replace(WIKILINK_RE, (_m, rawTarget: string, alias?: string) => {
     const target = rawTarget.trim();
     const text = (alias ?? target).trim();
     const permalink = resolver.permalinkFor(target);
@@ -168,46 +171,27 @@ export function markdownToWpHtml(md: string, resolver: LinkResolver): { html: st
     return `[${text}](${rootRelativePermalink(permalink)})`;
   });
 
-  const html = marked.parse(withLinks, { async: false }) as string;
-  return { html, unresolved };
+  return { md: resolved, unresolved };
 }
 
-// One shared instance — turndown has no per-call state, and construction (registering GFM-ish defaults)
-// isn't free. `bulletListMarker`/`headingStyle` match this codebase's own Markdown style (see the
-// `renderFrontmatter` templates in `lib/vault/frontmatter.ts`) so a pull→edit→push round-trip doesn't
-// visually reformat content the user never touched.
-const turndown = new TurndownService({ headingStyle: 'atx', bulletListMarker: '-', codeBlockStyle: 'fenced' });
-// Turndown has no default rule for these, so it falls through to its generic "unwrap and keep the
-// CONTENT" behavior — fine for a real wrapper `<div>`, actively wrong for `<script>`/`<style>`, whose
-// content is raw JS/CSS, not text meant to be read. Verified against a live turndown instance: without
-// this, `<style>.a{color:red}</style>` and `<script>alert(1)</script>` land in the Markdown body
-// verbatim as plain text. `.remove()` drops the element (and its content) entirely.
-turndown.remove(['script', 'style', 'noscript', 'template']);
+// A Markdown inline link `[text](href "optional title")` — but NOT an image `![alt](path)` (lookbehind).
+// Group 1 = text, 2 = href, 3 = trailing.
+const MD_LINK_RE = /(?<!!)\[([^\]]*)\]\(\s*([^)\s]+)((?:\s+"[^"]*")?\s*\))/g;
 
 /**
- * PULL transform: WordPress HTML (as returned by `content.rendered`) → vault Markdown.
- * Any `<a href>` `resolveInternalLink` recognizes is rewritten to `[[name]]` (or `[[name|anchor text]]`
- * when the link text differs; `name` is whatever the resolver returns — the target note's file name)
- * instead of a plain Markdown link, so the note round-trips
- * through a push exactly like one authored by hand. `resolveInternalLink` returning undefined (an
- * external link, or an internal one the caller couldn't resolve) leaves the link as plain `[text](url)`.
+ * PULL transform: rewrite every INTERNAL `[text](url)` in a Markdown body (as the plugin's prose codec
+ * hands it back) into a `[[note name]]` / `[[note name|text]]` wikilink, so the note round-trips through
+ * a push exactly like one authored by hand. `resolveInternalLink` returns the target note's file name for
+ * a URL this import considers internal (external links, and internal ones the caller couldn't resolve,
+ * are left as plain `[text](url)`). Pure string pass — no HTML parsing. Empty input → ''.
  */
-export function wpHtmlToMarkdown(html: string, resolveInternalLink: (url: string) => string | undefined): string {
-  const trimmed = html.trim();
+export function restoreWikilinks(md: string, resolveInternalLink: (url: string) => string | undefined): string {
+  const trimmed = md.trim();
   if (!trimmed) return '';
-
-  // Rewrite internal hrefs to a private `wikilink:` scheme BEFORE handing off to turndown, so its own
-  // link rule never sees a real URL for them — turndown has no href-rewrite hook, only a post-conversion
-  // string is available to us, and doing it as a string replace on the OUTPUT risks corrupting anchor
-  // text that legitimately contains parentheses. Doing it on the INPUT keeps turndown's own escaping of
-  // the anchor text correct, and the marker is trivial to peel back off afterward.
-  const withMarkedLinks = trimmed.replace(/(<a\s[^>]*href=["'])([^"']+)(["'][^>]*>)/gi, (whole, pre, href, post) => {
+  return trimmed.replace(MD_LINK_RE, (whole, text: string, href: string) => {
     const name = resolveInternalLink(href);
-    return name ? `${pre}wikilink:${encodeURIComponent(name)}${post}` : whole;
+    // An internal link becomes a wikilink (formatWikilink omits the alias when text === name);
+    // anything else stays the plain Markdown link it was.
+    return name ? formatWikilink(name, text) : whole;
   });
-
-  const md = turndown.turndown(withMarkedLinks);
-  return md.replace(/\[([^\]]*)\]\(wikilink:([^)]+)\)/g, (_m, text: string, encodedName: string) =>
-    formatWikilink(decodeURIComponent(encodedName), text),
-  );
 }

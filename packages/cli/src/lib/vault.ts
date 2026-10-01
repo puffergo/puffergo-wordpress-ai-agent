@@ -111,7 +111,7 @@ export async function updateNoteBody(path: string, newBody: string): Promise<voi
   await writeFile(path, `---\n${fm}\n---\n${newBody}`, 'utf8');
 }
 
-/** Walk the vault for *.md, mapping Silo content id -> { path, fm, body }. Skips .silo/ internals. */
+/** Walk the vault for *.md, mapping Silo content id -> { path, fm, body }. Skips `.puffergo/` internals. */
 export async function scanVault(dir: string): Promise<Map<string, { path: string; fm: string; body: string }>> {
   const out = new Map<string, { path: string; fm: string; body: string }>();
   async function walk(d: string): Promise<void> {

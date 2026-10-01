@@ -26,14 +26,13 @@ import {
   updateContent,
   buildLinkResolver,
   noteNamesFromScan,
-  markdownToWpHtml,
+  resolveWikilinks,
   resolveBodyAssets,
   type SiloWorkspace,
   type HealthIssue,
 } from '@puffergo/silo-core';
 import { dirname } from 'node:path';
 import { readWorkspace, writeWorkspace, listSites, resolveSite } from './adapters/fileStore';
-import { migrateLegacyConfig, GLOBAL_CREDENTIALS } from './adapters/credentials';
 import { wpAssetUploader } from './adapters/assetUploader';
 import { connect } from './lib/wp';
 import { applyPlan, type Plan } from './lib/plan';
@@ -53,6 +52,7 @@ import {
   cmdImages,
 } from './lib/productsCmd';
 import { cmdEditLive, siteErrorOutput } from './lib/siteCmd';
+import { cmdSiteSetup, SITE_SETUP_USAGE } from './lib/siteSetupCmd';
 import { cmdLogin, cmdLoginStatus, cmdLoginWait } from './lib/loginCmd';
 import {
   cmdTypes,
@@ -71,8 +71,9 @@ import {
 // `puffergo <login|products …|silo …>`; the legacy `silo <cmd>` bin calls this with no group word,
 // so anything that isn't a known group falls through to the silo commands unchanged.
 const rawArgv = process.argv.slice(2);
-const group = ['products', 'pages', 'login', '__login-wait'].includes(rawArgv[0] ?? '') ? rawArgv[0] : 'silo';
-const argv = rawArgv[0] === 'silo' || group === 'products' || group === 'pages' ? rawArgv.slice(1) : rawArgv;
+const group = ['products', 'pages', 'login', 'site', '__login-wait'].includes(rawArgv[0] ?? '') ? rawArgv[0] : 'silo';
+const argv =
+  rawArgv[0] === 'silo' || group === 'products' || group === 'pages' || group === 'site' ? rawArgv.slice(1) : rawArgv;
 const cmd = argv[0];
 const flags = new Map<string, string>();
 const positional: string[] = [];
@@ -203,8 +204,11 @@ async function cmdPush(): Promise<void> {
   ws = edited.ws;
   if (edited.changed) log(`↩ 已从 ${edited.changed} 篇笔记的 frontmatter 读回编辑`);
 
+  const { client, siteUrl } = await connect(dir, { configPath, site: wantedSite });
+
   // Only what was named, or else what is new or edited here: a push never rewrites posts nobody touched.
-  const synced = await readSynced(dir);
+  // The fingerprints are per-site, so this needs the resolved site first.
+  const synced = await readSynced(dir, siteUrl);
   let targets: string[];
   if (positional.length) {
     const m = matchTargets(positional, ws, bodies, dir);
@@ -226,8 +230,6 @@ async function cmdPush(): Promise<void> {
     if (!targets.length) return log('没有要推送的改动。');
   }
   const pushing = new Set(targets);
-  const { client, legacyWarning } = await connect(dir, { configPath });
-  if (legacyWarning) log(`⚠ ${legacyWarning}`);
 
   // Asset pass: upload local images to WP media and rewrite each body to the hosted URLs (once, up
   // front). The rewritten body is also written back to the note so the next push sees remote URLs and
@@ -260,16 +262,17 @@ async function cmdPush(): Promise<void> {
   const pushedIds: string[] = [];
   for (const item of ws.contents) {
     if (!pushing.has(item.id)) continue;
-    // Resolve `[[…]]` internal links to real permalinks via the glue codec. Rebuilt each iteration so
-    // it picks up permalinks assigned to siblings earlier in this same run.
-    const { html, unresolved } = markdownToWpHtml(bodyOf(item.id), buildLinkResolver(ws, noteNames));
-    const res = await syncContent(client, ws, item, { force, content: html || undefined });
+    // Resolve `[[…]]` internal links to real permalinks via the glue codec — the body STAYS Markdown
+    // (the plugin compiles it to blocks). Rebuilt each iteration so it picks up permalinks assigned to
+    // siblings earlier in this same run.
+    const { md, unresolved } = resolveWikilinks(bodyOf(item.id), buildLinkResolver(ws, noteNames));
+    const res = await syncContent(client, ws, item, { force, content: md || undefined });
     if (res.ok) {
       ws = updateContent(ws, item.id, res.patch);
       ok++;
       pushedIds.push(item.id);
       if (unresolved.length) needsRelink.add(item.id);
-      log(`  ✓ ${item.title}${html ? '（含正文）' : '（仅结构/SEO）'} → #${res.patch.wpPostId}`);
+      log(`  ✓ ${item.title}${md ? '（含正文）' : '（仅结构/SEO）'} → #${res.patch.wpPostId}`);
     } else if ('conflict' in res && res.conflict) {
       conflict++;
       log(`  ⚠ 冲突（WP 端已改）：${item.title} — 用 --force 覆盖`);
@@ -286,9 +289,9 @@ async function cmdPush(): Promise<void> {
     let relinked = 0;
     for (const item of ws.contents) {
       if (!needsRelink.has(item.id)) continue;
-      const { html } = markdownToWpHtml(bodyOf(item.id), resolver);
-      if (!html) continue;
-      const res = await syncContent(client, ws, item, { force: true, content: html });
+      const { md } = resolveWikilinks(bodyOf(item.id), resolver);
+      if (!md) continue;
+      const res = await syncContent(client, ws, item, { force: true, content: md });
       if (res.ok) {
         ws = updateContent(ws, item.id, res.patch);
         relinked++;
@@ -302,14 +305,13 @@ async function cmdPush(): Promise<void> {
   // frontmatter so the note in Obsidian reflects reality right after a push. Bodies are preserved.
   const before = await scanVault(dir);
   await scaffoldVault(dir, ws);
-  await writeSynced(dir, recordSynced(synced, before, await scanVault(dir), pushedIds));
+  await writeSynced(dir, siteUrl, recordSynced(synced, before, await scanVault(dir), pushedIds));
   log(`\n完成：成功 ${ok}，冲突 ${conflict}，失败 ${failed}`);
 }
 
 async function cmdPull(): Promise<void> {
   let ws = await loadWs();
-  const { client, conn, legacyWarning } = await connect(dir, { configPath });
-  if (legacyWarning) log(`⚠ ${legacyWarning}`);
+  const { client, conn, siteUrl } = await connect(dir, { configPath, site: wantedSite });
   const types = (flags.get('types')?.split(',') ?? conn.contentTypes?.map(t => t.type) ?? ['post', 'page']).filter(
     Boolean,
   );
@@ -324,10 +326,11 @@ async function cmdPull(): Promise<void> {
     });
   }
   log(`拉取类型：${types.join(', ')}${onlyIds ? `，只拉 ${onlyIds.join(', ')}` : ''}`);
-  const synced = await readSynced(dir);
+  const synced = await readSynced(dir, siteUrl);
   const res = await importFromWp(client, ws, types, {
     onlyIds,
     noteNames: noteNamesFromScan(await scanVault(dir)),
+    wantBodies: true, // the CLI vault mirrors bodies
   });
   if (onlyIds && res.imported < onlyIds.length)
     log(`⚠ 拉到 ${res.imported} 篇，少于要的 ${onlyIds.length} 篇（id 不对，或类型不在 ${types.join(', ')} 里）`);
@@ -349,7 +352,7 @@ async function cmdPull(): Promise<void> {
     await updateNoteBody(note.path, `\n${md}\n`);
     pulled.push(id);
   }
-  await writeSynced(dir, recordSynced(synced, before, await scanVault(dir), pulled));
+  await writeSynced(dir, siteUrl, recordSynced(synced, before, await scanVault(dir), pulled));
   log(
     `✓ 已同步：导入/更新 ${res.imported} 篇内容，${ws.nodes.length} 个节点；写入/刷新 ${files} 个 md 文件，正文 ${pulled.length} 篇`,
   );
@@ -359,16 +362,6 @@ async function cmdPull(): Promise<void> {
     onlyIds ? ws.contents.filter(c => onlyIds.includes(c.wpPostId ?? -1)).flatMap(c => [c.id, c.siloNodeId]) : [],
   );
   printHealth(healthCheck(ws).filter(i => !onlyIds || i.nodeIds.some(id => mine.has(id))));
-}
-
-async function cmdMigrateConfig(): Promise<void> {
-  const target = configPath ?? GLOBAL_CREDENTIALS;
-  const url = await migrateLegacyConfig(dir, target);
-  if (!url) {
-    log(`没有需要迁移的 vault 内 silo.config.json（凭据已在 ${target}）`);
-    return;
-  }
-  log(`✓ 已把凭据迁出 vault：${url} → ${target}（vault 内旧文件已删除）`);
 }
 
 async function cmdHealth(): Promise<void> {
@@ -421,12 +414,11 @@ async function main(): Promise<void> {
       return cmdStatus();
     case 'view':
       return cmdView();
-    case 'migrate-config':
-      return cmdMigrateConfig();
     default:
-      log('puffergo silo <init|plan|push|pull|health|status|view|migrate-config> [--dir <vault>] [--config <path>]');
+      log('puffergo silo <init|plan|push|pull|health|status|view> [--dir <vault>] [--config <path>]');
       log('puffergo login <siteUrl>');
       log('puffergo login status [--wait <seconds>]');
+      log(SITE_SETUP_USAGE);
       log(PRODUCTS_USAGE);
       log(PAGES_USAGE);
       if (cmd && cmd !== 'help' && cmd !== '--help') process.exitCode = 1;
@@ -505,21 +497,35 @@ async function pages(): Promise<void> {
   }
 }
 
+const SITE_USAGE = SITE_SETUP_USAGE;
+
+async function site(): Promise<void> {
+  const ctx = { dir, flags, positional };
+  switch (cmd) {
+    case 'setup':
+      return emit(await cmdSiteSetup(ctx));
+    default:
+      return emit({ ok: false, code: 'usage', message: SITE_USAGE });
+  }
+}
+
 const run =
   group === 'products'
     ? products
     : group === 'pages'
       ? pages
-      : group === 'login'
-        ? async () =>
-            emit(
-              positional[0] === 'status'
-                ? await cmdLoginStatus(flags.get('wait'))
-                : await cmdLogin(dir, positional[0] ?? argv[1]),
-            )
-        : group === '__login-wait'
-          ? () => cmdLoginWait(argv[1]!, argv[2]!, argv[3]!)
-          : main;
+      : group === 'site'
+        ? site
+        : group === 'login'
+          ? async () =>
+              emit(
+                positional[0] === 'status'
+                  ? await cmdLoginStatus(flags.get('wait'))
+                  : await cmdLogin(dir, positional[0] ?? argv[1]),
+              )
+          : group === '__login-wait'
+            ? () => cmdLoginWait(argv[1]!, argv[2]!, argv[3]!)
+            : main;
 
 run().catch(e => {
   const shared = siteErrorOutput(e);

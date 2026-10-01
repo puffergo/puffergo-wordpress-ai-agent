@@ -15,8 +15,7 @@
 | | |
 |---|---|
 | `skills/wordpress-bulk-product-upload` | 把产品照片和资料整理成产品页（标题、参数、价格/起订量/交期、图库、图文详情），推送为草稿，之后可以接着改，你说发布才发布。 |
-| `skills/wordpress-page-builder` | 用 Tailwind 分段建页面、文章、案例草稿，带 SEO 标题、描述和关键词；预览后改已有页面的某一块；改 SEO 信息。 |
-| `skills/wordpress-seo-silo` | 把网站定位展开成关键词和支柱/集群结构，写文章，带 Rank Math 标题、关键词和内链推送为 WordPress 草稿，并做 SEO 体检。 |
+| `skills/wordpress-content-builder` | 建页面、文章、案例草稿（正文用 Markdown，版式用 Tailwind 分段），带 SEO 标题、描述和关键词；预览后改已有页面的某一块；改 SEO 信息。网站要是已经在做内容战略，还管整套 SEO silo——把定位展开成关键词和支柱/集群结构，成批写文章，带 Rank Math 标题、关键词和内链推送为 WordPress 草稿，拉取回来，并做 SEO 体检。 |
 | `packages/cli` | 所有 Skill 共用的 `puffergo` 命令（打包进每个 Skill 的 `scripts/puffergo.mjs`，Node 18+，无依赖）。 |
 | `packages/silo-core` | `@puffergo/silo-core`：Silo 数据模型、WordPress REST 客户端、同步和体检。 |
 

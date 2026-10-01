@@ -1,46 +1,42 @@
 /**
- * Site resolution for every `puffergo` command that isn't `login` (spec section 7):
- *   --site <url> flag (remembered in the workdir) → <workdir>/.puffergo/config.json → the only site in
- *   credentials → error.
- * Also the small `.puffergo/config.json` reader/writer `login` uses to remember a workdir's site.
+ * Site resolution for every `puffergo` command that isn't `login`:
+ *   --site <url> flag → the folder's active site (.puffergo/state.json) → the only site in credentials
+ *   → error listing the sites the user IS logged into.
+ * The active-site pointer is shared with the silo channel (adapters/fileStore.ts), so one `--site` (or
+ * one `login`) points BOTH channels at the same site, per site — the old workdir-level config.json could
+ * only remember ONE site, which is how a folder ever drifted onto the wrong one.
+ *
+ * Per-site switches (edit-live) live in `.puffergo/sites/<domain>/config.json` — they belong to the site
+ * they were turned on for and can no longer be dropped by logging into a different one.
  */
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { resolveCredential, listCredentialSites, type ResolvedCredential } from '../adapters/credentials';
+import { dirname, join } from 'node:path';
+import { siteKey, siteConfigPath } from '@puffergo/silo-core';
+import { resolveCredential, listCredentialSites, type SiloConfig } from '../adapters/credentials';
+import { readActiveDomain, writeActiveDomain } from '../adapters/fileStore';
 
-export interface WorkdirConfig {
-  siteUrl: string;
+export interface SiteConfig {
   /** Off by default: live products and existing categories are left alone. Turned on only with the customer's words. */
   editLive?: { on: true; customerSaid: string; at: string };
 }
 
-function configPath(dir: string): string {
-  return join(dir, '.puffergo', 'config.json');
-}
-
-export async function readWorkdirConfig(dir: string): Promise<WorkdirConfig | null> {
-  const path = configPath(dir);
-  if (!existsSync(path)) return null;
+export async function readSiteConfig(dir: string, siteUrl: string): Promise<SiteConfig> {
+  const p = join(dir, siteConfigPath(siteKey(siteUrl)));
+  if (!existsSync(p)) return {};
   try {
-    const raw = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>;
-    if (typeof raw.siteUrl !== 'string') return null;
-    return raw.editLive
-      ? { siteUrl: raw.siteUrl, editLive: raw.editLive as WorkdirConfig['editLive'] }
-      : { siteUrl: raw.siteUrl };
+    const raw = JSON.parse(await readFile(p, 'utf8')) as SiteConfig;
+    return raw && typeof raw === 'object' ? raw : {};
   } catch {
-    return null;
+    return {};
   }
 }
 
-/** Logging in to a different site drops the edit-live switch; it belongs to the site it was turned on for. */
-export async function writeWorkdirConfig(dir: string, cfg: WorkdirConfig): Promise<void> {
-  const prev = await readWorkdirConfig(dir);
-  if (!('editLive' in cfg) && prev?.editLive && prev.siteUrl === cfg.siteUrl) cfg = { ...cfg, editLive: prev.editLive };
-  const path = configPath(dir);
-  await mkdir(join(dir, '.puffergo'), { recursive: true });
-  await writeFile(path, JSON.stringify(cfg, null, 2), 'utf8');
+export async function writeSiteConfig(dir: string, siteUrl: string, cfg: SiteConfig): Promise<void> {
+  const p = join(dir, siteConfigPath(siteKey(siteUrl)));
+  await mkdir(dirname(p), { recursive: true });
+  await writeFile(p, JSON.stringify(cfg, null, 2), 'utf8');
 }
 
 export class NoSiteError extends Error {
@@ -56,29 +52,32 @@ export class NotLoggedInError extends Error {
   }
 }
 
-/** Resolve the credential for the site this command should act on, per the order in the spec. */
-export async function resolveSite(dir: string, siteFlag: string | undefined): Promise<ResolvedCredential> {
-  let siteUrl = siteFlag;
-  if (!siteUrl) {
-    const cfg = await readWorkdirConfig(dir);
-    siteUrl = cfg?.siteUrl;
+/** Resolve the credential for the site this command should act on, per the order in the module doc. */
+export async function resolveSite(dir: string, siteFlag: string | undefined): Promise<ResolvedSite> {
+  if (siteFlag) {
+    const cred = await resolveCredential(siteFlag);
+    if (!cred) throw new NotLoggedInError(siteFlag);
+    // An explicit --site for a logged-in site becomes this folder's active site, as `login` would.
+    await writeActiveDomain(dir, cred.siteUrl);
+    return { config: cred };
   }
-  if (siteUrl) {
-    const cred = await resolveCredential(dir, siteUrl);
-    if (!cred) throw new NotLoggedInError(siteUrl);
-    // A --site for an already logged-in site sticks to this work folder, as `login` would.
-    if (siteFlag) await writeWorkdirConfig(dir, { siteUrl: cred.config.siteUrl });
-    return cred;
+  const active = await readActiveDomain(dir);
+  if (active) {
+    const cred = await resolveCredential(active);
+    if (!cred) throw new NotLoggedInError(active);
+    return { config: cred };
   }
   // No explicit/remembered site: fall back to "the only site in credentials".
-  const cred = await resolveCredential(dir, undefined);
-  if (cred) return cred;
-  const sites = await listCredentialSites();
-  throw new NoSiteError(sites);
+  const cred = await resolveCredential(undefined);
+  if (cred) return { config: cred };
+  throw new NoSiteError(await listCredentialSites());
+}
+
+export interface ResolvedSite {
+  config: SiloConfig;
 }
 
 /** Whether this work folder may change live products and existing categories on `siteUrl`. */
 export async function editLiveAllowed(dir: string, siteUrl: string): Promise<boolean> {
-  const cfg = await readWorkdirConfig(dir);
-  return !!cfg?.editLive?.on && cfg.siteUrl === siteUrl;
+  return !!(await readSiteConfig(dir, siteUrl)).editLive?.on;
 }

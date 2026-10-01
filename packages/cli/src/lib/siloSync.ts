@@ -1,29 +1,32 @@
 /**
  * Which notes `silo push` sends and which bodies `silo pull` may overwrite. A note is "changed" when its file
- * differs from how it was right after its last push or pull (a hash kept in `.silo/synced.json`), so a push
- * never touches posts nobody edited here, and a pull never overwrites edits not pushed yet.
+ * differs from how it was right after its last push or pull (a hash kept in the SITE's `synced.json` — one
+ * per site under `.puffergo/sites/<domain>/`, so two sites sharing a vault never shadow each other's
+ * fingerprints), so a push never touches posts nobody edited here, and a pull never overwrites edits not
+ * pushed yet.
  */
 
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { basename, join, resolve } from 'node:path';
-import type { SiloWorkspace } from '@puffergo/silo-core';
+import { basename, dirname, join, resolve } from 'node:path';
+import { siteKey, syncedPath, type SiloWorkspace } from '@puffergo/silo-core';
 
 export type Scan = Map<string, { path: string; fm: string; body: string }>;
 /** Content id → hash of its note as last pushed or pulled. */
 export type Synced = Record<string, string>;
 
-const syncedPath = (dir: string) => join(dir, '.silo', 'synced.json');
+const pathFor = (dir: string, siteUrl: string): string => join(dir, syncedPath(siteKey(siteUrl)));
 
-export async function readSynced(dir: string): Promise<Synced> {
-  const p = syncedPath(dir);
+export async function readSynced(dir: string, siteUrl: string): Promise<Synced> {
+  const p = pathFor(dir, siteUrl);
   return existsSync(p) ? (JSON.parse(await readFile(p, 'utf8')) as Synced) : {};
 }
 
-export async function writeSynced(dir: string, synced: Synced): Promise<void> {
-  await mkdir(join(dir, '.silo'), { recursive: true });
-  await writeFile(syncedPath(dir), JSON.stringify(synced, null, 2) + '\n', 'utf8');
+export async function writeSynced(dir: string, siteUrl: string, synced: Synced): Promise<void> {
+  const p = pathFor(dir, siteUrl);
+  await mkdir(dirname(p), { recursive: true });
+  await writeFile(p, JSON.stringify(synced, null, 2) + '\n', 'utf8');
 }
 
 export function noteHash(note: { fm: string; body: string }): string {

@@ -10,18 +10,28 @@ import { SILO_WORKSPACE_VERSION, SILO_STORE_VERSION, LOCAL_SITE_KEY } from './ty
 import { reconcileKeywords } from './keywords';
 
 /**
- * Canonical site key from a URL: lowercased host without `www.`, no protocol/path. This is how a
- * Silo workspace is matched to a 建站-tab site record (both keyed by domain). Empty/invalid → the
- * `__local__` placeholder so a not-yet-connected workspace still has a stable slot.
+ * Characters a site key must not contain because the key doubles as a file/directory NAME on every
+ * platform we ship to: `:` is legal on APFS/ext4 but on Windows NTFS it is the alternate-data-stream
+ * separator (creating `localhost:8080.json` fails with EINVAL), and `<>"/\|?*` are reserved there too.
+ * A local dev site with a port (Local by Flywheel's router mode is `localhost:10036`) hits this on the
+ * very first `silo init` — so the port colon, and any other reserved character, becomes `_`.
+ */
+const sanitizeKey = (host: string): string => host.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').replace(/[. ]+$/, '');
+
+/**
+ * Canonical site key from a URL: lowercased host without `www.`, no protocol/path, safe to use as a
+ * file/directory name on every platform (see `sanitizeKey`). This is how a Silo workspace is matched
+ * to a 建站-tab site record (both keyed by domain). Empty/invalid → the `__local__` placeholder so a
+ * not-yet-connected workspace still has a stable slot.
  */
 export function siteKey(url: string | undefined | null): string {
   const raw = (url ?? '').trim();
   if (!raw) return LOCAL_SITE_KEY;
   try {
     const host = new URL(raw.includes('://') ? raw : `https://${raw}`).host.toLowerCase();
-    return host.replace(/^www\./, '') || LOCAL_SITE_KEY;
+    return sanitizeKey(host.replace(/^www\./, '')) || LOCAL_SITE_KEY;
   } catch {
-    return raw.toLowerCase().replace(/^www\./, '') || LOCAL_SITE_KEY;
+    return sanitizeKey(raw.toLowerCase().replace(/^www\./, '')) || LOCAL_SITE_KEY;
   }
 }
 

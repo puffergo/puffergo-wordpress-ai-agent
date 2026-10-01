@@ -25,7 +25,7 @@ const SEO = {
   'seo-description': 'About our valves.',
   'focus-keyword': 'gate valve',
 };
-const { writeWorkdirConfig } = await import('../lib/site');
+const { writeSiteConfig } = await import('../lib/site');
 
 const SITE = 'http://site.test';
 // 1x1 PNG
@@ -35,9 +35,7 @@ const PNG = Buffer.from(
 );
 
 async function workdir(): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), 'pg-pages-'));
-  await writeWorkdirConfig(dir, { siteUrl: SITE });
-  return dir;
+  return mkdtemp(join(tmpdir(), 'pg-pages-'));
 }
 
 const ctx = (dir: string, positional: string[], flags: Record<string, string> = {}) => ({
@@ -471,7 +469,7 @@ describe('pages get / replace', () => {
     expect(replaceBlock).toHaveBeenCalledTimes(1);
 
     // or the switch, for many in a row
-    await writeWorkdirConfig(dir, { siteUrl: SITE, editLive: { on: true, customerSaid: '改一下首页', at: 'x' } });
+    await writeSiteConfig(dir, SITE, { editLive: { on: true, customerSaid: '改一下首页', at: 'x' } });
     expect(await cmdReplace(ctx(dir, ['5', '1', 'pages/5/block-1.html']))).toMatchObject({
       ok: true,
       note: 'This changed the live page.',
@@ -581,14 +579,30 @@ describe('pages SEO', () => {
     seo: { ...seo, ...over },
   });
 
-  it('create needs the slug and SEO title / description before anything is sent', async () => {
+  it('create sends a draft with no SEO at all, passing the site\'s advice through', async () => {
     const dir = await workdir();
-    const createPost = vi.fn();
+    await mkdir(join(dir, 'p'), { recursive: true });
+    await writeFile(join(dir, 'p/01.md'), '## Body\n\nText.');
+    const createPost = vi.fn(async () => ({
+      id: 3,
+      type: 'page',
+      status: 'draft',
+      blocks: 1,
+      baseModified: 'T',
+      link: 'l',
+      editUrl: 'e',
+      seo: {
+        slug: null,
+        seoTitle: null,
+        checks: [{ code: 'missing_seo', message: 'no address (slug), SEO title…' }],
+      },
+    }));
     fake.current = { siteUrl: SITE, createPost } as unknown as AgentClient;
-    const out = await cmdCreate(ctx(dir, ['x'], { type: 'page', title: 'Home', slug: 'home' }));
-    expect(out).toMatchObject({ ok: false, code: 'seo_missing', fix: 'ai' });
-    expect(String(out.message)).toContain('--seo-title, --seo-description');
-    expect(createPost).not.toHaveBeenCalled();
+    const out = await cmdCreate(ctx(dir, ['p'], { type: 'page', title: 'Home' }));
+    // Nothing gated it: the draft is created, and what the site says is missing reaches the AI in `seo`.
+    expect(out).toMatchObject({ ok: true, id: 3 });
+    expect(createPost).toHaveBeenCalledWith(expect.objectContaining({ type: 'page', title: 'Home' }));
+    expect(String(JSON.stringify((out as { seo?: unknown }).seo))).toContain('missing_seo');
   });
 
   it('sends the core keyword and --keywords "a, b" as a list of long-tail keywords', async () => {
@@ -625,7 +639,7 @@ describe('pages SEO', () => {
       code: 'slug_locked',
     });
 
-    await writeWorkdirConfig(dir, { siteUrl: SITE, editLive: { on: true, customerSaid: '改一下标题', at: 'x' } });
+    await writeSiteConfig(dir, SITE, { editLive: { on: true, customerSaid: '改一下标题', at: 'x' } });
     expect(await cmdSeo(ctx(dir, ['5'], { slug: 'about-us' }))).toMatchObject({
       ok: false,
       code: 'slug_locked',

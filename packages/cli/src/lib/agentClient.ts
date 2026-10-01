@@ -114,8 +114,13 @@ export class AgentClient {
     });
   }
 
+  /**
+   * Creates a draft. The SEO fields are all optional: the plugin creates the draft without them and reports
+   * what is missing as advice in the result's `seo.checks`, so a draft can exist before its SEO is agreed
+   * (`updateSeo` fills them in later).
+   */
   createPost<T = unknown>(
-    input: { type: string; title: string; excerpt?: string; blocks: ContentBlock[] } & SeoInput,
+    input: { type: string; title: string; excerpt?: string; blocks: ContentBlock[] } & Partial<SeoInput>,
   ): Promise<T> {
     return this.write('create-post', input);
   }
@@ -136,6 +141,11 @@ export class AgentClient {
     block: ContentBlock;
   }): Promise<T> {
     return this.write('replace-block', input);
+  }
+
+  /** Replace the post's WHOLE body with these blocks (title/slug/SEO/categories untouched). */
+  updateBody<T = unknown>(input: { id: number; baseModified: string; blocks: ContentBlock[] }): Promise<T> {
+    return this.write('update-body', input);
   }
 
   getProduct<T = unknown>(id: number): Promise<T> {

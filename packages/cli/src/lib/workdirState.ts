@@ -1,14 +1,16 @@
 /**
- * The little things the CLI remembers between runs, in `<workdir>/.puffergo/<name>.json`: uploaded media,
- * each post's baseModified, which section files became which post, the samples to follow. All of them are
- * kept per site, so pointing a work folder at another site never reuses the first site's ids.
+ * The little things the CLI remembers between runs, in `.puffergo/sites/<domain>/<name>.json`: uploaded
+ * media, each post's baseModified, which section files became which post, the samples to follow. One file
+ * per site (not a `{siteUrl: …}` dict any more), so pointing a work folder at another site never reuses
+ * the first site's ids and a write only ever touches that site's own file.
  */
 
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { siteKey, siteStatePath } from '@puffergo/silo-core';
 
-/** On disk: `{ "<siteUrl>": <value> }`. A missing or broken file reads as empty — these are caches, not data. */
+/** One site's `<name>.json` value. A missing or broken file reads as empty — these are caches, not data. */
 export interface SiteState<V> {
   read(dir: string, siteUrl: string): Promise<V>;
   write(dir: string, siteUrl: string, value: V): Promise<void>;
@@ -17,32 +19,27 @@ export interface SiteState<V> {
 }
 
 export function siteState<V extends object>(fileName: string): SiteState<V> {
-  const path = (dir: string) => join(dir, '.puffergo', fileName);
-  const readAll = async (dir: string): Promise<Record<string, V>> => {
-    if (!existsSync(path(dir))) return {};
+  const path = (dir: string, siteUrl: string) => join(dir, siteStatePath(siteKey(siteUrl), fileName));
+  const readOne = async (dir: string, siteUrl: string): Promise<V> => {
+    const p = path(dir, siteUrl);
+    if (!existsSync(p)) return {} as V;
     try {
-      return JSON.parse(await readFile(path(dir), 'utf8')) as Record<string, V>;
+      return JSON.parse(await readFile(p, 'utf8')) as V;
     } catch {
-      return {};
+      return {} as V;
     }
   };
-  const writeAll = async (dir: string, all: Record<string, V>): Promise<void> => {
-    await mkdir(join(dir, '.puffergo'), { recursive: true });
-    await writeFile(path(dir), JSON.stringify(all, null, 2) + '\n', 'utf8');
+  const writeOne = async (dir: string, siteUrl: string, value: V): Promise<void> => {
+    const p = path(dir, siteUrl);
+    await mkdir(dirname(p), { recursive: true });
+    await writeFile(p, JSON.stringify(value, null, 2) + '\n', 'utf8');
   };
   return {
-    async read(dir, siteUrl) {
-      return ((await readAll(dir))[siteUrl] ?? {}) as V;
-    },
-    async write(dir, siteUrl, value) {
-      const all = await readAll(dir);
-      all[siteUrl] = value;
-      await writeAll(dir, all);
-    },
+    read: readOne,
+    write: writeOne,
     async remember(dir, siteUrl, key, entry) {
-      const all = await readAll(dir);
-      all[siteUrl] = { ...(all[siteUrl] ?? {}), [key]: entry } as V;
-      await writeAll(dir, all);
+      const cur = await readOne(dir, siteUrl);
+      await writeOne(dir, siteUrl, { ...cur, [key]: entry } as V);
     },
   };
 }

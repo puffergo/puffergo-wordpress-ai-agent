@@ -1,5 +1,5 @@
 /**
- * The three Skills tell the customer the same thing about logging in and about where the site password
+ * The two Skills tell the customer the same thing about logging in and about where the site password
  * lives. That text is deliberately inline in each SKILL.md — the AI needs it before it runs the first
  * command, i.e. before it would read a reference file — so it is copied, and copies drift. This test is
  * the guard: edit one copy and it fails, naming the file that fell behind.
@@ -15,24 +15,24 @@ const SKILLS_DIR = join(import.meta.dirname, '..', '..', '..', '..', 'skills');
 
 /** Skill → the command it runs to prove the authorisation took. */
 const VERIFY_COMMAND: Record<string, string> = {
-  'wordpress-page-builder': 'pages types',
+  'wordpress-content-builder': 'pages types',
   'wordpress-bulk-product-upload': 'products schema',
-  'wordpress-seo-silo': 'silo status',
 };
 
 const skills = Object.keys(VERIFY_COMMAND);
 
 const read = (skill: string) => readFileSync(join(SKILLS_DIR, skill, 'SKILL.md'), 'utf8');
 
-/** The `## <name>` section's body, with the Skill's own verify command blanked out. */
+/** The `## <name>` section's body, with the Skill's own verify command blanked out. Stops at the next
+ *  heading of any level — the content Skill's 授权 section is followed by a `#` lane heading, not `##`. */
 function section(skill: string, name: string): string {
   const doc = read(skill);
-  const body = new RegExp(`\\n## ${name}\\n([\\s\\S]*?)(?=\\n## |$)`).exec(doc);
+  const body = new RegExp(`\\n## ${name}\\n([\\s\\S]*?)(?=\\n#|$)`).exec(doc);
   expect(body, `${skill} has no "## ${name}" section`).not.toBeNull();
   return body![1]!.trim().split(VERIFY_COMMAND[skill]!).join('<verify>');
 }
 
-describe('SKILL.md 三份共用的段落', () => {
+describe('SKILL.md 两份共用的段落', () => {
   it('授权 的说法完全一致', () => {
     const [first, ...rest] = skills.map(s => section(s, '授权'));
     for (const [i, body] of rest.entries())
