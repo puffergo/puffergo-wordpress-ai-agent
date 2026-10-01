@@ -28,6 +28,24 @@ export function blockSignature(blocks: DetailBlock[]): Array<string> {
   });
 }
 
+/**
+ * The same signature, with runs of blocks the site merges collapsed into one `native`.
+ *
+ * The site folds neighbouring prose / image / video blocks into a single prose block — the image
+ * becomes `![alt](url)` inside it, so nothing is lost, but the block count drops. Comparing the raw
+ * signature then reports `readback_mismatch` for a write that actually landed in full, and the
+ * `fix: "ai"` tells the agent to edit a file that no edit can satisfy. Only `config` and `static`
+ * survive as their own blocks, so a genuinely missing component or section still mismatches.
+ */
+export function mergedBlockSignature(blocks: DetailBlock[]): Array<string> {
+  const out: string[] = [];
+  for (const kind of blockSignature(blocks)) {
+    if (kind === 'native' && out[out.length - 1] === 'native') continue;
+    out.push(kind);
+  }
+  return out;
+}
+
 /** A new product whose detail has no component: only a suggestion (the customer may want it plain). */
 export function detailWarnings(product: ProductFile, ident: string): ValidationError[] {
   if (product.id || detailBlocks(product, ident).some(b => b.block.type === 'config')) return [];

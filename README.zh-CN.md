@@ -14,17 +14,17 @@
 
 | | |
 |---|---|
-| `skills/wordpress-bulk-product-upload` | 把产品照片和资料整理成产品页（标题、参数、价格/起订量/交期、图库、图文详情），推送为草稿，之后可以接着改，你说发布才发布。 |
-| `skills/wordpress-content-builder` | 建页面、文章、案例草稿（正文用 Markdown，版式用 Tailwind 分段），带 SEO 标题、描述和关键词；预览后改已有页面的某一块；改 SEO 信息。网站要是已经在做内容战略，还管整套 SEO silo——把定位展开成关键词和支柱/集群结构，成批写文章，带 Rank Math 标题、关键词和内链推送为 WordPress 草稿，拉取回来，并做 SEO 体检。 |
+| `skills/puffergo-wordpress-products` | 把产品照片和资料整理成产品页（标题、参数、价格/起订量/交期、图库、图文详情），推送为草稿，之后可以接着改，你说发布才发布。 |
+| `skills/puffergo-wordpress-content` | 建页面、文章、案例草稿（正文用 Markdown，版式用 Tailwind 分段），带 SEO 标题、描述和关键词；预览后改已有页面的某一块；改 SEO 信息。网站要是已经在做内容战略，还管整套 SEO silo——把定位展开成关键词和支柱/集群结构，成批写文章，带 Rank Math 标题、关键词和内链推送为 WordPress 草稿，拉取回来，并做 SEO 体检。 |
 | `packages/cli` | 所有 Skill 共用的 `puffergo` 命令（打包进每个 Skill 的 `scripts/puffergo.mjs`，Node 18+，无依赖）。 |
 | `packages/silo-core` | `@puffergo/silo-core`：Silo 数据模型、WordPress REST 客户端、同步和体检。 |
 
 ## 需要
 
-- Node.js 18 或更新版本（没有的话 AI 会自己装）。
+- Node.js 18 或更新版本。没装或版本太低，AI 会把一句安装命令给你，由你自己装——它不会在你电脑上装软件。
 - 一个你有管理员权限的 WordPress 网站。
 - **上架产品**需要安装 PufferGo WordPress 插件 **0.35.0 或更新版本**（提供产品类型和校验接口）。
-- **建页面**需要安装 PufferGo WordPress 插件 **0.35.0 或更新版本**（提供 Tailwind 区块和内容接口）。
+- **建页面、文章、案例**需要安装 PufferGo WordPress 插件 **0.36.0 或更新版本**（提供 Markdown 正文、Tailwind 区块和内容接口）。
 - **SEO Silo** 需要 Rank Math 写 SEO 字段；导入已有关键词需要 PufferGo 插件。
 
 插件版本过旧时，它给出的内容格式这个 CLI 已经不再支持，每条命令都会以 `update_plugin` 停下——请先在网站上把插件升级。
@@ -34,7 +34,7 @@
 把这句话发给你的 AI 工具（豆包、千问电脑版先切到「工作」模式；WorkBuddy、Codex、Claude Code 等直接发）：
 
 ```text
-帮我安装这个技能：https://github.com/puffergo/puffergo-wordpress-ai-agent/tree/main/skills/wordpress-bulk-product-upload
+帮我安装这个技能：https://github.com/puffergo/puffergo-wordpress-ai-agent/tree/main/skills/puffergo-wordpress-products
 ```
 
 AI 会自己下载装好；电脑上没有 Node.js 的话，第一次用时 AI 也会自己装。装好后直接说：

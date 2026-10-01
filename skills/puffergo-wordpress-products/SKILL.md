@@ -1,5 +1,5 @@
 ---
-name: wordpress-bulk-product-upload
+name: puffergo-wordpress-products
 description: >-
   Upload or edit products on the user's own WordPress site (PufferGo plugin) through conversation — one
   product or many. Use when the user drops product photos, gives a product title/specs, or says things like
@@ -19,7 +19,7 @@ description: >-
 - 本项目是开源的，代码全部公开透明；你的信息只保存在你自己的电脑上。
 - 写到网站上的产品默认是草稿，访客看不到，要你自己说发布才会发布。
 
-客户要做页面、博客或案例，是 wordpress-content-builder 技能，告诉他装那个。
+客户要做页面、博客或案例，是 puffergo-wordpress-content 技能，告诉他装那个。
 
 ## 命令
 
@@ -55,7 +55,7 @@ description: >-
 
 **铁律：推送前一定先把整理好的内容给客户过目，客户确认后才推送。**要问客户的事攒在一起，在过目那一条消息里一次问完。
 
-1. **准备**：`node -v` 低于 18 或没装，你自己装最新 LTS（macOS `brew install node` 或 nodejs.org 的 .pkg，Windows `winget install OpenJS.NodeJS.LTS`），系统弹窗要密码请客户自己输。然后运行 `products schema`；提示未登录就问网站地址，按下面「授权」走一遍，再跑一次 `schema`。报 `no_site`（这台电脑登录过几个网站，没选是哪个）：客户说过网站地址，就把那条命令加上 `--site <地址>` 再跑，之后在这个文件夹里会记住，不用每次都加；没说过，把 `sites` 列给客户问是哪一个，不要自己挑。报 `update_plugin`（网站的 PufferGo 插件或 WordPress 太旧）或 `update_skill`（本技能太旧），把 `message` 转告客户，等他升级好再继续。
+1. **准备**：先跑一次 `node -v`，18 以上就能用（脚本自己不检查版本，是你跑这一句看的）。太低或没装，把一句安装命令发给客户请他自己装（macOS `brew install node` 或 nodejs.org 的 .pkg，Windows `winget install OpenJS.NodeJS.LTS`）——**你不要替他装，也不要问他的电脑密码**；装完请他回你一声，你再跑一次 `node -v` 确认。然后运行 `products schema`；提示未登录就问网站地址，按下面「授权」走一遍，再跑一次 `schema`。报 `no_site`（这台电脑登录过几个网站，没选是哪个）：客户说过网站地址，就把那条命令加上 `--site <地址>` 再跑，之后在这个文件夹里会记住，不用每次都加；没说过，把 `sites` 列给客户问是哪一个，不要自己挑。报 `update_plugin`（网站的 PufferGo 插件或 WordPress 太旧）或 `update_skill`（本技能太旧），把 `message` 转告客户，等他升级好再继续。
 2. **收资料**：图片要有文件路径，拿不到就请客户把图片拖进来或告诉你文件夹。复制到 `images/`，改成规范文件名，马上运行 `products images images/`：超过 200KB 的、尺寸或比例放不进打算放的位置的，当场一条消息告诉客户，附上那个位置的 `cropUrl`（PufferGo 图片工具，能一次裁剪、改尺寸、压缩）。客户处理完发回新图就换上；不在乎的就照用原图，这只是提醒，不影响推送。网站不会自动压缩或裁剪图片，别这么说。客户发来别的网站上的产品链接（如阿里巴巴），读取页面上的资料和图片当作客户资料；读不到就请客户截图。
 3. **整理并校验**：写 `products/<key>.json`，运行 `products check`，`fix: "ai"` 的自己改，`fix: "user"` 的留到下一步问。
 4. **给客户过目**：一条消息里列出标题、简介、SEO（标题、描述、核心和长尾关键词）、分类、交易信息、参数表、详情每一块（是什么区块、排法、标题、用哪张图或哪个视频），以及要客户回答的：
@@ -89,6 +89,7 @@ description: >-
 
 - `name` 必填；`slug` 必填，小写英文、数字和连字符，全文件不重复；`description` 可选；`children` 是下一级。
 - 按 `slug` 对应网站上的分类：没有就新建，不会删除。已有的分类默认不改（结果里的 `leftAlone`），打开 `edit-live` 后才更新名称、描述、上级和排序。
+- **产品文件里的 `categories` 只认网站上已有的 slug**，写新的会报 `unknown_category`（`message` 里写了是哪个）：先问客户要不要加这个分类，他说要，就把它按层级加进 `categories.json` 一起过目，先 `categories push` 建好，再推产品。这样新分类才落在它该在的层级、带上排序；从产品文件里直接建会掉到顶级分类里。
 - 建议客户不超过三级。
 - `order` 可选：同一级里从 1 开始的正整数，数字小的排在前，不写就排在最后。客户说了先后顺序（「这个放第一个」「按这个顺序排」）就写上。
   - 网站的分类排法不是「手动」时，`order` 写进去了但前台看不出来，`check` / `push` 会给这条警告，把它转告客户：请他到后台「产品设置 → 分类排序」改成手动。
@@ -139,7 +140,7 @@ description: >-
   - `focusKeyword`：这个产品最想被搜到的一个词；`keywords`：可选的长尾词，最多 5 个，不和核心词重复，都不能带逗号。
   - 核心关键词要出现在 SEO 标题、描述和产品标题里，`check` 报 `keyword_missing` 就补上。
   - 已有的产品：只改长尾词时核心词不变。报 `no_seo_plugin` 是网站没装 SEO 插件，请客户装好启用 Rank Math SEO（或 Yoast SEO）。
-- `categories` 写分类的 `slug`，从 schema 的 `categories` 里取。
+- `categories` 写分类的 `slug`，从 schema 的 `categories` 里取（只认网站上已有的，写新的报 `unknown_category`，见「产品分类」）。
 - `gallery` 第一张是主图。图片写 `file`（本地）或 `mediaId`（网站上已有的）。组件里的图片不一样，写法见 `blocks.md`「配置型组件」。
 - `detail`：见下面「详情」。
 
@@ -150,6 +151,7 @@ description: >-
 1. **详情默认用 schema 里 `blocks.default` 这个组件**，新产品和改已有产品都一样。`detail.blocks` 里已经有这个组件，就在它里面改，不再加第二个。客户想换别的组件（`blocks.components` 里其他的）或者用静态区块，照他的。
 2. 排哪几段、写什么，按这个组件的 `guide` 来，和客户商量。
 3. **已有的区块不动**：`pull` 下来的 `detail.blocks` 里原有的区块（包括 `native`）原样留着，新组件加在它们后面。客户明确要删、要挪才动。
+   - **相邻的同类区块在网站上会并成一块**：一段正文紧挨着一张图，推上去之后站点把它们合成一块正文（图片变成正文里的 `![说明](网址)`）。所以 `push` 后回读的区块数可能比你写的少、路径也会变——内容没丢，也不用回头改文件。下次要改，先 `pull` 拿最新的一份。
    - `pull` 下来是 `prose` 的，是客户自己在编辑器里写的段落、标题、列表或图片。你可以改它的文字（`markdown`），写法见 `prose.md`；但客户没让改就别动。
 4. 客户给了视频链接就加 `video` 区块；给的是视频文件，请他先传到 YouTube 再给链接；组件排不出来的（表格等）才加 `static` 区块。客户要一段能让他自己随手改的说明文字，用 `prose` 区块（`markdown`）——但详情的主体还是用组件。
    - `prose` 的 `markdown` 里**不能写本地图片路径**（脚本不会上传它）。详情里的图片用 `image` 区块，或组件的图片字段；实在要写在正文里，用 `mediaId` 对应的网址，或先用 `image` 区块推上去。
@@ -158,10 +160,11 @@ description: >-
 
 - 参数、交易信息、认证只来自客户，没给就问，不填猜的值。
 - 文案用英文（客户另有要求除外），和客户对话用客户的语言。详情里不重复交易信息。
-- `check` 报 `unsupported_claim`：客户没说过的，删掉；客户给过的事实（如参数里的保修年限、认证），照原话写，不管这条警告。不要换个说法绕开检查。
+- `check` 报 `unsupported_claim`：**这是提醒，不是禁止，不挡上架**。客户确实说过这句话（他自己资料里写 world-class 之类），照他的原话留着；他没说过的，删掉。客户给过的事实（如参数里的保修年限、认证）照原话写。不要换个说法绕开检查。
 - `check` 报 `no_detail_component`：新产品的详情里没有组件，只是提醒。过目时建议客户用组件排详情，客户就要简单的，照他的推。
 - `check` 报 `image_advice`（图片体积、尺寸、比例和放的位置不符），只是提醒。客户已经说过照用的图不再提，其余的过目时列出来，附上链接。
 - 图片文件名：小写英文加连字符，以型号开头，如 `ck6150-cnc-lathe-control-panel.jpg`。alt：一句带产品名的英文描述；同一张图用在多处时 alt 写成一样的。
+- `check` 报 `missing_alt`：这张图没写 alt（图库里的图片和详情里的图片都会查）。补一句英文描述，写图上是什么；客户明确不要的可以留空，只是提醒，不挡上架。
 
 ## 安全
 

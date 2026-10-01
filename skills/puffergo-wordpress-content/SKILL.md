@@ -1,5 +1,5 @@
 ---
-name: wordpress-content-builder
+name: puffergo-wordpress-content
 description: >-
   Build, edit and operate content on the user's own WordPress site (PufferGo plugin): pages, blog posts
   and case studies as Markdown body text (native WordPress blocks the customer can edit) plus Tailwind
@@ -9,7 +9,7 @@ description: >-
   health check. Use when the user says things like "做一个页面 / 写一篇博客 / 加一个案例 / 改一下首页这一块 /
   这段文字换一下 / 规划关键词 / 搭建 silo / 成批写文章 / 给网站做 SEO 体检 / make a landing page /
   add a case study / edit this section / plan keywords / publish to WordPress".
-  Not for products (use wordpress-bulk-product-upload). All WordPress operations go through the bundled
+  Not for products (use puffergo-wordpress-products). All WordPress operations go through the bundled
   `puffergo` script; the site password never enters the chat.
 ---
 
@@ -35,7 +35,7 @@ description: >-
 - 本项目是开源的，代码全部公开透明；你的信息只保存在你自己的电脑上。
 - 写到网站上的内容默认是草稿，访客看不到，要你自己说发布才会发布。
 
-要上架或修改产品，是 wordpress-bulk-product-upload 技能，告诉他装那个。
+要上架或修改产品，是 puffergo-wordpress-products 技能，告诉他装那个。
 
 ## 命令
 
@@ -43,7 +43,11 @@ description: >-
 
 ## 准备
 
-`node -v` 低于 18 或没装，你自己装最新 LTS（macOS `brew install node` 或 nodejs.org 的 .pkg，Windows `winget install OpenJS.NodeJS.LTS`），系统弹窗要密码请客户自己输。然后运行 `pages types`；提示未登录就问网站地址，按下面「授权」走一遍，再跑一次 `pages types`。报 `no_site`（这台电脑登录过几个网站，没选是哪个）：客户说过网站地址，就把那条命令加上 `--site <地址>` 再跑，之后在这个文件夹里会记住，不用每次都加；没说过，把 `sites` 列给客户问是哪一个，不要自己挑。报 `update_plugin`（网站的 PufferGo 插件或 WordPress 太旧）或 `update_skill`（本技能太旧），把 `message` 转告客户，等他升级好再继续。
+先跑一次 `node -v`：18 以上就能用（脚本自己不检查版本，是你跑这一句看的）。太低或没装，把一句安装命令发给客户请他自己装（macOS `brew install node` 或 nodejs.org 的 .pkg，Windows `winget install OpenJS.NodeJS.LTS`）——**你不要替他装，也不要问他的电脑密码**；装完请他回你一声，你再跑一次 `node -v` 确认。
+
+然后运行 `pages types`；提示未登录就问网站地址，按下面「授权」走一遍，再跑一次 `pages types`。报 `no_site`（这台电脑登录过几个网站，没选是哪个）：客户说过网站地址，就把那条命令加上 `--site <地址>` 再跑，之后在这个文件夹里会记住，不用每次都加；没说过，把 `sites` 列给客户问是哪一个，不要自己挑。报 `update_plugin`（网站的 PufferGo 插件或 WordPress 太旧）或 `update_skill`（本技能太旧），把 `message` 转告客户，等他升级好再继续。
+
+**网站还没准备好时用 `puffergo site setup`**：它不改任何东西，只查一遍这个站能不能用（授权还有效吗、WordPress 是不是 6.9 以上、PufferGo 插件启用没有、有没有装 SEO 插件），把 `problems` 和 `needsInstall` 列给你。缺的东西照 `next` 转告客户，问同不同意装；他说「装」，才运行 `puffergo site setup install --customer-said "客户原话"`，它会装 PufferGo 插件，网站一个 SEO 插件都没有时再装 Rank Math（已有 Rank Math 或 Yoast 就不动）。**WordPress 本身太旧、插件要升级，脚本装不了**，报 `needs_manual_install` 时把 `message` 里那几句后台操作转告客户。装完再跑一次 `site setup`，`ready: true` 就可以开始了。
 
 ## 授权
 
@@ -69,6 +73,7 @@ description: >-
 | `puffergo pages create --type <类型> --title "标题" --slug <网址> --seo-title "…" --seo-description "…" --focus-keyword "…" [--keywords "长尾词1, 长尾词2"] [--category "分类slug1, 分类slug2"] [--featured-image <图片>] [--excerpt "摘要"] <文件或文件夹>…` | 建一个草稿（访客看不到），每个文件是一段，按文件名排序 |
 | `puffergo pages seo <id或链接> [--slug …] [--seo-title "…"] [--seo-description "…"] [--focus-keyword "…"] [--keywords "…"] [--category "…"] [--featured-image <图片>] [--customer-said "客户原话"]` | 不带参数是查看网址、SEO 标题、描述、关键词、分类、特色图和 Rank Math 评分；带参数是修改 |
 | `puffergo pages preview <id或链接> <路径> <文件>` | 在整页里预览改过的这一块，不写入网站，随时可以用。只在改已发布页面之前用 |
+| `puffergo pages preview <文件或文件夹>… [--title "标题"]` | 整批预览：把这批文件（或一个文件夹里按名字排好的文件）当成一个新建的页面在浏览器里打开看效果，不写入网站，网站上也还没有这一页。写完先给客户看这个，比建草稿再改快 |
 | `puffergo pages replace <id或链接> <路径> <文件> [--customer-said "客户原话"]` | 用文件替换这个区块。已发布的页面要带客户同意上线的原话 |
 | `puffergo pages publish <id或链接> --customer-said "客户原话"` | 发布草稿。只有客户明确说「发布」「上线」时才用 |
 | `puffergo pages edit-live on --customer-said "客户原话" / off` | 一次改很多已发布页面时用：打开后所有已发布的页面和产品都能改，改完马上关 |
@@ -97,7 +102,11 @@ description: >-
 2. **写段落**：一段一个文件，放在 `pages/<英文短名>/` 里，按顺序命名，后缀选对（写法见「写区块」）：
    - 文章、案例：`01-intro.md`、`02-comparison.html`、`03-faq.json`、`04-body.md`…正文用 `.md`，中间要插对比表、CTA、FAQ 这类版式就插一个 `.html` 或 `.json`，正文接着用下一个 `.md`。
    - 页面：`01-hero.html`、`02-features.html`…整页都是版式。
-   - 客户给的图片复制到同一文件夹的 `images/` 里，文件里写相对路径 `images/xxx.jpg`（Markdown 里是 `![图片说明](images/xxx.jpg)`），脚本会自动上传。
+   - 客户给的图片复制到这一批文件所在文件夹里的 `images/`（如 `pages/<短名>/images/`）。**两套路径基准，别混用**：
+     - **`.md` 正文和 `.html` 版式里的图片**：相对**这个文件所在的文件夹**，`![图片说明](images/xxx.jpg)`。
+     - **`--featured-image`**：相对**工作目录**（你运行 `puffergo` 的那个目录），所以写 `pages/<短名>/images/cover.jpg`。
+     - `.json` 组件里的图片两个地方都找（先看文件旁边，再看工作目录）。
+     - 找不到会报 `image_not_found`，按报错里的位置改。脚本会自动上传图片。
 3. **定好 SEO 信息**：建之前要有这几样，客户没给就问他，或者和他商量定下来：
    - **网址 `--slug`**：小写英文和数字，用 `-` 连接，简短、说清这一页是什么，如 `gate-valves-vietnam-water-plant`。
    - **SEO 标题 `--seo-title`**：搜索结果和分享卡片上的标题。要带网站名就自己写进去，脚本不会自动加。
@@ -108,7 +117,7 @@ description: >-
    - **特色图 `--featured-image`**：文章、案例这类会显示在列表页和分享卡片上，问客户要一张；页面可以不要。
    - **分类 `--category`**：文章、案例、解决方案这类要归到分类里（`pages types` 里这个类型的 `taxonomy.categories` 就是网站现有的分类，按树状列给客户选，多个用英文逗号隔开）。**页面不归分类**（`taxonomy` 是 null），别给它写。客户要的分类网站上还没有，先按「分类」建好再建草稿。
    - 核心关键词要出现在 SEO 标题、SEO 描述、网址、页面大标题（H1）和正文开头里。
-4. **建草稿**：`pages create --type <类型> --title "标题" --slug … --seo-title "…" --seo-description "…" --focus-keyword "…" [--keywords "…, …"] [--category "…"] [--featured-image images/cover.jpg] pages/<短名>`。文章、案例这类可以加 `--excerpt` 写一句摘要。以下情况什么都不会写入网站，改好再运行：
+4. **建草稿**：`pages create --type <类型> --title "标题" --slug … --seo-title "…" --seo-description "…" --focus-keyword "…" [--keywords "…, …"] [--category "…"] [--featured-image pages/<短名>/images/cover.jpg] pages/<短名>`。文章、案例这类可以加 `--excerpt` 写一句摘要。以下情况什么都不会写入网站，改好再运行：
    - 报 `invalid_blocks`：按 `errors` 里每条的 `file` 和 `message` 改文件。`prose_unsupported` 是正文里写了 Markdown 不支持的东西（`message` 带行号），要么改写，要么那一段改成 `.html` 版式区块。
    - 报 `unknown_category`：`--category` 里有网站上没有的分类 slug（`message` 里写了是哪个）。**不会**帮你新建：要么换成 `pages types` 里已有的 slug，要么按「分类」先建好。报 `no_categories` 是这个类型不归分类（如页面），把 `--category` 去掉。
    - 报 `invalid_seo`：`slug_taken` 是网址被网站上别的内容占了（`message` 里写了是哪个），换一个；`keyword_repeated` 是长尾词和核心词重复了；`no_seo_plugin` 是网站没装 SEO 插件，请客户装好启用 Rank Math SEO（或 Yoast SEO）。
@@ -256,7 +265,7 @@ description: >-
 - `name` 必填；`slug` 必填，小写英文、数字和连字符，全文件不重复；`description` 可选；`children` 是下一级。
 - 按 `slug` 对应网站上的分类：没有就新建，不会删除。已有的分类默认不改（结果里的 `leftAlone`），打开 `edit-live` 后才更新名称、描述和上级。
 - 建议客户不超过三级。
-- 这里**没有** `order`：这些分类按名称排，写了会报错。产品分类才有排序（那是 wordpress-bulk-product-upload 技能）。
+- 这里**没有** `order`：这些分类按名称排，写了会报错。产品分类才有排序（那是 puffergo-wordpress-products 技能）。
 - 客户要看分类，就按树状列出来（上级在前，下级缩进）；分类数据在 `pages types` 里这个类型的 `taxonomy.categories` 里，每项的 `parent` 是上级的 slug。
 - 台账车道的分类由 `silo plan` 的 `nodes`（`isCategory: true`）管，推送时自动建；不要另外写 `<类型>-categories.json`。
 
@@ -272,12 +281,11 @@ description: >-
 
 ## 内容规则
 
-- 公司信息、数据、客户名称、认证、价格只来自客户，没给就问，不编。也不加客户没说过的评价，如 leading、best、top、state-of-the-art、world-class。
+- 公司信息、数据、客户名称、认证、价格只来自客户，没给就问，不编。也不加客户没说过的评价，如 leading、best、top、state-of-the-art、world-class——**这是提醒不是禁令**：客户自己的资料里就是这么写的、或他明确要这么写，照他的。
 - 产品名和行业术语照客户的原意准确翻译（例如 截止阀 是 globe valve，止回阀 才是 check valve）；拿不准的，过目时把中英对照列给客户确认。
 - 文案用英文（客户另有要求除外），和客户对话用客户的语言。
 
 ## 安全
 
-- 网站凭据在客户电脑的 `~/.puffergo/credentials.json`，**只有脚本读它**。你不要打开它、不要 `cat`/读取/搜索它、也不要把内容贴进对话——这是硬规定。要知道这台电脑授权过哪些网站，用命令的输出（`no_site` 错误里的 `sites`、`silo status`），不要读凭据文件。可用 `--config`/`PUFFERGO_CONFIG` 覆盖路径。
-- 旧版凭据若在工作目录内的 `silo.config.json`，用 `puffergo silo migrate-config` 迁出（避免随 Obsidian Sync/Publish 外泄）。
+- 网站凭据在客户电脑的 `~/.puffergo/credentials.json`，**只有脚本读它**。你不要打开它、不要 `cat`/读取/搜索它、也不要把内容贴进对话——这是硬规定。要知道这台电脑授权过哪些网站，用命令的输出（`no_site` 错误里的 `sites`、`silo status`），不要读凭据文件。可用 `--config`/`PUFFERGO_CONFIG` 覆盖路径。凭据只在这一处，不会写进工作目录，所以不会被 Obsidian Sync/Publish 同步出去。
 - 你不直接请求 WordPress，一律通过 `puffergo`；发布只经 `pages publish` 或 `silo push`。

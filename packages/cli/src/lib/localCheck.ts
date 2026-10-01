@@ -89,6 +89,33 @@ export async function localCheckProduct(
     }
   }
 
-  warnings.push(...claimWarnings(product), ...detailWarnings(product, ident));
+  warnings.push(
+    ...claimWarnings(product),
+    ...altWarnings(product, ident, components),
+    ...detailWarnings(product, ident),
+  );
   return { errors, warnings };
+}
+
+/**
+ * The text a visitor never sees but search engines, screen readers and a broken image all use. A missing
+ * one costs reach rather than correctness, so it is a warning: the customer may have a reason to leave a
+ * decorative image blank, and pushing without it is still better than not pushing at all.
+ */
+function altWarnings(product: ProductFile, ident: string, components?: Components): ValidationError[] {
+  const out: ValidationError[] = [];
+  const message = (what: string) =>
+    `${what} has no alt text. Add one short English sentence saying what the picture shows, with the product name in it.`;
+
+  for (const { path, ref } of walkImageRefs(product)) {
+    if (!ref.alt?.trim())
+      out.push({ path: `${path}.alt`, code: 'missing_alt', message: message(`The image at ${path}`), fix: 'ai' });
+  }
+  // A component keeps its alt in the sibling field next to the image (`image` / `imageAlt`).
+  for (const { path, row } of walkConfigImages(product, ident, components)) {
+    if (typeof row.imageAlt === 'string' && row.imageAlt.trim()) continue;
+    const altPath = path.replace(/\.image$/i, '.imageAlt');
+    out.push({ path: altPath, code: 'missing_alt', message: message(`The image at ${altPath}`), fix: 'ai' });
+  }
+  return out;
 }

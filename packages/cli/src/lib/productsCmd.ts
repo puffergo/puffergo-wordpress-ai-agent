@@ -30,7 +30,7 @@ import {
   PluginOutdatedError,
 } from './siteSchema';
 import type { ProductFile, ValidationError, DetailBlock } from './productTypes';
-import { blockSignature, detailBlocks } from './detailBlocks';
+import { blockSignature, detailBlocks, mergedBlockSignature } from './detailBlocks';
 import { MissingImageError, uploadHtmlImages } from './htmlImages';
 import { placeProblems, type ImagesSpec } from './imageAdvice';
 import { readCategoriesFile, syncCategories, CATEGORIES_FILE, PRODUCT_CAT_REST_BASE } from './categories';
@@ -313,10 +313,14 @@ export function readbackMismatches(local: ProductFile, remote: Record<string, un
     const localBlocks = detailBlocks(local, '').map(w => w.block);
     const remoteBlocks = (remote.detail as { blocks?: DetailBlock[] } | undefined)?.blocks ?? [];
     // A legacy file changes only its component block; compare that one.
-    const remoteSig = blockSignature(
+    // Compared on the MERGED signature: the site folds neighbouring prose/image/video blocks into one,
+    // so `[prose, image]` legitimately reads back as `[prose]`. Judging that by the raw block count
+    // reported a mismatch for a write that landed in full, with `fix: "ai"` — nothing the agent could
+    // fix. A missing component or static section still shows up, because those never merge.
+    const remoteSig = mergedBlockSignature(
       local.detail.blocks ? remoteBlocks : remoteBlocks.filter(b => b.type === 'config'),
     );
-    const localSig = blockSignature(localBlocks);
+    const localSig = mergedBlockSignature(localBlocks);
     if (!(local.detail.blocks ? eq(localSig, remoteSig) : remoteSig.includes(localSig[0]))) {
       mismatches.push(`detail blocks mismatch: expected ${JSON.stringify(localSig)}, got ${JSON.stringify(remoteSig)}`);
     }
@@ -549,7 +553,7 @@ async function pushOne(
       readbackErrors = mismatches.map(m => ({
         path: identOf(product),
         code: 'readback_mismatch',
-        message: m,
+        message: readbackMessage(m, upsertRes.id),
         fix: 'ai' as const,
       }));
     }
@@ -558,7 +562,7 @@ async function pushOne(
       {
         path: identOf(product),
         code: 'readback_mismatch',
-        message: e instanceof Error ? e.message : String(e),
+        message: readbackMessage(e instanceof Error ? e.message : String(e), upsertRes.id),
         fix: 'ai',
       },
     ];
@@ -576,6 +580,18 @@ async function pushOne(
     errors: readbackErrors,
     warnings: [...prep.warnings, ...prep.statusWarnings],
   };
+}
+
+/**
+ * A read-back failure never rolls the write back: the draft is already on the site by the time we
+ * compare. Say so, and say how to get back in step — otherwise the next push of the same file hits
+ * `conflict` and looks like a fresh failure rather than the half-finished one it really is.
+ */
+function readbackMessage(mismatch: string, id: number | null | undefined): string {
+  const written = id
+    ? ` The draft #${id} was still written to the site — run \`products pull ${id}\` and re-apply your changes before pushing this file again.`
+    : '';
+  return `${mismatch}.${written}`;
 }
 
 /** Published (or scheduled) on the site. A product not on the site yet is not live. */

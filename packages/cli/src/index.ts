@@ -287,10 +287,14 @@ async function cmdPush(): Promise<void> {
   if (needsRelink.size) {
     const resolver = buildLinkResolver(ws, noteNames);
     let relinked = 0;
+    /** Links that still point at nothing after the second pass: said out loud, or the agent keeps
+     *  re-reading a "pushed fine" result and wondering why `silo health` never stops calling it an island. */
+    const stillBroken: string[] = [];
     for (const item of ws.contents) {
       if (!needsRelink.has(item.id)) continue;
-      const { md } = resolveWikilinks(bodyOf(item.id), resolver);
+      const { md, unresolved } = resolveWikilinks(bodyOf(item.id), resolver);
       if (!md) continue;
+      if (unresolved.length) stillBroken.push(`${item.title} → ${unresolved.join('、')}`);
       const res = await syncContent(client, ws, item, { force: true, content: md });
       if (res.ok) {
         ws = updateContent(ws, item.id, res.patch);
@@ -298,6 +302,10 @@ async function cmdPush(): Promise<void> {
       }
     }
     if (relinked) log(`  ↻ 二次解析内链后重推 ${relinked} 篇`);
+    for (const line of stillBroken)
+      log(
+        `  ⚠ 内链没解析成网址：${line} — 它指向的不是台账里的笔记，正文里现在是纯文本；要让它们链起来，用台账里笔记的文件名，或直接写站上已有页面的完整网址`,
+      );
   }
 
   await writeWorkspace(dir, ws);
@@ -357,6 +365,15 @@ async function cmdPull(): Promise<void> {
     `✓ 已同步：导入/更新 ${res.imported} 篇内容，${ws.nodes.length} 个节点；写入/刷新 ${files} 个 md 文件，正文 ${pulled.length} 篇`,
   );
   if (kept.length) log(`⚠ 这些笔记有没推送的改动，正文没覆盖：${kept.join('、')}`);
+  // "正文 0 篇" on its own reads like a failure. Say what it actually means: those posts are built
+  // from layout blocks (or another editor), Markdown cannot carry them, so their words stay in
+  // WordPress and are edited there — SEO and categories still sync from here.
+  const withPost = ws.contents.filter(c => c.wpPostId != null && (!onlyIds || onlyIds.includes(c.wpPostId)));
+  const withoutBody = withPost.filter(c => !res.bodies.has(c.id)).map(c => c.title);
+  if (withoutBody.length)
+    log(
+      `ℹ ${withoutBody.length} 篇的正文没有拉回本地：${withoutBody.join('、')} —— 它们在站点上是用版式区块/组件或别的编辑器做的，Markdown 表达不了，正文请到 WordPress 编辑器里改；这些篇的 SEO 和分类照常能推`,
+    );
   // Pulling some posts: only their own issues, not every category of the site.
   const mine = new Set(
     onlyIds ? ws.contents.filter(c => onlyIds.includes(c.wpPostId ?? -1)).flatMap(c => [c.id, c.siloNodeId]) : [],

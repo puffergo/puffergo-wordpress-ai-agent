@@ -11,9 +11,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SKILL_NAME_PLACEHOLDER = '__PUFFERGO_SKILL_NAME__';
-const SKILLS = ['wordpress-bulk-product-upload', 'wordpress-content-builder'];
+const SKILLS = ['puffergo-wordpress-products', 'puffergo-wordpress-content'];
 /** Skills whose `silo view` needs the preview page bundle next to puffergo.mjs. */
-const PREVIEW_SKILLS = ['wordpress-content-builder'];
+const PREVIEW_SKILLS = ['puffergo-wordpress-content'];
 
 const pkg = join(dirname(fileURLToPath(import.meta.url)), '..');
 const out = join(pkg, 'dist', 'puffergo.mjs');

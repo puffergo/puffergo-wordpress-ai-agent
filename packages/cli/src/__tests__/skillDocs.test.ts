@@ -15,8 +15,8 @@ const SKILLS_DIR = join(import.meta.dirname, '..', '..', '..', '..', 'skills');
 
 /** Skill → the command it runs to prove the authorisation took. */
 const VERIFY_COMMAND: Record<string, string> = {
-  'wordpress-content-builder': 'pages types',
-  'wordpress-bulk-product-upload': 'products schema',
+  'puffergo-wordpress-content': 'pages types',
+  'puffergo-wordpress-products': 'products schema',
 };
 
 const skills = Object.keys(VERIFY_COMMAND);

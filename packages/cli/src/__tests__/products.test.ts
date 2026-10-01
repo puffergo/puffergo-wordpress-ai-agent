@@ -91,8 +91,8 @@ describe('workdir files', () => {
       title: 't',
       gallery: [
         { file: 'images/missing.jpg' },
-        { file: 'images/fake.jpg' },
-        { file: 'images/small.png' },
+        { file: 'images/fake.jpg', alt: 'Fake' },
+        { file: 'images/small.png', alt: 'Small' },
         { file: 'images/ok.png' },
       ],
     };
@@ -101,7 +101,27 @@ describe('workdir files', () => {
       ['k-1.gallery[0]', 'not_found'],
       ['k-1.gallery[1]', 'format'],
     ]);
-    expect(r.warnings.filter(e => e.code !== 'no_detail_component').map(e => e.path)).toEqual(['k-1.gallery[2]']);
+    // gallery[2] is the small-image advice; the two images left without alt get a missing_alt warning.
+    expect(r.warnings.filter(e => e.code !== 'no_detail_component').map(e => [e.path, e.code])).toEqual([
+      ['k-1.gallery[2]', 'format'],
+      ['k-1.gallery[0].alt', 'missing_alt'],
+      ['k-1.gallery[3].alt', 'missing_alt'],
+    ]);
+  });
+
+  it('missing alt text is a warning, and an alt the customer wrote is left alone', async () => {
+    await mkdir(join(dir, 'images'));
+    await writeFile(join(dir, 'images', 'ok.png'), png(1200, 800));
+    const withAlt = await localCheckProduct(
+      { key: 'k-2', title: 't', gallery: [{ file: 'images/ok.png', alt: 'Front view' }] },
+      dir,
+    );
+    expect(withAlt.warnings.filter(w => w.code === 'missing_alt')).toEqual([]);
+
+    const bare = await localCheckProduct({ key: 'k-3', title: 't', gallery: [{ file: 'images/ok.png' }] }, dir);
+    const w = bare.warnings.filter(x => x.code === 'missing_alt');
+    expect(w.map(x => x.path)).toEqual(['k-3.gallery[0].alt']);
+    expect(w[0]!.fix).toBe('ai');
   });
 
   it('upload cache is kept per site', async () => {
@@ -498,30 +518,27 @@ describe('resolveProductId', () => {
 });
 
 import { claimWarnings } from '../lib/claims';
-// Guard switched off in src/lib/claims.ts (empty CLAIMS) — un-skip when the list is restored.
-describe.skip('claimWarnings', () => {
-  it('flags marketing words per field, once each, and leaves plain facts alone', () => {
+describe('claimWarnings', () => {
+  it('flags praise per field, once each, and leaves plain facts alone', () => {
     const w = claimWarnings({
       key: 'v-1',
       title: 'GV-50 Gate Valve',
-      excerpt: 'Durable, robust valve. Durable again.',
+      excerpt: 'A world-class valve. World-class again.',
       detail: {
         blocks: [
           {
             type: 'config',
             component: 'any-component',
             data: {
-              sections: [
-                { layout: 'text', heading: 'Body', body: 'WCB cast steel body rated PN16; ensures reliability.' },
-              ],
+              sections: [{ layout: 'text', heading: 'Body', body: 'WCB cast steel body; a guaranteed fit.' }],
             },
           },
         ],
       },
     });
     expect(w.map(x => x.path)).toEqual(['v-1.excerpt', 'v-1.detail.blocks[0].data.sections[0].body']);
-    expect(w[0].message).toContain('"durable", "robust"');
-    expect(w[1].message).toContain('"ensures", "reliability"');
+    expect(w[0].message).toContain('"world-class"');
+    expect(w[1].message).toContain('"guaranteed"');
     expect(claimWarnings({ title: 'Flanged ends bolt onto DN50 pipelines' })).toEqual([]);
     const blocks = claimWarnings({
       key: 'v-2',
@@ -529,22 +546,43 @@ describe.skip('claimWarnings', () => {
       detail: {
         blocks: [
           { type: 'static', html: '<section><p>Premium <b>cast</b> body</p></section>' },
-          { type: 'config', component: 'content-alternating', data: { intro: 'A world-class finish.' } },
+          { type: 'config', component: 'content-alternating', data: { intro: 'A leading finish.' } },
         ],
       },
     });
     expect(blocks.map(x => x.path)).toEqual(['v-2.detail.blocks[0].html', 'v-2.detail.blocks[1].data.intro']);
-    expect(claimWarnings({ title: 't', excerpt: 'Factory tested before shipping.' })[0].message).toContain('"tested"');
+  });
+
+  /** A reminder, never a block: `fix: "user"` is what keeps it out of `errors[]` and off the push. */
+  it('is a reminder for the customer, not a reason to refuse', () => {
+    const w = claimWarnings({ key: 'v-4', title: 'A world-class valve' });
+    expect(w[0]).toMatchObject({ code: 'unsupported_claim', fix: 'user' });
+    expect(w[0].message).toContain('reminder');
+  });
+
+  /**
+   * The point of the narrow list: ordinary product language must NOT be flagged. An earlier, longer
+   * list flagged all of these, misfired constantly, and got switched off entirely — silence is worse
+   * than a nudge, so this test is the guard against ever widening the list back.
+   */
+  it('leaves ordinary product language alone', () => {
+    expect(
+      claimWarnings({
+        key: 'v-5',
+        title: 'Durable IP66 wall light, 5-year warranty, factory tested, high efficiency',
+        excerpt: 'Corrosion-resistant, precision-machined, certified to CE.',
+      }),
+    ).toEqual([]);
   });
 
   it('leaves alone a word the customer gave in the specs or a trade field', () => {
-    const p = { key: 'v-3', title: 't', excerpt: '5-year warranty; IP66 certified.' };
-    expect(claimWarnings(p)[0].message).toContain('"certified"');
+    const p = { key: 'v-3', title: 't', excerpt: 'A premium finish.' };
+    expect(claimWarnings(p)[0].message).toContain('"premium"');
     expect(
       claimWarnings({
         ...p,
-        specs: [{ key: 'Warranty', value: '5 years' }],
-        trade: { note: 'IP66 certified by TUV' },
+        specs: [{ key: 'Finish', value: 'premium anodised' }],
+        trade: { note: 'premium grade' },
       }),
     ).toEqual([]);
   });
@@ -615,5 +653,53 @@ describe('detail warnings', () => {
       detail: { blocks: [{ type: 'config' as const, component: 'content-alternating', data: { sections: [] } }] },
     };
     expect(detailWarnings(withComponent, 'a')).toEqual([]);
+  });
+});
+
+/**
+ * The site folds neighbouring prose / image / video blocks into one prose block — the image lands
+ * inside it as `![alt](url)`, so nothing is lost, but the block count drops. Judging that by the raw
+ * block count made `push` fail on writes that landed in full, and told the agent to fix a file no
+ * edit could satisfy.
+ */
+describe('readback: blocks the site merged', () => {
+  const local = {
+    key: 'pg-combo',
+    title: 'PG Combo',
+    detail: {
+      blocks: [
+        { type: 'prose' as const, markdown: '## Combo\n\nA paragraph.' },
+        { type: 'image' as const, image: { file: 'images/a.png', alt: 'a' } },
+      ],
+    },
+  };
+  const remote = {
+    title: 'PG Combo',
+    detail: { blocks: [{ type: 'prose' as const, markdown: '## Combo\n\nA paragraph.\n\n![a](https://s/a.png)' }] },
+  };
+
+  it('a merged run is not a mismatch — the write landed in full', () => {
+    expect(readbackMismatches(local, remote)).toEqual([]);
+  });
+
+  it('still catches a block that really is missing', () => {
+    const withComponent = {
+      ...local,
+      detail: {
+        blocks: [
+          { type: 'config' as const, component: 'content-alternating', data: { sections: [] } },
+          ...local.detail.blocks,
+        ],
+      },
+    };
+    expect(readbackMismatches(withComponent, remote)).not.toEqual([]);
+  });
+
+  it('still catches a static section that did not land', () => {
+    const withStatic = {
+      ...local,
+      detail: { blocks: [...local.detail.blocks, { type: 'static' as const, html: '<section>x</section>' }] },
+    };
+    expect(readbackMismatches(withStatic, remote)).not.toEqual([]);
   });
 });

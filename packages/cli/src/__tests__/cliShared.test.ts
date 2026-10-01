@@ -298,8 +298,7 @@ describe('products preview', () => {
 });
 
 describe('pages: any config component is edited by its data', () => {
-  // Guard switched off in lib/claims.ts; the unsupported_claim assertion below no longer holds.
-  it.skip('get saves schema and data; replace uploads local images and sends only the data', async () => {
+  it('get saves schema and data; replace uploads local images and sends only the data', async () => {
     const dir = await workdir();
     const post = { id: 5, type: 'page', title: 'P', status: 'draft', baseModified: 'T', link: 'l', editUrl: 'e' };
     const schema = { slides: { type: 'array', itemSchema: { title: { type: 'text' }, image: { type: 'image' } } } };
@@ -340,7 +339,7 @@ describe('pages: any config component is edited by its data', () => {
         schema,
         data: {
           slides: [
-            { title: 'Durable lamp', image: 'images/a.png' },
+            { title: 'World-class lamp', image: 'images/a.png' },
             { title: 'Side', image: 'b.png' },
           ],
         },
@@ -363,7 +362,7 @@ describe('pages: any config component is edited by its data', () => {
         component: 'carousel',
         data: {
           slides: [
-            { title: 'Durable lamp', image: 'https://shared.test/a.png' },
+            { title: 'World-class lamp', image: 'https://shared.test/a.png' },
             { title: 'Side', image: 'https://shared.test/a.png' },
           ],
         },

@@ -84,8 +84,7 @@ describe('pages preview / create', () => {
     await writeFile(join(dir, 'pages/home/02-body.html'), '<section><p>b</p></section>');
   });
 
-  // Guard switched off in lib/claims.ts; the marketing-word warning assertion below no longer holds.
-  it.skip('flags marketing words in the visible text, not in class names', async () => {
+  it('flags praise in the visible text, not in class names', async () => {
     await writeFile(
       join(dir, 'pages/home/02-body.html'),
       '<section class="leading-7"><p>A state-of-the-art factory.</p></section>',
@@ -322,8 +321,7 @@ describe('body text in .md files', () => {
     });
   });
 
-  // Guard switched off in lib/claims.ts; the marketing-word warning assertion below no longer holds.
-  it.skip('edited body text is warned only about marketing words the edit added', async () => {
+  it('edited body text is warned only about praise the edit added', async () => {
     fake.current = {
       siteUrl: SITE,
       getBlocks: async () => ({
@@ -417,8 +415,7 @@ describe('pages get / replace', () => {
     expect(replaceBlock).toHaveBeenLastCalledWith(expect.objectContaining({ baseModified: 'T2' }));
   });
 
-  // Guard switched off in lib/claims.ts; the marketing-word warning assertion below no longer holds.
-  it.skip('an edited block is warned only about marketing words the edit added', async () => {
+  it('an edited block is warned only about praise the edit added', async () => {
     const dir = await workdir();
     fake.current = {
       siteUrl: SITE,
@@ -579,7 +576,7 @@ describe('pages SEO', () => {
     seo: { ...seo, ...over },
   });
 
-  it('create sends a draft with no SEO at all, passing the site\'s advice through', async () => {
+  it("create sends a draft with no SEO at all, passing the site's advice through", async () => {
     const dir = await workdir();
     await mkdir(join(dir, 'p'), { recursive: true });
     await writeFile(join(dir, 'p/01.md'), '## Body\n\nText.');

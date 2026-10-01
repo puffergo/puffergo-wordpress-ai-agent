@@ -14,17 +14,17 @@
 
 | | |
 |---|---|
-| `skills/wordpress-bulk-product-upload` | Agent Skill: turn product photos and notes into product pages (title, specs, price/MOQ/lead time, gallery, image-and-text detail sections), push as drafts, edit later, publish on request. |
-| `skills/wordpress-content-builder` | Agent Skill: build pages, posts and case studies as drafts (Markdown body text plus Tailwind layout sections), with SEO title, description and keywords; edit one section of an existing page after a preview; change SEO fields. When the site runs a content strategy, also the whole SEO silo — expand the positioning into keywords and a pillar/cluster architecture, write the articles in a local vault, push them as drafts with Rank Math titles, keywords and internal links, pull back from WordPress and run an SEO health check. |
+| `skills/puffergo-wordpress-products` | Agent Skill: turn product photos and notes into product pages (title, specs, price/MOQ/lead time, gallery, image-and-text detail sections), push as drafts, edit later, publish on request. |
+| `skills/puffergo-wordpress-content` | Agent Skill: build pages, posts and case studies as drafts (Markdown body text plus Tailwind layout sections), with SEO title, description and keywords; edit one section of an existing page after a preview; change SEO fields. When the site runs a content strategy, also the whole SEO silo — expand the positioning into keywords and a pillar/cluster architecture, write the articles in a local vault, push them as drafts with Rank Math titles, keywords and internal links, pull back from WordPress and run an SEO health check. |
 | `packages/cli` | The `puffergo` command every skill runs (bundled into each skill as `scripts/puffergo.mjs`, Node 18+, no dependencies). |
 | `packages/silo-core` | `@puffergo/silo-core`: the silo data model, WordPress REST client, sync and health check. |
 
 ## Requirements
 
-- Node.js 18 or newer (the agent installs it if missing).
+- Node.js 18 or newer. If it is missing or too old, the agent gives you the one-line install command — it does not install software on your machine.
 - A WordPress site you administer.
 - **Product upload** needs the PufferGo WordPress plugin **0.35.0 or newer**, which provides the product type and the validation endpoints.
-- **Page builder** needs the PufferGo WordPress plugin **0.35.0 or newer** (Tailwind blocks and the content endpoints).
+- **Pages, posts and case studies** need the PufferGo WordPress plugin **0.36.0 or newer** (Markdown body text, Tailwind blocks and the content endpoints).
 - **SEO silo** works on WordPress with Rank Math for the SEO fields; importing existing keywords needs the PufferGo plugin.
 
 An older plugin answers with a content format this CLI no longer speaks, and every command stops with
@@ -35,7 +35,7 @@ An older plugin answers with a content format this CLI no longer speaks, and eve
 Send this to your AI agent (Claude Code, Codex, WorkBuddy, 豆包 or 千问 desktop in work mode, and most agents that support skills):
 
 ```text
-Install this skill: https://github.com/puffergo/puffergo-wordpress-ai-agent/tree/main/skills/wordpress-bulk-product-upload
+Install this skill: https://github.com/puffergo/puffergo-wordpress-ai-agent/tree/main/skills/puffergo-wordpress-products
 ```
 
 The agent downloads and installs it, and installs Node.js on first use if it is missing. Then ask in plain language:

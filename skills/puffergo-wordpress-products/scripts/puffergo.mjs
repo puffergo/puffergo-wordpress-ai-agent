@@ -12361,7 +12361,7 @@ var AgentClient = class {
 };
 
 // src/skillName.ts
-var SKILL_NAME = "wordpress-content-builder";
+var SKILL_NAME = "puffergo-wordpress-products";
 
 // src/lib/siteSchema.ts
 var SUPPORTED_SCHEMA_VERSION = 6;
@@ -12636,6 +12636,14 @@ function blockSignature(blocks) {
     return b.type === "static" ? "static" : "native";
   });
 }
+function mergedBlockSignature(blocks) {
+  const out = [];
+  for (const kind of blockSignature(blocks)) {
+    if (kind === "native" && out[out.length - 1] === "native") continue;
+    out.push(kind);
+  }
+  return out;
+}
 function detailWarnings(product, ident) {
   if (product.id || detailBlocks(product, ident).some((b) => b.block.type === "config")) return [];
   return [
@@ -12731,75 +12739,25 @@ function walkConfigImages(product, ident, components) {
 
 // src/lib/claims.ts
 var CLAIMS = [
-  /* ——— disabled ———
-  'durable',
-  'durability',
-  'robust',
-  'reliable',
-  'reliability',
-  'rugged',
-  'heavy-duty',
-  'sturdy',
-  'high-precision',
-  'precise',
-  'precision',
-  'high-quality',
-  'top-quality',
-  'premium',
-  'industrial-grade',
-  'excellent',
-  'exceptional',
-  'superior',
-  'outstanding',
-  'unmatched',
-  'unrivaled',
-  'world-class',
-  'leading',
-  'state-of-the-art',
-  'cutting-edge',
-  'advanced',
-  'innovative',
-  'high-performance',
-  'high-resolution',
-  'efficient',
-  'efficiency',
-  'versatile',
-  'seamless',
-  'ensures?',
-  'guaranteed?',
-  'long service life',
-  'extended service life',
-  'long-lasting',
-  'corrosion resistance',
-  'corrosion-resistant',
-  'demanding',
-  'ideal for',
-  'perfect for',
-  'engineered for',
-  'engineered to',
-  'trusted',
-  'proven',
-  'spacious',
-  'ample',
-  'consistent',
-  'production-ready',
-  'production ready',
-  // Factory, service and commercial promises (the Skill's banned categories).
-  'tested',
-  'testing',
-  'factory-tested',
-  'quality control',
-  'quality-controlled',
-  'inspected',
-  'inspection',
-  'certified',
-  'certification',
-  'warranty',
-  'after-sales',
-  'technical support',
-  'discount',
-  'discounts',
-   ——— end disabled ——— */
+  "world-class",
+  "world class",
+  "leading",
+  "industry-leading",
+  "market-leading",
+  "state-of-the-art",
+  "cutting-edge",
+  "best-in-class",
+  "top-rated",
+  "top-quality",
+  "unmatched",
+  "unrivaled",
+  "unparalleled",
+  "second to none",
+  "superior",
+  "outstanding",
+  "exceptional",
+  "premium",
+  "guaranteed?"
 ];
 var CLAIM_RE = CLAIMS.length ? new RegExp(`\\b(${CLAIMS.join("|")})\\b`, "gi") : null;
 function given(p) {
@@ -12830,8 +12788,8 @@ function claimWarning(path, text, before = "") {
   return {
     path,
     code: "unsupported_claim",
-    message: `Uses ${found.map((w) => `"${w}"`).join(", ")}. Delete the claim unless the customer said it in their own words; keep only the facts they gave.`,
-    fix: "ai"
+    message: `Says ${found.map((w) => `"${w}"`).join(", ")}. This is a reminder, not a block: check it against what the customer said \u2014 if they said it in their own words, or they approve it, keep it; otherwise reword to the facts they gave.`,
+    fix: "user"
   };
 }
 function claimWarnings(p) {
@@ -12933,8 +12891,26 @@ async function localCheckProduct(product, baseDir, images, components) {
       }
     }
   }
-  warnings.push(...claimWarnings(product), ...detailWarnings(product, ident));
+  warnings.push(
+    ...claimWarnings(product),
+    ...altWarnings(product, ident, components),
+    ...detailWarnings(product, ident)
+  );
   return { errors, warnings };
+}
+function altWarnings(product, ident, components) {
+  const out = [];
+  const message = (what) => `${what} has no alt text. Add one short English sentence saying what the picture shows, with the product name in it.`;
+  for (const { path, ref } of walkImageRefs(product)) {
+    if (!ref.alt?.trim())
+      out.push({ path: `${path}.alt`, code: "missing_alt", message: message(`The image at ${path}`), fix: "ai" });
+  }
+  for (const { path, row } of walkConfigImages(product, ident, components)) {
+    if (typeof row.imageAlt === "string" && row.imageAlt.trim()) continue;
+    const altPath = path.replace(/\.image$/i, ".imageAlt");
+    out.push({ path: altPath, code: "missing_alt", message: message(`The image at ${altPath}`), fix: "ai" });
+  }
+  return out;
 }
 
 // src/lib/uploadImage.ts
@@ -13417,10 +13393,10 @@ function readbackMismatches(local, remote) {
   if (local.detail !== void 0) {
     const localBlocks = detailBlocks(local, "").map((w) => w.block);
     const remoteBlocks = remote.detail?.blocks ?? [];
-    const remoteSig = blockSignature(
+    const remoteSig = mergedBlockSignature(
       local.detail.blocks ? remoteBlocks : remoteBlocks.filter((b) => b.type === "config")
     );
-    const localSig = blockSignature(localBlocks);
+    const localSig = mergedBlockSignature(localBlocks);
     if (!(local.detail.blocks ? eq(localSig, remoteSig) : remoteSig.includes(localSig[0]))) {
       mismatches.push(`detail blocks mismatch: expected ${JSON.stringify(localSig)}, got ${JSON.stringify(remoteSig)}`);
     }
@@ -13597,7 +13573,7 @@ async function pushOne(c, loaded, ctx, cache2, allowPublish, tpl, editLive) {
       readbackErrors = mismatches.map((m) => ({
         path: identOf(product),
         code: "readback_mismatch",
-        message: m,
+        message: readbackMessage(m, upsertRes.id),
         fix: "ai"
       }));
     }
@@ -13606,7 +13582,7 @@ async function pushOne(c, loaded, ctx, cache2, allowPublish, tpl, editLive) {
       {
         path: identOf(product),
         code: "readback_mismatch",
-        message: e instanceof Error ? e.message : String(e),
+        message: readbackMessage(e instanceof Error ? e.message : String(e), upsertRes.id),
         fix: "ai"
       }
     ];
@@ -13623,6 +13599,10 @@ async function pushOne(c, loaded, ctx, cache2, allowPublish, tpl, editLive) {
     errors: readbackErrors,
     warnings: [...prep.warnings, ...prep.statusWarnings]
   };
+}
+function readbackMessage(mismatch, id) {
+  const written = id ? ` The draft #${id} was still written to the site \u2014 run \`products pull ${id}\` and re-apply your changes before pushing this file again.` : "";
+  return `${mismatch}.${written}`;
 }
 async function isLive2(c, product) {
   if (product.id) {
@@ -15012,10 +14992,12 @@ async function cmdPush2() {
   if (needsRelink.size) {
     const resolver = buildLinkResolver(ws, noteNames);
     let relinked = 0;
+    const stillBroken = [];
     for (const item of ws.contents) {
       if (!needsRelink.has(item.id)) continue;
-      const { md } = resolveWikilinks(bodyOf(item.id), resolver);
+      const { md, unresolved } = resolveWikilinks(bodyOf(item.id), resolver);
       if (!md) continue;
+      if (unresolved.length) stillBroken.push(`${item.title} \u2192 ${unresolved.join("\u3001")}`);
       const res = await syncContent(client2, ws, item, { force: true, content: md });
       if (res.ok) {
         ws = updateContent(ws, item.id, res.patch);
@@ -15023,6 +15005,10 @@ async function cmdPush2() {
       }
     }
     if (relinked) log(`  \u21BB \u4E8C\u6B21\u89E3\u6790\u5185\u94FE\u540E\u91CD\u63A8 ${relinked} \u7BC7`);
+    for (const line of stillBroken)
+      log(
+        `  \u26A0 \u5185\u94FE\u6CA1\u89E3\u6790\u6210\u7F51\u5740\uFF1A${line} \u2014 \u5B83\u6307\u5411\u7684\u4E0D\u662F\u53F0\u8D26\u91CC\u7684\u7B14\u8BB0\uFF0C\u6B63\u6587\u91CC\u73B0\u5728\u662F\u7EAF\u6587\u672C\uFF1B\u8981\u8BA9\u5B83\u4EEC\u94FE\u8D77\u6765\uFF0C\u7528\u53F0\u8D26\u91CC\u7B14\u8BB0\u7684\u6587\u4EF6\u540D\uFF0C\u6216\u76F4\u63A5\u5199\u7AD9\u4E0A\u5DF2\u6709\u9875\u9762\u7684\u5B8C\u6574\u7F51\u5740`
+      );
   }
   await writeWorkspace(dir, ws);
   const before = await scanVault(dir);
@@ -15080,6 +15066,12 @@ ${md}
     `\u2713 \u5DF2\u540C\u6B65\uFF1A\u5BFC\u5165/\u66F4\u65B0 ${res.imported} \u7BC7\u5185\u5BB9\uFF0C${ws.nodes.length} \u4E2A\u8282\u70B9\uFF1B\u5199\u5165/\u5237\u65B0 ${files} \u4E2A md \u6587\u4EF6\uFF0C\u6B63\u6587 ${pulled.length} \u7BC7`
   );
   if (kept.length) log(`\u26A0 \u8FD9\u4E9B\u7B14\u8BB0\u6709\u6CA1\u63A8\u9001\u7684\u6539\u52A8\uFF0C\u6B63\u6587\u6CA1\u8986\u76D6\uFF1A${kept.join("\u3001")}`);
+  const withPost = ws.contents.filter((c) => c.wpPostId != null && (!onlyIds || onlyIds.includes(c.wpPostId)));
+  const withoutBody = withPost.filter((c) => !res.bodies.has(c.id)).map((c) => c.title);
+  if (withoutBody.length)
+    log(
+      `\u2139 ${withoutBody.length} \u7BC7\u7684\u6B63\u6587\u6CA1\u6709\u62C9\u56DE\u672C\u5730\uFF1A${withoutBody.join("\u3001")} \u2014\u2014 \u5B83\u4EEC\u5728\u7AD9\u70B9\u4E0A\u662F\u7528\u7248\u5F0F\u533A\u5757/\u7EC4\u4EF6\u6216\u522B\u7684\u7F16\u8F91\u5668\u505A\u7684\uFF0CMarkdown \u8868\u8FBE\u4E0D\u4E86\uFF0C\u6B63\u6587\u8BF7\u5230 WordPress \u7F16\u8F91\u5668\u91CC\u6539\uFF1B\u8FD9\u4E9B\u7BC7\u7684 SEO \u548C\u5206\u7C7B\u7167\u5E38\u80FD\u63A8`
+    );
   const mine = new Set(
     onlyIds ? ws.contents.filter((c) => onlyIds.includes(c.wpPostId ?? -1)).flatMap((c) => [c.id, c.siloNodeId]) : []
   );
