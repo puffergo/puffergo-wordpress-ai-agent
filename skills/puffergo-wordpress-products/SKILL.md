@@ -56,6 +56,7 @@ description: >-
 **铁律：推送前一定先把整理好的内容给客户过目，客户确认后才推送。**要问客户的事攒在一起，在过目那一条消息里一次问完。
 
 1. **准备**：先跑一次 `node -v`，18 以上就能用（脚本自己不检查版本，是你跑这一句看的）。太低或没装，把一句安装命令发给客户请他自己装（macOS `brew install node` 或 nodejs.org 的 .pkg，Windows `winget install OpenJS.NodeJS.LTS`）——**你不要替他装，也不要问他的电脑密码**；装完请他回你一声，你再跑一次 `node -v` 确认。然后运行 `products schema`；提示未登录就问网站地址，按下面「授权」走一遍，再跑一次 `schema`。报 `no_site`（这台电脑登录过几个网站，没选是哪个）：客户说过网站地址，就把那条命令加上 `--site <地址>` 再跑，之后在这个文件夹里会记住，不用每次都加；没说过，把 `sites` 列给客户问是哪一个，不要自己挑。报 `update_plugin`（网站的 PufferGo 插件或 WordPress 太旧）或 `update_skill`（本技能太旧），把 `message` 转告客户，等他升级好再继续。
+- **网站还没准备好时用 `puffergo site setup`**：它不改任何东西，只查一遍这个站能不能用（授权还有效吗、WordPress 是不是 6.9 以上、PufferGo 插件启用没有、有没有装 SEO 插件），把 `problems` 和 `needsInstall` 列给你。缺的照 `next` 转告客户，问同不同意装；他说「装」，才运行 `puffergo site setup install --customer-said "客户原话"`。WordPress 本身太旧、插件要升级，脚本装不了，报 `needs_manual_install` 时把 `message` 里那几句后台操作转告客户。装完再跑一次 `site setup`，`ready: true` 就可以开始了。
 2. **收资料**：图片要有文件路径，拿不到就请客户把图片拖进来或告诉你文件夹。复制到 `images/`，改成规范文件名，马上运行 `products images images/`：超过 200KB 的、尺寸或比例放不进打算放的位置的，当场一条消息告诉客户，附上那个位置的 `cropUrl`（PufferGo 图片工具，能一次裁剪、改尺寸、压缩）。客户处理完发回新图就换上；不在乎的就照用原图，这只是提醒，不影响推送。网站不会自动压缩或裁剪图片，别这么说。客户发来别的网站上的产品链接（如阿里巴巴），读取页面上的资料和图片当作客户资料；读不到就请客户截图。
 3. **整理并校验**：写 `products/<key>.json`，运行 `products check`，`fix: "ai"` 的自己改，`fix: "user"` 的留到下一步问。
 4. **给客户过目**：一条消息里列出标题、简介、SEO（标题、描述、核心和长尾关键词）、分类、交易信息、参数表、详情每一块（是什么区块、排法、标题、用哪张图或哪个视频），以及要客户回答的：
