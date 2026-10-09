@@ -26,6 +26,14 @@ function isCallbackRequest(params: URLSearchParams): boolean {
   return params.has('password') || params.get('success') === 'false';
 }
 
+/** Bind failures that mean "not this port" rather than "the server is broken". A live listener answers
+ *  `EADDRINUSE`; Windows reserves whole ranges for Hyper-V / WinNAT and answers `EACCES` to a bind while
+ *  still looking free to anyone knocking on it. Both mean: let the OS choose instead. */
+export function portIsUnusable(err: unknown): boolean {
+  const code = (err as NodeJS.ErrnoException)?.code ?? '';
+  return code === 'EADDRINUSE' || code === 'EACCES' || code === 'EPERM' || code === 'EADDRNOTAVAIL';
+}
+
 export interface AuthorizeServerOptions {
   /** App name shown on WordPress's authorize screen. Default 'PufferGo'. */
   appName?: string;
@@ -114,10 +122,11 @@ export function runAuthorizeServer(
       active = server;
 
       server.on('error', err => {
-        // Somebody else holds the port we were asked to keep — take a free one instead of failing the whole
-        // flow. The authorize URL already handed out points at the old number, so callers compare the port
-        // they get in `onListening` against the one they asked for.
-        if ((err as NodeJS.ErrnoException).code === 'EADDRINUSE' && bindPort !== 0) {
+        // The port we were asked to keep is not ours to take — somebody else holds it, or Windows has it
+        // reserved. Take a free one instead of failing the whole flow; the authorize URL already handed out
+        // points at the old number, so callers compare the port they get in `onListening` with the one they
+        // asked for.
+        if (portIsUnusable(err) && bindPort !== 0) {
           start(0);
           return;
         }

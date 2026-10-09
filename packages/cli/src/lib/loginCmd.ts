@@ -116,10 +116,24 @@ function portIsHeld(port: number, timeoutMs = 500): Promise<boolean> {
   });
 }
 
-/** The first PufferGo callback port nothing is using, or 0 to let the OS pick when they all are. */
+/** The first PufferGo callback port we can actually hold, or 0 to let the OS pick when none of them work
+ *  out — which costs the takeover below, never the login itself.
+ *
+ *  This binds rather than knocks: Windows reserves whole ranges for Hyper-V / WinNAT, and a port inside
+ *  one answers `EACCES` to our listener while looking perfectly free to a connect probe. Trusting the
+ *  probe would hand the customer a login that dies the moment the waiter tries to bind it. */
 async function pickCallbackPort(): Promise<number> {
-  for (const port of CALLBACK_PORTS) if (!(await portIsHeld(port, 150))) return port;
+  for (const port of CALLBACK_PORTS) if (await portIsUsable(port)) return port;
   return 0;
+}
+
+function portIsUsable(port: number): Promise<boolean> {
+  return new Promise(usable => {
+    const probe = net.createServer();
+    probe.once('error', () => usable(false));
+    probe.once('listening', () => probe.close(() => usable(true)));
+    probe.listen(port, '127.0.0.1');
+  });
 }
 
 /** Save the grant (or its absence) where `login status`, the next command and the next session read it.

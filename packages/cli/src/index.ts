@@ -415,8 +415,16 @@ async function cmdView(): Promise<void> {
   );
 }
 
+/** Which shipped build this is. The script travels inside the Skill folder, so "I reinstalled it" proves
+ *  nothing on its own — this is what a customer's AI quotes back when a fix did or did not arrive. Bump it
+ *  whenever the bundle the build script writes into the Skills changes behavior. */
+const BUILD = '2026-10-09.1';
+
 async function main(): Promise<void> {
   switch (cmd) {
+    case 'version':
+    case '--version':
+      return emit({ ok: true, build: BUILD, node: process.version });
     case 'init':
       return cmdInit();
     case 'plan':
@@ -435,6 +443,7 @@ async function main(): Promise<void> {
       log('puffergo silo <init|plan|push|pull|health|status|view> [--dir <vault>] [--config <path>]');
       log('puffergo login <siteUrl>');
       log('puffergo login status [--wait <seconds>]');
+      log('puffergo version');
       log(SITE_SETUP_USAGE);
       log(PRODUCTS_USAGE);
       log(PAGES_USAGE);
