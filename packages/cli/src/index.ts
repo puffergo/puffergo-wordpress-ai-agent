@@ -537,11 +537,11 @@ const run =
           ? async () =>
               emit(
                 positional[0] === 'status'
-                  ? await cmdLoginStatus(flags.get('wait'))
+                  ? await cmdLoginStatus(dir, flags.get('wait'))
                   : await cmdLogin(dir, positional[0] ?? argv[1]),
               )
           : group === '__login-wait'
-            ? () => cmdLoginWait(argv[1]!, argv[2]!, argv[3]!)
+            ? () => cmdLoginWait(argv[1]!, argv[2]!, argv[3]!, argv[4])
             : main;
 
 run().catch(e => {
