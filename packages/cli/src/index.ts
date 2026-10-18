@@ -51,6 +51,7 @@ import {
   cmdCategories,
   cmdImages,
 } from './lib/productsCmd';
+import { cmdProfileGet, cmdProfileCheck, cmdProfileSet, PROFILE_USAGE } from './lib/profileCmd';
 import { cmdEditLive, siteErrorOutput } from './lib/siteCmd';
 import { cmdSiteSetup, SITE_SETUP_USAGE } from './lib/siteSetupCmd';
 import { cmdLogin, cmdLoginStatus, cmdLoginWait } from './lib/loginCmd';
@@ -71,9 +72,13 @@ import {
 // `puffergo <login|products …|silo …>`; the legacy `silo <cmd>` bin calls this with no group word,
 // so anything that isn't a known group falls through to the silo commands unchanged.
 const rawArgv = process.argv.slice(2);
-const group = ['products', 'pages', 'login', 'site', '__login-wait'].includes(rawArgv[0] ?? '') ? rawArgv[0] : 'silo';
+const group = ['products', 'pages', 'profile', 'login', 'site', '__login-wait'].includes(rawArgv[0] ?? '')
+  ? rawArgv[0]
+  : 'silo';
 const argv =
-  rawArgv[0] === 'silo' || group === 'products' || group === 'pages' || group === 'site' ? rawArgv.slice(1) : rawArgv;
+  rawArgv[0] === 'silo' || group === 'products' || group === 'pages' || group === 'profile' || group === 'site'
+    ? rawArgv.slice(1)
+    : rawArgv;
 const cmd = argv[0];
 const flags = new Map<string, string>();
 const positional: string[] = [];
@@ -445,6 +450,7 @@ async function main(): Promise<void> {
       log('puffergo login status [--wait <seconds>]');
       log('puffergo version');
       log(SITE_SETUP_USAGE);
+      log(PROFILE_USAGE);
       log(PRODUCTS_USAGE);
       log(PAGES_USAGE);
       if (cmd && cmd !== 'help' && cmd !== '--help') process.exitCode = 1;
@@ -523,6 +529,20 @@ async function pages(): Promise<void> {
   }
 }
 
+async function profile(): Promise<void> {
+  const ctx = { dir, flags, positional };
+  switch (cmd) {
+    case 'get':
+      return emit(await cmdProfileGet(ctx));
+    case 'check':
+      return emit(await cmdProfileCheck(ctx));
+    case 'set':
+      return emit(await cmdProfileSet(ctx));
+    default:
+      return emit({ ok: false, code: 'usage', message: PROFILE_USAGE });
+  }
+}
+
 const SITE_USAGE = SITE_SETUP_USAGE;
 
 async function site(): Promise<void> {
@@ -540,18 +560,20 @@ const run =
     ? products
     : group === 'pages'
       ? pages
-      : group === 'site'
-        ? site
-        : group === 'login'
-          ? async () =>
-              emit(
-                positional[0] === 'status'
-                  ? await cmdLoginStatus(dir, flags.get('wait'))
-                  : await cmdLogin(dir, positional[0] ?? argv[1]),
-              )
-          : group === '__login-wait'
-            ? () => cmdLoginWait(argv[1]!, argv[2]!, argv[3]!, argv[4])
-            : main;
+      : group === 'profile'
+        ? profile
+        : group === 'site'
+          ? site
+          : group === 'login'
+            ? async () =>
+                emit(
+                  positional[0] === 'status'
+                    ? await cmdLoginStatus(dir, flags.get('wait'))
+                    : await cmdLogin(dir, positional[0] ?? argv[1]),
+                )
+            : group === '__login-wait'
+              ? () => cmdLoginWait(argv[1]!, argv[2]!, argv[3]!, argv[4])
+              : main;
 
 run().catch(e => {
   const shared = siteErrorOutput(e);

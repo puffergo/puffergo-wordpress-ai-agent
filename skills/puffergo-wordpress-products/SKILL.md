@@ -40,6 +40,9 @@ description: >-
 | `puffergo products sample list / set <类型名> <key、id或链接> / show <类型名>` | 样板：列出、保存、读取 |
 | `puffergo products categories check / push` | 校验 / 写入 `categories.json` 里的产品分类 |
 | `puffergo products edit-live on --customer-said "客户原话" / off` | 一次改很多已发布的产品，或改已有分类时用：打开后所有已发布的产品和页面都能改，改完马上关 |
+| `puffergo profile get` | 读出站点画像（品牌、客户是谁、信任数据、语气、关键词），带 `completeness` 和 `limits` |
+| `puffergo profile check <file.json>` | 干跑：这份画像文件存进去会变成什么样。不写入 |
+| `puffergo profile set <file.json> [--replace]` | 写入画像。默认合并，文件没提的块和字段保持原样；`--replace` 才整份覆盖 |
 
 没有删除命令，客户要删产品请他在 WordPress 后台操作。
 
@@ -51,6 +54,22 @@ description: >-
 2. 马上运行 `puffergo login status`，它会一直等到客户点完为止。
 3. 回来是 `approved`：先回一句「我看到你批准了，正在核对权限」，再运行 `products schema`，然后告诉客户网站是哪个、可以开始了。回来是 `waiting`（等太久了）：告诉客户你还在等那个页面，再运行一次 `login status`。回来是 `denied`：把 `message` 转告客户，重新 `login`。
 4. 回来是 `waiting` 且带 `tookOver`：本机接听的进程之前被打断过，客户那一次点击（如果他点了）丢了。只要跟他说「回到还开着的那个页面，再点一次批准」——**就是再点一下，不要让他复制网址、不要让他改文件、也不用重新 `login`**；然后你再跑一次 `login status`。
+
+## 站点画像
+
+客户网站「是干什么的」只存在一份地方——站点画像：品牌、客户是谁、信任数据（人数、产能、良率、出口国家）、语气、关键词。**写产品文案之前先读一次**，口径才跟这个站对得上；还空着哪些它也会告诉你。
+
+| 命令 | 作用 |
+|---|---|
+| `puffergo profile get` | 读出整份画像，带 `completeness`（填了多少、还缺哪些）和 `limits`（产品最多 3 个、关键词最多 30 个之类的硬限制） |
+| `puffergo profile check <file.json>` | 干跑：这份文件存进去会变成什么样，哪些会被截断或改掉。不写入 |
+| `puffergo profile set <file.json> [--replace]` | 写入。**默认合并**：文件里没提的块和字段保持原样；`--replace` 才整份覆盖 |
+
+- `get` 的 `profile` 存成文件、改完再 `set`，就是改画像的全部流程。
+- `set` 会把改之前的画像存到 `<file>.previous.json`（`--backup <文件>` 改位置）。改错了，把那个文件用 `--replace` 发回去就还原了。
+- `check` 报 `profile_warnings` 就先改文件再 `set`：它列出的正是会被截断或改掉的东西——产品超过 3 个、关键词超过 30 个、语气不是 Professional / Innovative / Caring、邮箱不是邮箱、渠道类型不认识。
+- 没有删除命令，客户要清空画像请他在 WordPress 后台的站点画像页操作。
+- 报 `update_plugin`：这个站的 PufferGo 插件太旧，还没有这几个能力，把 `message` 转告客户，等他升级好再继续。
 
 ## 工作流
 

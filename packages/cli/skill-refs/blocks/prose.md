@@ -2,7 +2,7 @@
 
 文章、案例的正文，还有产品详情里的大段文字，都写成 Markdown，存成 `.md` 文件。它到网站上是 WordPress 原生区块（段落、标题、列表…），客户在编辑器里就能像平常一样改字、回车分段、加粗、换图片，不用找你。
 
-**页面（`layout` 是 `fullWidth`）不这样写**，它整页都是版式，用静态区块（`static.md`）。
+**页面（`layout` 是 `fullWidth`）不这样写**——它整页都是版式，用静态区块（`static.md`）。**在 fullWidth 页面里用 `.md` 是错的**：`.md` 会被转成 WordPress 原生 prose 块，不进 PufferGo 的 `tailwind-container`，于是 `max-w-canvas mx-auto px-6` 不生效，内容左右无 padding、直接贴到浏览器边。要排版的区段一律写 `.html`。
 
 ## 能写什么
 

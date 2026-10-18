@@ -7409,7 +7409,7 @@ function runAuthorizeServer(siteUrl, onListening, opts = {}) {
     onTimeout,
     signal
   } = opts;
-  return new Promise((resolve10, reject) => {
+  return new Promise((resolve11, reject) => {
     let settled = false;
     let timer;
     let active;
@@ -7418,7 +7418,7 @@ function runAuthorizeServer(siteUrl, onListening, opts = {}) {
       settled = true;
       if (timer) clearTimeout(timer);
       active?.close();
-      resolve10(value);
+      resolve11(value);
     };
     timer = setTimeout(() => {
       onTimeout?.();
@@ -7471,7 +7471,7 @@ div{text-align:center}</style></head><body><div>${ok ? "\u2705 \u5DF2\u6388\u674
 });
 
 // src/index.ts
-import { readFile as readFile17 } from "node:fs/promises";
+import { readFile as readFile18 } from "node:fs/promises";
 
 // ../silo-core/lib/model/types.ts
 var SILO_WORKSPACE_VERSION = 3;
@@ -7480,9 +7480,9 @@ var LOCAL_SITE_KEY = "__local__";
 // ../silo-core/lib/model/factory.ts
 var newId = (prefix) => `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 var emptySeo = () => ({ title: "", description: "", coreKeywords: [], longTailKeywords: [] });
-var emptyWorkspace = (profile) => ({
+var emptyWorkspace = (profile2) => ({
   version: SILO_WORKSPACE_VERSION,
-  profile,
+  profile: profile2,
   nodes: [],
   contents: [],
   edges: [],
@@ -11612,7 +11612,7 @@ async function importFromWp(client2, ws, postTypes, opts = {}) {
 }
 
 // src/index.ts
-import { dirname as dirname11 } from "node:path";
+import { dirname as dirname12 } from "node:path";
 
 // src/adapters/fileStore.ts
 import { readFile, writeFile, mkdir, readdir } from "node:fs/promises";
@@ -12340,6 +12340,17 @@ var AgentClient = class {
   }
   mediaLookup(sha256) {
     return this.read("find-media", { sha256 });
+  }
+  /** The site profile: brand, audience, trust data, keywords — what every generated page is written from. */
+  getSiteProfile() {
+    return this.read("get-site-profile");
+  }
+  validateSiteProfile(profile2) {
+    return this.write("validate-site-profile", { profile: profile2 });
+  }
+  /** `mode` omitted means merge: only what the profile names is written. */
+  updateSiteProfile(profile2, mode) {
+    return this.write("update-site-profile", { profile: profile2, ...mode ? { mode } : {} });
   }
   /** Product category terms via WordPress's own `/wp/v2/puffergo_product_cat` route; `lang` filters under Polylang. */
   /** @param restBase The taxonomy's own route: `puffergo_product_cat`, `categories`, `docs_category`… */
@@ -13927,6 +13938,130 @@ async function cmdImages(ctx) {
   }
 }
 
+// src/lib/profileCmd.ts
+import { readFile as readFile14, writeFile as writeFile9 } from "node:fs/promises";
+import { dirname as dirname8, resolve as resolve7 } from "node:path";
+var PROFILE_USAGE = "puffergo profile <get|check <file.json>|set <file.json> [--replace] [--backup <file>]> [--dir <workdir>] [--site <url>]";
+function profileError(e) {
+  if (e instanceof AgentHttpError) {
+    const code = e.body?.code;
+    if (code && ABILITIES_MISSING.has(code)) {
+      return {
+        ok: false,
+        code: "update_plugin",
+        fix: "user",
+        message: "This site's PufferGo plugin is too old to read or write the site profile. In wp-admin, update the PufferGo plugin to the latest version, then try again."
+      };
+    }
+  }
+  return null;
+}
+async function readProfileFile(file, verb) {
+  if (!file) throw new CodedError("usage", `\u7528\u6CD5\uFF1Apuffergo profile ${verb} <file.json>`);
+  let raw;
+  try {
+    raw = await readFile14(resolve7(file), "utf8");
+  } catch {
+    throw new CodedError("file_not_found", `\u672A\u627E\u5230 profile \u6587\u4EF6\uFF1A${file}`, "ai");
+  }
+  let json;
+  try {
+    json = JSON.parse(raw);
+  } catch (e) {
+    throw new CodedError("invalid_json", `profile \u6587\u4EF6\u4E0D\u662F\u5408\u6CD5 JSON\uFF1A${e instanceof Error ? e.message : String(e)}`);
+  }
+  if (!json || typeof json !== "object" || Array.isArray(json)) {
+    throw new CodedError("invalid_json", "profile \u6587\u4EF6\u9876\u5C42\u5FC5\u987B\u662F\u4E00\u4E2A\u5BF9\u8C61\uFF08\u7AD9\u70B9\u753B\u50CF JSON\uFF09\u3002");
+  }
+  const inner = json.profile;
+  if (inner && typeof inner === "object" && !Array.isArray(inner)) {
+    return inner;
+  }
+  return json;
+}
+async function cmdProfileGet(ctx) {
+  let c;
+  try {
+    c = await client(ctx);
+  } catch (e) {
+    return errorOutput(e);
+  }
+  try {
+    const res = await c.getSiteProfile();
+    return { ok: true, ...res };
+  } catch (e) {
+    return profileError(e) ?? errorOutput(e);
+  }
+}
+async function cmdProfileCheck(ctx) {
+  let profile2;
+  try {
+    profile2 = await readProfileFile(ctx.positional[0], "check");
+  } catch (e) {
+    return errorOutput(e);
+  }
+  let c;
+  try {
+    c = await client(ctx);
+  } catch (e) {
+    return errorOutput(e);
+  }
+  try {
+    const res = await c.validateSiteProfile(profile2);
+    const warnings = res.warnings ?? [];
+    if (warnings.length) {
+      return {
+        ok: false,
+        code: "profile_warnings",
+        fix: "ai",
+        message: `The profile would be saved, but ${warnings.length} thing(s) would be cut or changed \u2014 read them, fix the file, and run \`puffergo profile check\` again before \`set\`.`,
+        warnings,
+        profile: res.profile,
+        completeness: res.completeness
+      };
+    }
+    return { ok: true, valid: true, profile: res.profile, completeness: res.completeness, warnings: [] };
+  } catch (e) {
+    return profileError(e) ?? errorOutput(e);
+  }
+}
+async function cmdProfileSet(ctx) {
+  let profile2;
+  try {
+    profile2 = await readProfileFile(ctx.positional[0], "set");
+  } catch (e) {
+    return errorOutput(e);
+  }
+  const replace = ctx.flags.get("replace") === "true" || ctx.flags.get("replace") === "";
+  let c;
+  try {
+    c = await client(ctx);
+  } catch (e) {
+    return errorOutput(e);
+  }
+  try {
+    const res = await c.updateSiteProfile(profile2, replace ? "replace" : "merge");
+    const backup = ctx.flags.get("backup") ?? resolve7(dirname8(ctx.positional[0]), `${stripJson(ctx.positional[0])}.previous.json`);
+    if (res.previous) {
+      await writeFile9(backup, JSON.stringify({ profile: res.previous }, null, 2) + "\n", "utf8");
+    }
+    return {
+      ok: true,
+      mode: res.mode ?? "merge",
+      site: c.siteUrl,
+      completeness: res.completeness,
+      warnings: res.warnings ?? [],
+      previous: backup,
+      note: "Merged into the existing profile \u2014 blocks the file does not mention were left as they were. To undo, run `puffergo profile set <file> --replace` with the previous-profile file below."
+    };
+  } catch (e) {
+    return profileError(e) ?? errorOutput(e);
+  }
+}
+function stripJson(file) {
+  return file.replace(/\.json$/i, "");
+}
+
 // src/lib/siteSetupCmd.ts
 var PUFFERGO_SLUG = "puffergo";
 var RANKMATH_SLUG = "seo-by-rank-math";
@@ -14064,9 +14199,9 @@ async function cmdSiteSetup(ctx) {
 import { spawn as spawn2 } from "node:child_process";
 import * as net from "node:net";
 import { existsSync as existsSync13 } from "node:fs";
-import { readFile as readFile14, rm, writeFile as writeFile9, rename as rename2, mkdir as mkdir9, mkdtemp } from "node:fs/promises";
+import { readFile as readFile15, rm, writeFile as writeFile10, rename as rename2, mkdir as mkdir9, mkdtemp } from "node:fs/promises";
 import { tmpdir as tmpdir2 } from "node:os";
-import { dirname as dirname8, join as join11 } from "node:path";
+import { dirname as dirname9, join as join11 } from "node:path";
 var WAIT_MS = 10 * 60 * 1e3;
 var STATUS_WAIT_MS = 100 * 1e3;
 var WINDOW_GRACE_MS = 30 * 1e3;
@@ -14074,12 +14209,12 @@ var CALLBACK_PORTS = [49512, 49513, 49514, 49515, 49516, 49517];
 var LOGIN_STATE = join11(PUFFERGO_DIR, "login-state.json");
 var loginStatePath = () => process.env.PUFFERGO_LOGIN_STATE || LOGIN_STATE;
 async function writeLoginState(state, path = loginStatePath()) {
-  await mkdir9(dirname8(path), { recursive: true });
-  await writeFile9(path, JSON.stringify(state, null, 2), "utf8");
+  await mkdir9(dirname9(path), { recursive: true });
+  await writeFile10(path, JSON.stringify(state, null, 2), "utf8");
 }
 async function readLoginState(path = loginStatePath()) {
   try {
-    const s = JSON.parse(await readFile14(path, "utf8"));
+    const s = JSON.parse(await readFile15(path, "utf8"));
     return s && typeof s.siteUrl === "string" && typeof s.status === "string" ? s : null;
   } catch {
     return null;
@@ -14206,13 +14341,13 @@ async function cmdLogin(dir2, siteArg) {
 }
 async function writeHandshake(path, value) {
   const tmp = `${path}.tmp`;
-  await writeFile9(tmp, value, "utf8");
+  await writeFile10(tmp, value, "utf8");
   await rename2(tmp, path);
 }
 async function readHandshake(path) {
   if (!existsSync13(path)) return "";
   try {
-    return (await readFile14(path, "utf8")).trim();
+    return (await readFile15(path, "utf8")).trim();
   } catch {
     return "";
   }
@@ -14337,17 +14472,17 @@ async function rebindLoginState(siteUrl, bound) {
 
 // src/lib/pagesCmd.ts
 import { existsSync as existsSync16 } from "node:fs";
-import { mkdir as mkdir10, readFile as readFile16, writeFile as writeFile10 } from "node:fs/promises";
-import { dirname as dirname10, join as join13, relative as relative3, resolve as resolve9 } from "node:path";
+import { mkdir as mkdir10, readFile as readFile17, writeFile as writeFile11 } from "node:fs/promises";
+import { dirname as dirname11, join as join13, relative as relative3, resolve as resolve10 } from "node:path";
 
 // src/lib/contentBlocks.ts
 import { existsSync as existsSync15 } from "node:fs";
-import { readFile as readFile15, readdir as readdir5, stat as stat3 } from "node:fs/promises";
-import { dirname as dirname9, join as join12, relative as relative2, resolve as resolve8 } from "node:path";
+import { readFile as readFile16, readdir as readdir5, stat as stat3 } from "node:fs/promises";
+import { dirname as dirname10, join as join12, relative as relative2, resolve as resolve9 } from "node:path";
 
 // src/lib/markdownImages.ts
 import { existsSync as existsSync14 } from "node:fs";
-import { isAbsolute as isAbsolute2, resolve as resolve7 } from "node:path";
+import { isAbsolute as isAbsolute2, resolve as resolve8 } from "node:path";
 var LOCAL_REF2 = /(!\[[^\]]*\]\(\s*)(?!https?:|\/\/|data:|\/|#)([^)\s]+)/g;
 function localMarkdownImageRefs(markdown) {
   return [...new Set([...markdown.matchAll(LOCAL_REF2)].map((m) => m[2]))];
@@ -14357,7 +14492,7 @@ async function uploadMarkdownImages(c, cache2, markdown, baseDir) {
   const uploaded = [];
   let reused = 0;
   for (const ref of localMarkdownImageRefs(markdown)) {
-    const abs = isAbsolute2(ref) ? ref : resolve7(baseDir, decodeURI(ref));
+    const abs = isAbsolute2(ref) ? ref : resolve8(baseDir, decodeURI(ref));
     if (!existsSync14(abs)) throw new MissingImageError(ref);
     const up = await resolveUpload(c, cache2, abs);
     if (up.reused) reused++;
@@ -14389,7 +14524,7 @@ async function blockFiles(dir2, args) {
     );
   const out = [];
   for (const a of args) {
-    const p = resolve8(dir2, a);
+    const p = resolve9(dir2, a);
     if (!existsSync15(p)) throw new FileError("file_not_found", `Not found: ${a}`);
     if ((await stat3(p)).isDirectory()) {
       const names = (await readdir5(p)).filter((n) => suffixOf(n) && !isOriginal(n)).sort();
@@ -14424,14 +14559,14 @@ async function blocksFromFiles(c, ctx, files, componentData) {
         });
         continue;
       }
-      const text = (await readFile15(file, "utf8")).replace(/\n+$/, "");
+      const text = (await readFile16(file, "utf8")).replace(/\n+$/, "");
       try {
         if (suffix === ".md") {
-          const up = await uploadMarkdownImages(c, cache2, text, dirname9(file));
+          const up = await uploadMarkdownImages(c, cache2, text, dirname10(file));
           uploaded.push(...up.uploaded.map((abs) => relative2(ctx.dir, abs)));
           blocks.push({ type: "prose", markdown: up.markdown });
         } else {
-          const up = await uploadHtmlImages(c, cache2, text, dirname9(file));
+          const up = await uploadHtmlImages(c, cache2, text, dirname10(file));
           uploaded.push(...up.uploaded.map((abs) => relative2(ctx.dir, abs)));
           blocks.push({ type: "static", html: up.html });
         }
@@ -14462,7 +14597,7 @@ async function blockWarnings(dir2, files, blocks) {
     if (suffix === ".json") continue;
     const orig = file.replace(new RegExp(`\\${suffix}$`, "i"), `.orig${suffix}`);
     const words = (t) => suffix === ".md" ? t : t.replace(/<[^>]*>/g, " ");
-    const before = existsSync15(orig) ? words(await readFile15(orig, "utf8")) : "";
+    const before = existsSync15(orig) ? words(await readFile16(orig, "utf8")) : "";
     const w = claimWarning(relative2(dir2, file), blockText2(block2), before);
     if (w) out.push(w);
   }
@@ -14486,7 +14621,7 @@ var editable = (b) => b.kind === "prose" || b.kind === "static" || b.kind === "c
 var SUFFIX_OF_KIND = { prose: ".md", static: ".html", config: ".json" };
 async function componentInput(c, ctx, file) {
   const name = relative3(ctx.dir, file);
-  const read = async (f) => existsSync16(f) ? JSON.parse(await readFile16(f, "utf8")) : null;
+  const read = async (f) => existsSync16(f) ? JSON.parse(await readFile17(f, "utf8")) : null;
   let cf;
   try {
     cf = await read(file);
@@ -14503,7 +14638,7 @@ async function componentInput(c, ctx, file) {
   try {
     for (const { value, set } of configImages(cf.data, cf.schema)) {
       if (!isLocalImage(value)) continue;
-      const abs = [resolve9(dirname10(file), value), resolve9(ctx.dir, value)].find((p) => existsSync16(p));
+      const abs = [resolve10(dirname11(file), value), resolve10(ctx.dir, value)].find((p) => existsSync16(p));
       if (!abs)
         throw new FileError(
           "image_not_found",
@@ -14535,7 +14670,7 @@ async function blocksOf(c, ctx, files) {
   const { blocks, uploaded } = await blocksFromFiles(c, ctx, files, async (file) => {
     const { data, uploaded: up, warnings } = await componentInput(c, ctx, file);
     componentWarnings.push(...warnings);
-    const component = JSON.parse(await readFile16(file, "utf8")).component;
+    const component = JSON.parse(await readFile17(file, "utf8")).component;
     return { component, data, uploaded: up };
   });
   return { blocks, uploaded, warnings: [...await blockWarnings(ctx.dir, files, blocks), ...componentWarnings] };
@@ -14629,8 +14764,8 @@ function cmdGet(ctx) {
       const file = join13("pages", String(id), `block-${path}${suffix}`);
       await mkdir10(join13(ctx.dir, "pages", String(id)), { recursive: true });
       const text = content.endsWith("\n") ? content : content + "\n";
-      await writeFile10(join13(ctx.dir, file), text, "utf8");
-      await writeFile10(join13(ctx.dir, "pages", String(id), `block-${path}.orig${suffix}`), text, "utf8");
+      await writeFile11(join13(ctx.dir, file), text, "utf8");
+      await writeFile11(join13(ctx.dir, "pages", String(id), `block-${path}.orig${suffix}`), text, "utf8");
       saved.push({ path, file, text: block2.text });
     }
     if (!base)
@@ -14875,7 +15010,7 @@ function seoWarnings(seo, before = {}) {
 async function featuredImage(c, ctx) {
   const arg = ctx.flags.get("featured-image");
   if (!arg) return null;
-  const abs = resolve9(ctx.dir, arg);
+  const abs = resolve10(ctx.dir, arg);
   if (!existsSync16(abs)) throw new FileError("image_not_found", `The featured image "${arg}" isn't there.`);
   const cache2 = await readUploadsCache(ctx.dir, c.siteUrl);
   try {
@@ -14987,8 +15122,8 @@ function cmdSeo(ctx) {
 
 // src/index.ts
 var rawArgv = process.argv.slice(2);
-var group = ["products", "pages", "login", "site", "__login-wait"].includes(rawArgv[0] ?? "") ? rawArgv[0] : "silo";
-var argv = rawArgv[0] === "silo" || group === "products" || group === "pages" || group === "site" ? rawArgv.slice(1) : rawArgv;
+var group = ["products", "pages", "profile", "login", "site", "__login-wait"].includes(rawArgv[0] ?? "") ? rawArgv[0] : "silo";
+var argv = rawArgv[0] === "silo" || group === "products" || group === "pages" || group === "profile" || group === "site" ? rawArgv.slice(1) : rawArgv;
 var cmd = argv[0];
 var flags = /* @__PURE__ */ new Map();
 var positional = [];
@@ -15059,7 +15194,7 @@ async function cmdPlan() {
   if (!file) die("usage", "\u7528\u6CD5\uFF1Asilo plan <plan.json>");
   let raw;
   try {
-    raw = await readFile17(file, "utf8");
+    raw = await readFile18(file, "utf8");
   } catch {
     die("file_not_found", `\u672A\u627E\u5230 plan \u6587\u4EF6\uFF1A${file}`);
   }
@@ -15117,7 +15252,7 @@ async function cmdPush2() {
       resolvedBody.set(id, file.body);
       continue;
     }
-    const res = await resolveBodyAssets(file.body, wpAssetUploader(client2, [dirname11(file.path), dir]));
+    const res = await resolveBodyAssets(file.body, wpAssetUploader(client2, [dirname12(file.path), dir]));
     resolvedBody.set(id, res.md);
     if (res.uploaded) {
       await updateNoteBody(file.path, res.md);
@@ -15293,6 +15428,7 @@ async function main() {
       log("puffergo login status [--wait <seconds>]");
       log("puffergo version");
       log(SITE_SETUP_USAGE);
+      log(PROFILE_USAGE);
       log(PRODUCTS_USAGE);
       log(PAGES_USAGE);
       if (cmd && cmd !== "help" && cmd !== "--help") process.exitCode = 1;
@@ -15362,6 +15498,19 @@ async function pages() {
       return emit({ ok: false, code: "usage", message: PAGES_USAGE });
   }
 }
+async function profile() {
+  const ctx = { dir, flags, positional };
+  switch (cmd) {
+    case "get":
+      return emit(await cmdProfileGet(ctx));
+    case "check":
+      return emit(await cmdProfileCheck(ctx));
+    case "set":
+      return emit(await cmdProfileSet(ctx));
+    default:
+      return emit({ ok: false, code: "usage", message: PROFILE_USAGE });
+  }
+}
 var SITE_USAGE = SITE_SETUP_USAGE;
 async function site() {
   const ctx = { dir, flags, positional };
@@ -15372,7 +15521,7 @@ async function site() {
       return emit({ ok: false, code: "usage", message: SITE_USAGE });
   }
 }
-var run2 = group === "products" ? products : group === "pages" ? pages : group === "site" ? site : group === "login" ? async () => emit(
+var run2 = group === "products" ? products : group === "pages" ? pages : group === "profile" ? profile : group === "site" ? site : group === "login" ? async () => emit(
   positional[0] === "status" ? await cmdLoginStatus(dir, flags.get("wait")) : await cmdLogin(dir, positional[0] ?? argv[1])
 ) : group === "__login-wait" ? () => cmdLoginWait(argv[1], argv[2], argv[3], argv[4]) : main;
 run2().catch((e) => {

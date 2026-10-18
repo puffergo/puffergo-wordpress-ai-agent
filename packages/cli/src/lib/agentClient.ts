@@ -169,6 +169,20 @@ export class AgentClient {
     return this.read('find-media', { sha256 });
   }
 
+  /** The site profile: brand, audience, trust data, keywords — what every generated page is written from. */
+  getSiteProfile<T = unknown>(): Promise<T> {
+    return this.read('get-site-profile');
+  }
+
+  validateSiteProfile<T = unknown>(profile: unknown): Promise<T> {
+    return this.write('validate-site-profile', { profile });
+  }
+
+  /** `mode` omitted means merge: only what the profile names is written. */
+  updateSiteProfile<T = unknown>(profile: unknown, mode?: 'merge' | 'replace'): Promise<T> {
+    return this.write('update-site-profile', { profile, ...(mode ? { mode } : {}) });
+  }
+
   /** Product category terms via WordPress's own `/wp/v2/puffergo_product_cat` route; `lang` filters under Polylang. */
   /** @param restBase The taxonomy's own route: `puffergo_product_cat`, `categories`, `docs_category`… */
   async listCategoryTerms<T = unknown>(restBase: string, lang = ''): Promise<T[]> {

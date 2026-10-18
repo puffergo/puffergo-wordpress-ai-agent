@@ -84,9 +84,7 @@ describe('puffergo login status', () => {
     const status = cmdLoginStatus(dir, '5');
     expect(await waitUntilListening(port)).toBe(true); // we are the callback server now
 
-    const back = await fetch(
-      `http://127.0.0.1:${port}/?user_login=Carol&password=${encodeURIComponent('Abcd Efg1')}`,
-    );
+    const back = await fetch(`http://127.0.0.1:${port}/?user_login=Carol&password=${encodeURIComponent('Abcd Efg1')}`);
     expect(await back.text()).toContain('已授权');
 
     await expect(status).resolves.toMatchObject({ ok: true, status: 'approved', siteUrl: SITE });

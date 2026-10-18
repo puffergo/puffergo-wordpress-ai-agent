@@ -226,8 +226,7 @@ export async function cmdLogin(dir: string, siteArg: string | undefined): Promis
     pending: true,
     siteUrl,
     authorizeUrl,
-    next:
-      'Send `authorizeUrl` to the user verbatim too — the page may not have opened, or opened somewhere they cannot paste into. Never open it in your own built-in browser: the callback comes back to this machine, so it has to be the user\'s own browser. Tell them the authorization page is open and to click Approve (logging in to WordPress first if asked), then run `puffergo login status` right away — it waits for the click and answers by itself, so never ask the user to report back. If it returns `waiting`, tell the user you are still waiting and run it again. The link stays valid for 10 minutes.',
+    next: "Send `authorizeUrl` to the user verbatim too — the page may not have opened, or opened somewhere they cannot paste into. Never open it in your own built-in browser: the callback comes back to this machine, so it has to be the user's own browser. Tell them the authorization page is open and to click Approve (logging in to WordPress first if asked), then run `puffergo login status` right away — it waits for the click and answers by itself, so never ask the user to report back. If it returns `waiting`, tell the user you are still waiting and run it again. The link stays valid for 10 minutes.",
   };
 }
 
@@ -295,8 +294,7 @@ export async function cmdLoginStatus(dir: string, waitSeconds?: string): Promise
         status: 'waiting',
         siteUrl: state.siteUrl,
         tookOver: true,
-        next:
-          '本机接听的进程之前被打断过，客户那一次点击（如果已经点了）没有送到。请客户回到还开着的那个授权页，再点一次「批准」——就是再点一下，不用重新登录、不用复制任何东西；然后马上再运行 `puffergo login status`。',
+        next: '本机接听的进程之前被打断过，客户那一次点击（如果已经点了）没有送到。请客户回到还开着的那个授权页，再点一次「批准」——就是再点一下，不用重新登录、不用复制任何东西；然后马上再运行 `puffergo login status`。',
       };
     }
   }
@@ -393,12 +391,7 @@ async function runAuthorizeServer(
 }
 
 /** The detached child: owns the callback server, writes credentials, exits. Never prints anything. */
-export async function cmdLoginWait(
-  siteUrl: string,
-  handshake: string,
-  dir: string,
-  portArg?: string,
-): Promise<void> {
+export async function cmdLoginWait(siteUrl: string, handshake: string, dir: string, portArg?: string): Promise<void> {
   const wanted = Number(portArg) > 0 ? Number(portArg) : undefined;
   let bound = wanted;
   const creds = await runAuthorizeServer(
