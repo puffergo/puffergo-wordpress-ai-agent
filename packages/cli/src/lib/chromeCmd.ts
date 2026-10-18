@@ -2,7 +2,8 @@
  * `puffergo chrome …` — the header/footer nav menus as structured data an AI can read and edit.
  *
  * "Chrome" is the site-wide frame: the header menu and the footer menu. Both are plain WordPress
- * nav menus, so this is item-level surgery (add/rename/move/delete), never template or color work.
+ * nav menus, so this is item-level surgery (add/rename/move — deleting is a wp-admin trip, on
+ * purpose), never template or color work.
  *
  * The shape mirrors `profile` and `products categories`: read first (`get`), show the user what
  * WOULD happen (`plan` — a dry run the plugin performs without writing), then `apply`. Every write

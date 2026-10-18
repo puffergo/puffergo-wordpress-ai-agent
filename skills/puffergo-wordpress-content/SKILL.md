@@ -76,7 +76,7 @@ Node 是你的运行环境，你自己搞定，不要拿它去问客户：跑一
 
 ## 导航菜单（页头 / 页脚）
 
-网站顶部的导航和底部的链接，都是普通的 WordPress 菜单——**改的是菜单项（加一项、改名、挪位置、删一项），不是换模板、不是改配色**。客户说「Products 下面加个 CNC Milling」「把 Blog 改成 Insights」这类话，就用这个。
+网站顶部的导航和底部的链接，都是普通的 WordPress 菜单——**改的是菜单项（加一项、改名、挪位置），不是换模板、不是改配色**。客户说「Products 下面加个 CNC Milling」「把 Blog 改成 Insights」这类话，就用这个。
 
 | 命令 | 作用 |
 |---|---|
@@ -91,13 +91,13 @@ Node 是你的运行环境，你自己搞定，不要拿它去问客户：跑一
   "ops": [
     { "op": "add",    "parent": "Products", "title": "CNC Milling", "link": { "slug": "cnc-milling" }, "position": 2 },
     { "op": "rename", "match": "Blog",  "title": "Insights" },
-    { "op": "move",   "match": "About", "parent": "Company", "position": 1 },
-    { "op": "delete", "match": "Sample Page" }
+    { "op": "move",   "match": "About", "parent": "Company", "position": 1 }
   ] }
 ```
 
 - `add` 的 `link` 两种：站内页面/产品用 `{ "slug": "…" }`（按 slug 解析，保留页面关联，多语言站切语言时链接自动换）；外链/电话/邮箱用 `{ "url": "…" }`（裸电话自动变 `tel:`、裸邮箱变 `mailto:`）。不给 `link` 就是个占位项。
 - `match` 支持 **id / 标题 / 路径** 三种写法。**匹配到 0 项或 2 项以上，这一条直接跳过并报原因，绝不猜**——所以标题重名时改用 id。
+- **没有删除操作，故意不给。** 客户要删菜单项，把 `editUrl` 发给他，请他到 WordPress 后台自己删。
 - **没在 `ops` 里提到的项，一律不动。** 不存在「漏传就被删」这回事。
 - `plan` 报 `chrome_skipped`（有操作会被跳过）：先把原因念给客户、改 `ops.json` 或干脆去掉那一条，再 `plan` 一遍，确认干净了才 `apply`。
 - `apply` 返回里带了 `skipped` 就别当成全成功——把跳过的那几条如实告诉客户。
