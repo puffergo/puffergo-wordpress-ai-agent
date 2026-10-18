@@ -52,7 +52,7 @@ import {
   cmdImages,
 } from './lib/productsCmd';
 import { cmdProfileGet, cmdProfileCheck, cmdProfileSet, PROFILE_USAGE } from './lib/profileCmd';
-import { cmdChromeGet, cmdChromePlan, cmdChromeApply, CHROME_USAGE } from './lib/chromeCmd';
+import { cmdChromeGet, cmdChromeCheck, cmdChromePush, CHROME_USAGE } from './lib/chromeCmd';
 import { cmdEditLive, siteErrorOutput } from './lib/siteCmd';
 import { cmdSiteSetup, SITE_SETUP_USAGE } from './lib/siteSetupCmd';
 import { cmdLogin, cmdLoginStatus, cmdLoginWait } from './lib/loginCmd';
@@ -555,10 +555,12 @@ async function chrome(): Promise<void> {
   switch (cmd) {
     case 'get':
       return emit(await cmdChromeGet(ctx));
-    case 'plan':
-      return emit(await cmdChromePlan(ctx));
-    case 'apply':
-      return emit(await cmdChromeApply(ctx));
+    case 'check':
+    case 'plan': // legacy alias
+      return emit(await cmdChromeCheck(ctx));
+    case 'push':
+    case 'apply': // legacy alias
+      return emit(await cmdChromePush(ctx));
     default:
       return emit({ ok: false, code: 'usage', message: CHROME_USAGE });
   }

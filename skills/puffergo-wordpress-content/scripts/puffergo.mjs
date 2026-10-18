@@ -11612,7 +11612,7 @@ async function importFromWp(client2, ws, postTypes, opts = {}) {
 }
 
 // src/index.ts
-import { dirname as dirname12 } from "node:path";
+import { dirname as dirname13 } from "node:path";
 
 // src/adapters/fileStore.ts
 import { readFile, writeFile, mkdir, readdir } from "node:fs/promises";
@@ -12352,16 +12352,16 @@ var AgentClient = class {
   updateSiteProfile(profile2, mode) {
     return this.write("update-site-profile", { profile: profile2, ...mode ? { mode } : {} });
   }
-  /** The header + footer nav menus as the site stores them, with ids to match on and the Polylang status. */
+  /** The header + footer nav menus as the site stores them, with the editable tree file shape and the Polylang status. */
   getChrome() {
     return this.read("get-chrome");
   }
-  /** Dry run: what each op WOULD do. Writes nothing, so it is safe to show a user before applying. */
-  planChrome(target, ops) {
-    return this.write("plan-chrome", { target, ops });
+  /** Dry run: the create/update/keep diff between a menu tree and the live menu. Writes nothing. */
+  planChrome(target, menu) {
+    return this.write("plan-chrome", { target, menu });
   }
-  applyChrome(target, ops) {
-    return this.write("apply-chrome", { target, ops });
+  applyChrome(target, menu) {
+    return this.write("apply-chrome", { target, menu });
   }
   /** Product category terms via WordPress's own `/wp/v2/puffergo_product_cat` route; `lang` filters under Polylang. */
   /** @param restBase The taxonomy's own route: `puffergo_product_cat`, `categories`, `docs_category`… */
@@ -14074,9 +14074,9 @@ function stripJson(file) {
 }
 
 // src/lib/chromeCmd.ts
-import { readFile as readFile15 } from "node:fs/promises";
-import { resolve as resolve8 } from "node:path";
-var CHROME_USAGE = "puffergo chrome <get | plan <ops.json> | apply <ops.json>> [--target <header|footer>] [--dir <workdir>] [--site <url>]";
+import { readFile as readFile15, writeFile as writeFile10 } from "node:fs/promises";
+import { dirname as dirname9, resolve as resolve8 } from "node:path";
+var CHROME_USAGE = "puffergo chrome <get [--target <header|footer>] [--out <menu.json>]|check <menu.json>|push <menu.json>> [--target <header|footer>] [--site <url>]";
 var TARGETS = ["header", "footer"];
 function chromeError(e) {
   if (e instanceof AgentHttpError) {
@@ -14092,43 +14092,44 @@ function chromeError(e) {
   }
   return null;
 }
-async function readOpsFile(file, verb, ctx) {
-  if (!file) throw new CodedError("usage", `\u7528\u6CD5\uFF1Apuffergo chrome ${verb} <ops.json>`);
+async function readMenuFile(file, verb, ctx) {
+  if (!file) throw new CodedError("usage", `\u7528\u6CD5\uFF1Apuffergo chrome ${verb} <menu.json>`);
   let raw;
   try {
     raw = await readFile15(resolve8(file), "utf8");
   } catch {
-    throw new CodedError("file_not_found", `\u672A\u627E\u5230 ops \u6587\u4EF6\uFF1A${file}`, "ai");
+    throw new CodedError("file_not_found", `\u672A\u627E\u5230 menu \u6587\u4EF6\uFF1A${file}`, "ai");
   }
   let json;
   try {
     json = JSON.parse(raw);
   } catch (e) {
-    throw new CodedError("invalid_json", `ops \u6587\u4EF6\u4E0D\u662F\u5408\u6CD5 JSON\uFF1A${e instanceof Error ? e.message : String(e)}`);
+    throw new CodedError("invalid_json", `menu \u6587\u4EF6\u4E0D\u662F\u5408\u6CD5 JSON\uFF1A${e instanceof Error ? e.message : String(e)}`);
   }
   let target = "";
-  let ops;
+  let menu;
   if (Array.isArray(json)) {
-    ops = json;
+    menu = json;
   } else if (json && typeof json === "object") {
     const o = json;
+    if (o.ops !== void 0)
+      throw new CodedError(
+        "invalid_json",
+        "\u8FD9\u4EFD\u6587\u4EF6\u662F\u65E7\u7684 ops \u683C\u5F0F\u3002\u83DC\u5355\u73B0\u5728\u6309\u6811\u6587\u4EF6\u7F16\u8F91\uFF1A`chrome get --out menu.json` \u5BFC\u51FA\uFF0C\u6539\u6587\u4EF6\uFF08title/link/description/target/children/\u987A\u5E8F\uFF09\uFF0C\u518D `chrome check` / `chrome push`\u3002"
+      );
     target = typeof o.target === "string" ? o.target : "";
-    ops = o.ops;
+    menu = o.menu;
   } else {
-    throw new CodedError("invalid_json", 'ops \u6587\u4EF6\u9876\u5C42\u5FC5\u987B\u662F {"target":\u2026,"ops":[\u2026]} \u6216\u4E00\u4E2A ops \u6570\u7EC4\u3002');
+    throw new CodedError("invalid_json", 'menu \u6587\u4EF6\u9876\u5C42\u5FC5\u987B\u662F {"target":\u2026,"menu":[\u2026]} \u6216\u4E00\u4E2A\u6811\u8282\u70B9\u6570\u7EC4\u3002');
   }
   const flagTarget = ctx.flags.get("target") ?? "";
-  if (!target && flagTarget) target = flagTarget;
-  if (!target) {
-    throw new CodedError("invalid_json", 'ops \u6587\u4EF6\u7F3A "target"\uFF08header|footer\uFF09\uFF0C\u4E5F\u53EF\u4EE5\u7528 --target \u6307\u5B9A\u3002');
-  }
-  if (!TARGETS.includes(target)) {
+  if (flagTarget) target = flagTarget;
+  if (!target) throw new CodedError("invalid_json", 'menu \u6587\u4EF6\u7F3A "target"\uFF08header|footer\uFF09\uFF0C\u4E5F\u53EF\u4EE5\u7528 --target \u6307\u5B9A\u3002');
+  if (!TARGETS.includes(target))
     throw new CodedError("invalid_json", `target \u53EA\u80FD\u662F ${TARGETS.join(" | ")}\uFF0C\u6536\u5230 "${target}"\u3002`);
-  }
-  if (!Array.isArray(ops) || ops.length === 0) {
-    throw new CodedError("invalid_json", '"ops" \u5FC5\u987B\u662F\u4E00\u4E2A\u975E\u7A7A\u6570\u7EC4\u3002');
-  }
-  return { target, ops };
+  if (!Array.isArray(menu))
+    throw new CodedError("invalid_json", '"menu" \u5FC5\u987B\u662F\u4E00\u4E2A\u6811\u8282\u70B9\u6570\u7EC4\uFF08\u53EF\u4EE5\u4E3A\u7A7A\u6570\u7EC4\uFF0C\u4F46\u5B57\u6BB5\u5F97\u5728\uFF09\u3002');
+  return { target, menu };
 }
 function polylangNote(res) {
   const p = res.polylang;
@@ -14146,15 +14147,52 @@ async function cmdChromeGet(ctx) {
   }
   try {
     const res = await c.getChrome();
-    return { ok: true, site: c.siteUrl, ...res };
+    const target = ctx.flags.get("target") ?? "";
+    if (target && !TARGETS.includes(target))
+      return {
+        ok: false,
+        code: "invalid_json",
+        message: `--target \u53EA\u80FD\u662F ${TARGETS.join(" | ")}\uFF0C\u6536\u5230 "${target}"\u3002`
+      };
+    const outPath = ctx.flags.get("out");
+    if (outPath) {
+      const t = target || "header";
+      const payload = res[t];
+      if (!payload || !Array.isArray(payload.menu))
+        return {
+          ok: false,
+          code: "update_plugin",
+          fix: "user",
+          message: "This site's plugin returned no editable menu tree \u2014 update the PufferGo plugin."
+        };
+      await writeFile10(resolve8(outPath), JSON.stringify({ target: t, menu: payload.menu }, null, 2) + "\n", "utf8");
+      return {
+        ok: true,
+        site: c.siteUrl,
+        target: t,
+        file: resolve8(outPath),
+        menuId: payload.menuId,
+        items: payload.menu.length,
+        note: `Menu tree written to ${outPath}. Edit the file (title / link / description / target / children / array order), then \`chrome check ${outPath}\` and \`chrome push ${outPath}\`. Nothing is ever deleted: items you remove from the file stay on the site (leftAlone) \u2014 deleting is a wp-admin action.`,
+        editUrl: payload.editUrl,
+        polylang: res.polylang
+      };
+    }
+    const view = { ok: true, site: c.siteUrl, ...res };
+    if (target) {
+      delete view.header;
+      delete view.footer;
+      view[target] = res[target];
+    }
+    return view;
   } catch (e) {
     return chromeError(e) ?? errorOutput(e);
   }
 }
-async function cmdChromePlan(ctx) {
+async function cmdChromeCheck(ctx) {
   let parsed;
   try {
-    parsed = await readOpsFile(ctx.positional[0], "plan", ctx);
+    parsed = await readMenuFile(ctx.positional[0], "check", ctx);
   } catch (e) {
     return errorOutput(e);
   }
@@ -14165,7 +14203,7 @@ async function cmdChromePlan(ctx) {
     return errorOutput(e);
   }
   try {
-    const res = await c.planChrome(parsed.target, parsed.ops);
+    const res = await c.planChrome(parsed.target, parsed.menu);
     const skipped = res.skipped ?? [];
     const out = {
       ok: true,
@@ -14173,8 +14211,11 @@ async function cmdChromePlan(ctx) {
       site: c.siteUrl,
       target: res.target,
       menuId: res.menuId,
-      planned: res.planned ?? [],
+      changes: res.changes ?? [],
+      kept: res.kept ?? 0,
       skipped,
+      leftAlone: res.leftAlone ?? [],
+      warnings: res.warnings ?? [],
       editUrl: res.editUrl,
       polylang: res.polylang
     };
@@ -14184,7 +14225,7 @@ async function cmdChromePlan(ctx) {
         ok: false,
         code: "chrome_skipped",
         fix: "ai",
-        message: `${skipped.length} of ${parsed.ops.length} op(s) would be skipped \u2014 read the reasons, fix the ops file (or drop them on purpose), and plan again before apply.`
+        message: `${skipped.length} node(s) would be skipped \u2014 read the reasons, fix the menu file (or drop them on purpose), and check again before push.`
       };
     }
     return out;
@@ -14192,10 +14233,10 @@ async function cmdChromePlan(ctx) {
     return chromeError(e) ?? errorOutput(e);
   }
 }
-async function cmdChromeApply(ctx) {
+async function cmdChromePush(ctx) {
   let parsed;
   try {
-    parsed = await readOpsFile(ctx.positional[0], "apply", ctx);
+    parsed = await readMenuFile(ctx.positional[0], "push", ctx);
   } catch (e) {
     return errorOutput(e);
   }
@@ -14206,29 +14247,40 @@ async function cmdChromeApply(ctx) {
     return errorOutput(e);
   }
   try {
-    const res = await c.applyChrome(parsed.target, parsed.ops);
+    const res = await c.applyChrome(parsed.target, parsed.menu);
     const skipped = res.skipped ?? [];
-    const applied = res.applied ?? [];
+    const changes = res.changes ?? [];
     const note = polylangNote(res);
+    let previousFile;
+    if (res.previous) {
+      previousFile = resolve8(dirname9(ctx.positional[0]), `${stripJson2(ctx.positional[0])}.previous.json`);
+      await writeFile10(previousFile, JSON.stringify(res.previous, null, 2) + "\n", "utf8");
+    }
     return {
       ok: true,
       site: c.siteUrl,
       target: res.target,
       menuId: res.menuId,
-      applied,
+      changes,
+      kept: res.kept ?? 0,
       skipped,
+      leftAlone: res.leftAlone ?? [],
+      warnings: res.warnings ?? [],
       menu: res.menu,
-      previous: res.previous,
+      ...previousFile ? { previous: previousFile } : {},
       editUrl: res.editUrl,
       polylang: res.polylang,
       ...note ? { polylangNote: note } : {},
       ...skipped.length ? {
-        skippedNote: `${skipped.length} op(s) were skipped with reasons \u2014 report them to the user, do not present this as a clean success.`
+        skippedNote: `${skipped.length} node(s) were skipped with reasons \u2014 report them to the user, do not present this as a clean success.`
       } : {}
     };
   } catch (e) {
     return chromeError(e) ?? errorOutput(e);
   }
+}
+function stripJson2(file) {
+  return file.replace(/\.json$/i, "");
 }
 
 // src/lib/siteSetupCmd.ts
@@ -14368,9 +14420,9 @@ async function cmdSiteSetup(ctx) {
 import { spawn as spawn2 } from "node:child_process";
 import * as net from "node:net";
 import { existsSync as existsSync13 } from "node:fs";
-import { readFile as readFile16, rm, writeFile as writeFile10, rename as rename2, mkdir as mkdir9, mkdtemp } from "node:fs/promises";
+import { readFile as readFile16, rm, writeFile as writeFile11, rename as rename2, mkdir as mkdir9, mkdtemp } from "node:fs/promises";
 import { tmpdir as tmpdir2 } from "node:os";
-import { dirname as dirname9, join as join11 } from "node:path";
+import { dirname as dirname10, join as join11 } from "node:path";
 var WAIT_MS = 10 * 60 * 1e3;
 var STATUS_WAIT_MS = 100 * 1e3;
 var WINDOW_GRACE_MS = 30 * 1e3;
@@ -14378,8 +14430,8 @@ var CALLBACK_PORTS = [49512, 49513, 49514, 49515, 49516, 49517];
 var LOGIN_STATE = join11(PUFFERGO_DIR, "login-state.json");
 var loginStatePath = () => process.env.PUFFERGO_LOGIN_STATE || LOGIN_STATE;
 async function writeLoginState(state, path = loginStatePath()) {
-  await mkdir9(dirname9(path), { recursive: true });
-  await writeFile10(path, JSON.stringify(state, null, 2), "utf8");
+  await mkdir9(dirname10(path), { recursive: true });
+  await writeFile11(path, JSON.stringify(state, null, 2), "utf8");
 }
 async function readLoginState(path = loginStatePath()) {
   try {
@@ -14510,7 +14562,7 @@ async function cmdLogin(dir2, siteArg) {
 }
 async function writeHandshake(path, value) {
   const tmp = `${path}.tmp`;
-  await writeFile10(tmp, value, "utf8");
+  await writeFile11(tmp, value, "utf8");
   await rename2(tmp, path);
 }
 async function readHandshake(path) {
@@ -14641,13 +14693,13 @@ async function rebindLoginState(siteUrl, bound) {
 
 // src/lib/pagesCmd.ts
 import { existsSync as existsSync16 } from "node:fs";
-import { mkdir as mkdir10, readFile as readFile18, writeFile as writeFile11 } from "node:fs/promises";
-import { dirname as dirname11, join as join13, relative as relative3, resolve as resolve11 } from "node:path";
+import { mkdir as mkdir10, readFile as readFile18, writeFile as writeFile12 } from "node:fs/promises";
+import { dirname as dirname12, join as join13, relative as relative3, resolve as resolve11 } from "node:path";
 
 // src/lib/contentBlocks.ts
 import { existsSync as existsSync15 } from "node:fs";
 import { readFile as readFile17, readdir as readdir5, stat as stat3 } from "node:fs/promises";
-import { dirname as dirname10, join as join12, relative as relative2, resolve as resolve10 } from "node:path";
+import { dirname as dirname11, join as join12, relative as relative2, resolve as resolve10 } from "node:path";
 
 // src/lib/markdownImages.ts
 import { existsSync as existsSync14 } from "node:fs";
@@ -14731,11 +14783,11 @@ async function blocksFromFiles(c, ctx, files, componentData) {
       const text = (await readFile17(file, "utf8")).replace(/\n+$/, "");
       try {
         if (suffix === ".md") {
-          const up = await uploadMarkdownImages(c, cache2, text, dirname10(file));
+          const up = await uploadMarkdownImages(c, cache2, text, dirname11(file));
           uploaded.push(...up.uploaded.map((abs) => relative2(ctx.dir, abs)));
           blocks.push({ type: "prose", markdown: up.markdown });
         } else {
-          const up = await uploadHtmlImages(c, cache2, text, dirname10(file));
+          const up = await uploadHtmlImages(c, cache2, text, dirname11(file));
           uploaded.push(...up.uploaded.map((abs) => relative2(ctx.dir, abs)));
           blocks.push({ type: "static", html: up.html });
         }
@@ -14807,7 +14859,7 @@ async function componentInput(c, ctx, file) {
   try {
     for (const { value, set } of configImages(cf.data, cf.schema)) {
       if (!isLocalImage(value)) continue;
-      const abs = [resolve11(dirname11(file), value), resolve11(ctx.dir, value)].find((p) => existsSync16(p));
+      const abs = [resolve11(dirname12(file), value), resolve11(ctx.dir, value)].find((p) => existsSync16(p));
       if (!abs)
         throw new FileError(
           "image_not_found",
@@ -14933,8 +14985,8 @@ function cmdGet(ctx) {
       const file = join13("pages", String(id), `block-${path}${suffix}`);
       await mkdir10(join13(ctx.dir, "pages", String(id)), { recursive: true });
       const text = content.endsWith("\n") ? content : content + "\n";
-      await writeFile11(join13(ctx.dir, file), text, "utf8");
-      await writeFile11(join13(ctx.dir, "pages", String(id), `block-${path}.orig${suffix}`), text, "utf8");
+      await writeFile12(join13(ctx.dir, file), text, "utf8");
+      await writeFile12(join13(ctx.dir, "pages", String(id), `block-${path}.orig${suffix}`), text, "utf8");
       saved.push({ path, file, text: block2.text });
     }
     if (!base)
@@ -15421,7 +15473,7 @@ async function cmdPush2() {
       resolvedBody.set(id, file.body);
       continue;
     }
-    const res = await resolveBodyAssets(file.body, wpAssetUploader(client2, [dirname12(file.path), dir]));
+    const res = await resolveBodyAssets(file.body, wpAssetUploader(client2, [dirname13(file.path), dir]));
     resolvedBody.set(id, res.md);
     if (res.uploaded) {
       await updateNoteBody(file.path, res.md);
@@ -15686,10 +15738,12 @@ async function chrome() {
   switch (cmd) {
     case "get":
       return emit(await cmdChromeGet(ctx));
+    case "check":
     case "plan":
-      return emit(await cmdChromePlan(ctx));
+      return emit(await cmdChromeCheck(ctx));
+    case "push":
     case "apply":
-      return emit(await cmdChromeApply(ctx));
+      return emit(await cmdChromePush(ctx));
     default:
       return emit({ ok: false, code: "usage", message: CHROME_USAGE });
   }

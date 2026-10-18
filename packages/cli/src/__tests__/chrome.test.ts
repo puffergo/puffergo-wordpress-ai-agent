@@ -1,13 +1,14 @@
 /**
- * `puffergo chrome …` driven through the real command code against a stubbed site: the ops file
- * shapes (full object, bare array + --target), the plan dry run that fails loudly on skips, the
- * apply that carries `previous` and the Polylang stale note, and the old-plugin downgrade path.
+ * `puffergo chrome …` driven through the real command code against a stubbed site: the tree file
+ * shape (`{target, menu}` and bare array + --target), `get --out` writing the editable file, the
+ * check dry run that fails loudly on skips, the push that saves `previous` next to the file and
+ * carries the Polylang stale note, the refusal of a legacy ops file, and the old-plugin downgrade.
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdtemp, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { cmdChromeGet, cmdChromePlan, cmdChromeApply, CHROME_USAGE } from '../lib/chromeCmd';
+import { cmdChromeGet, cmdChromeCheck, cmdChromePush, CHROME_USAGE } from '../lib/chromeCmd';
 import { writeActiveDomain } from '../adapters/fileStore';
 
 const SITE = 'http://chrome.test';
@@ -57,13 +58,30 @@ const ctx = (dir: string, positional: string[] = [], flags: Record<string, strin
   flags: new Map(Object.entries(flags)),
 });
 
-async function opsFile(dir: string, name: string, body: unknown): Promise<string> {
+async function menuFile(dir: string, name: string, body: unknown): Promise<string> {
   const file = join(dir, name);
   await writeFile(file, JSON.stringify(body));
   return file;
 }
 
-const OPS = [{ op: 'add', title: 'CNC Milling', link: { slug: 'cnc-milling' }, parent: 'Products' }];
+const MENU = [
+  { id: 10, title: 'Products', link: { slug: 'products' } },
+  { title: 'CNC Milling', link: { url: '/cnc-milling/' } },
+];
+
+const GET_CHROME = {
+  ok: true,
+  header: {
+    menuId: 12,
+    items: [],
+    tree: [],
+    menu: MENU,
+    editUrl: 'http://chrome.test/wp-admin/nav-menus.php?action=edit&menu=12',
+  },
+  footer: { menuId: 13, items: [], tree: [], menu: [] },
+  limits: { matchedBy: 'id' },
+  polylang: { active: false },
+};
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -73,20 +91,23 @@ afterEach(() => {
 describe('chrome get', () => {
   it('reads both menus back with the site url attached', async () => {
     const dir = await workdir();
-    const sent = stubSite({
-      'get-product-schema': SCHEMA,
-      'get-chrome': {
-        ok: true,
-        header: { menuId: 12, items: [] },
-        footer: { menuId: 13, items: [] },
-        polylang: { active: false },
-      },
-    });
+    const sent = stubSite({ 'get-product-schema': SCHEMA, 'get-chrome': GET_CHROME });
     const out = (await cmdChromeGet(ctx(dir))) as { ok: boolean; site: string; header: unknown };
     expect(out.ok).toBe(true);
     expect(out.site).toBe(SITE);
     expect(out.header).toBeDefined();
     expect(sent.map(s => s.ability)).toContain('get-chrome');
+  });
+
+  it('--out writes the editable tree file in the exact shape check/push read', async () => {
+    const dir = await workdir();
+    stubSite({ 'get-product-schema': SCHEMA, 'get-chrome': GET_CHROME });
+    const outPath = join(dir, 'menu.json');
+    const out = (await cmdChromeGet(ctx(dir, [], { target: 'header', out: outPath }))) as Record<string, unknown>;
+    expect(out.ok).toBe(true);
+    expect(out.items).toBe(2);
+    const saved = JSON.parse(await readFile(outPath, 'utf8'));
+    expect(saved).toEqual({ target: 'header', menu: MENU });
   });
 
   it('a plugin without the ability says update the plugin', async () => {
@@ -99,10 +120,10 @@ describe('chrome get', () => {
   });
 });
 
-describe('chrome plan', () => {
-  it('a clean plan is ok and sends target + ops', async () => {
+describe('chrome check', () => {
+  it('a clean check is ok and sends target + menu', async () => {
     const dir = await workdir();
-    const file = await opsFile(dir, 'ops.json', { target: 'header', ops: OPS });
+    const file = await menuFile(dir, 'menu.json', { target: 'header', menu: MENU });
     const sent = stubSite({
       'get-product-schema': SCHEMA,
       'plan-chrome': {
@@ -110,18 +131,19 @@ describe('chrome plan', () => {
         dry: true,
         target: 'header',
         menuId: 12,
-        planned: [{ op: 'ops[0]', kind: 'add' }],
+        changes: [{ op: 'create', node: 'menu[1]' }],
+        kept: 1,
         skipped: [],
       },
     });
-    const out = await cmdChromePlan(ctx(dir, [file]));
-    expect(out).toMatchObject({ ok: true, dry: true });
-    expect(sent.find(s => s.ability === 'plan-chrome')?.input).toEqual({ target: 'header', ops: OPS });
+    const out = await cmdChromeCheck(ctx(dir, [file]));
+    expect(out).toMatchObject({ ok: true, dry: true, kept: 1 });
+    expect(sent.find(s => s.ability === 'plan-chrome')?.input).toEqual({ target: 'header', menu: MENU });
   });
 
-  it('any skipped op fails the plan loudly — the agent must fix it before apply', async () => {
+  it('any skipped node fails the check loudly — the agent must fix it before push', async () => {
     const dir = await workdir();
-    const file = await opsFile(dir, 'ops.json', { target: 'header', ops: OPS });
+    const file = await menuFile(dir, 'menu.json', { target: 'header', menu: MENU });
     stubSite({
       'get-product-schema': SCHEMA,
       'plan-chrome': {
@@ -129,43 +151,48 @@ describe('chrome plan', () => {
         dry: true,
         target: 'header',
         menuId: 12,
-        planned: [],
-        skipped: [{ op: 'ops[0]', kind: 'add', reason: 'slug-not-found', message: 'No page "cnc-milling".' }],
+        changes: [],
+        skipped: [{ node: 'menu[1]', reason: 'duplicate', message: 'already there' }],
       },
     });
-    expect(await cmdChromePlan(ctx(dir, [file]))).toMatchObject({ ok: false, code: 'chrome_skipped', fix: 'ai' });
+    expect(await cmdChromeCheck(ctx(dir, [file]))).toMatchObject({ ok: false, code: 'chrome_skipped', fix: 'ai' });
   });
 
   it('a bare array file + --target works', async () => {
     const dir = await workdir();
-    const file = await opsFile(dir, 'ops.json', OPS);
+    const file = await menuFile(dir, 'menu.json', MENU);
     const sent = stubSite({
       'get-product-schema': SCHEMA,
-      'plan-chrome': { ok: true, dry: true, target: 'footer', menuId: 13, planned: [{ op: 'ops[0]' }], skipped: [] },
+      'plan-chrome': { ok: true, dry: true, target: 'footer', menuId: 13, changes: [], skipped: [] },
     });
-    const out = await cmdChromePlan(ctx(dir, [file], { target: 'footer' }));
+    const out = await cmdChromeCheck(ctx(dir, [file], { target: 'footer' }));
     expect(out).toMatchObject({ ok: true });
     expect(sent.find(s => s.ability === 'plan-chrome')?.input).toMatchObject({ target: 'footer' });
   });
 
-  it('missing target, empty ops, bad json, missing file are each told apart', async () => {
+  it('a legacy ops file is refused with a pointer to the new flow', async () => {
+    const dir = await workdir();
+    const file = await menuFile(dir, 'ops.json', { target: 'header', ops: [{ op: 'add', title: 'X' }] });
+    stubSite({ 'get-product-schema': SCHEMA });
+    expect(await cmdChromeCheck(ctx(dir, [file]))).toMatchObject({ code: 'invalid_json' });
+  });
+
+  it('missing target, bad json, missing file, no file arg are each told apart', async () => {
     const dir = await workdir();
     stubSite({ 'get-product-schema': SCHEMA });
-    const noTarget = await opsFile(dir, 'a.json', { ops: OPS });
-    expect(await cmdChromePlan(ctx(dir, [noTarget]))).toMatchObject({ code: 'invalid_json' });
-    const emptyOps = await opsFile(dir, 'b.json', { target: 'header', ops: [] });
-    expect(await cmdChromePlan(ctx(dir, [emptyOps]))).toMatchObject({ code: 'invalid_json' });
-    const bad = await opsFile(dir, 'c.json', '{oops');
-    expect(await cmdChromePlan(ctx(dir, [bad]))).toMatchObject({ code: 'invalid_json' });
-    expect(await cmdChromePlan(ctx(dir, [join(dir, 'nope.json')]))).toMatchObject({ code: 'file_not_found' });
-    expect(await cmdChromePlan(ctx(dir, []))).toMatchObject({ code: 'usage' });
+    const noTarget = await menuFile(dir, 'a.json', { menu: MENU });
+    expect(await cmdChromeCheck(ctx(dir, [noTarget]))).toMatchObject({ code: 'invalid_json' });
+    const bad = await menuFile(dir, 'c.json', '{oops');
+    expect(await cmdChromeCheck(ctx(dir, [bad]))).toMatchObject({ code: 'invalid_json' });
+    expect(await cmdChromeCheck(ctx(dir, [join(dir, 'nope.json')]))).toMatchObject({ code: 'file_not_found' });
+    expect(await cmdChromeCheck(ctx(dir, []))).toMatchObject({ code: 'usage' });
   });
 });
 
-describe('chrome apply', () => {
-  it('applies and carries previous + editUrl + polylang', async () => {
+describe('chrome push', () => {
+  it('pushes, saves previous next to the file, carries editUrl + polylang note', async () => {
     const dir = await workdir();
-    const file = await opsFile(dir, 'ops.json', { target: 'header', ops: OPS });
+    const file = await menuFile(dir, 'menu.json', { target: 'header', menu: MENU });
     const sent = stubSite({
       'get-product-schema': SCHEMA,
       'apply-chrome': {
@@ -173,67 +200,101 @@ describe('chrome apply', () => {
         dry: false,
         target: 'header',
         menuId: 12,
-        applied: [{ op: 'ops[0]', kind: 'add', id: 482, title: 'CNC Milling' }],
+        changes: [{ op: 'create', node: 'menu[1]', id: 482, title: 'CNC Milling' }],
+        kept: 1,
         skipped: [],
-        previous: [{ id: 100, title: 'Products' }],
+        previous: [{ id: 10, title: 'Products' }],
         editUrl: 'http://chrome.test/wp-admin/nav-menus.php?action=edit&menu=12',
         polylang: { active: true, sourceMenuId: 12, stale: true },
       },
     });
-    const out = (await cmdChromeApply(ctx(dir, [file]))) as Record<string, unknown>;
+    const out = (await cmdChromePush(ctx(dir, [file]))) as Record<string, unknown>;
     expect(out.ok).toBe(true);
-    expect(out.previous).toEqual([{ id: 100, title: 'Products' }]);
+    expect(sent.find(s => s.ability === 'apply-chrome')?.input).toEqual({ target: 'header', menu: MENU });
+    // `previous` is a file on disk (the undo), not the array itself.
+    expect(typeof out.previous).toBe('string');
+    const previous = JSON.parse(await readFile(out.previous as string, 'utf8'));
+    expect(previous).toEqual([{ id: 10, title: 'Products' }]);
     expect(out.editUrl).toContain('nav-menus.php');
     // A stale translated copy must be surfaced as a note the agent cannot miss.
     expect(out.polylangNote).toContain('re-translate');
-    expect(sent.find(s => s.ability === 'apply-chrome')?.input).toEqual({ target: 'header', ops: OPS });
   });
 
   it('no polylang note when translations are not stale', async () => {
     const dir = await workdir();
-    const file = await opsFile(dir, 'ops.json', { target: 'header', ops: OPS });
-    stubSite({
-      'get-product-schema': SCHEMA,
-      'apply-chrome': { ok: true, dry: false, applied: [], skipped: [], polylang: { active: false, stale: false } },
-    });
-    const out = (await cmdChromeApply(ctx(dir, [file]))) as Record<string, unknown>;
-    expect(out.ok).toBe(true);
-    expect(out.polylangNote).toBeUndefined();
-  });
-
-  it('a skipped op in apply is reported, not hidden', async () => {
-    const dir = await workdir();
-    const file = await opsFile(dir, 'ops.json', { target: 'header', ops: OPS });
+    const file = await menuFile(dir, 'menu.json', { target: 'header', menu: MENU });
     stubSite({
       'get-product-schema': SCHEMA,
       'apply-chrome': {
         ok: true,
         dry: false,
-        applied: [],
-        skipped: [{ op: 'ops[0]', kind: 'add', reason: 'duplicate', message: 'already there' }],
+        changes: [],
+        kept: 2,
+        skipped: [],
+        polylang: { active: false, stale: false },
+      },
+    });
+    const out = (await cmdChromePush(ctx(dir, [file]))) as Record<string, unknown>;
+    expect(out.ok).toBe(true);
+    expect(out.polylangNote).toBeUndefined();
+    expect(out.previous).toBeUndefined(); // nothing changed → nothing to undo
+  });
+
+  it('a skipped node in push is reported, not hidden', async () => {
+    const dir = await workdir();
+    const file = await menuFile(dir, 'menu.json', { target: 'header', menu: MENU });
+    stubSite({
+      'get-product-schema': SCHEMA,
+      'apply-chrome': {
+        ok: true,
+        dry: false,
+        changes: [],
+        kept: 2,
+        skipped: [{ node: 'menu[1]', reason: 'duplicate', message: 'already there' }],
         polylang: { active: false },
       },
     });
-    const out = (await cmdChromeApply(ctx(dir, [file]))) as Record<string, unknown>;
+    const out = (await cmdChromePush(ctx(dir, [file]))) as Record<string, unknown>;
     expect(out.skippedNote).toBeDefined();
+  });
+
+  it('leftAlone comes back on the response so the agent can report it', async () => {
+    const dir = await workdir();
+    const file = await menuFile(dir, 'menu.json', { target: 'header', menu: [MENU[0]] });
+    stubSite({
+      'get-product-schema': SCHEMA,
+      'apply-chrome': {
+        ok: true,
+        dry: false,
+        changes: [],
+        kept: 1,
+        skipped: [],
+        leftAlone: [{ id: 11, title: 'Blog', url: '/blog' }],
+        leftAloneNote: 'NOT deleted',
+        polylang: { active: false },
+      },
+    });
+    const out = (await cmdChromePush(ctx(dir, [file]))) as Record<string, unknown>;
+    expect(out.leftAlone).toEqual([{ id: 11, title: 'Blog', url: '/blog' }]);
   });
 
   it('a plugin without the ability says update the plugin', async () => {
     const dir = await workdir();
-    const file = await opsFile(dir, 'ops.json', { target: 'header', ops: OPS });
+    const file = await menuFile(dir, 'menu.json', { target: 'header', menu: MENU });
     stubSite({
       'get-product-schema': SCHEMA,
       'apply-chrome': new Fail(404, { code: 'rest_ability_not_found', message: 'not found' }),
     });
-    expect(await cmdChromeApply(ctx(dir, [file]))).toMatchObject({ ok: false, code: 'update_plugin' });
+    expect(await cmdChromePush(ctx(dir, [file]))).toMatchObject({ ok: false, code: 'update_plugin' });
   });
 });
 
 describe('usage', () => {
   it('names every subcommand', () => {
     expect(CHROME_USAGE).toContain('get');
-    expect(CHROME_USAGE).toContain('plan');
-    expect(CHROME_USAGE).toContain('apply');
+    expect(CHROME_USAGE).toContain('check');
+    expect(CHROME_USAGE).toContain('push');
     expect(CHROME_USAGE).toContain('--target');
+    expect(CHROME_USAGE).toContain('--out');
   });
 });

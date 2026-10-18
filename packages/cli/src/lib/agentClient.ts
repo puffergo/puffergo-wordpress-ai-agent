@@ -183,18 +183,18 @@ export class AgentClient {
     return this.write('update-site-profile', { profile, ...(mode ? { mode } : {}) });
   }
 
-  /** The header + footer nav menus as the site stores them, with ids to match on and the Polylang status. */
+  /** The header + footer nav menus as the site stores them, with the editable tree file shape and the Polylang status. */
   getChrome<T = unknown>(): Promise<T> {
     return this.read('get-chrome');
   }
 
-  /** Dry run: what each op WOULD do. Writes nothing, so it is safe to show a user before applying. */
-  planChrome<T = unknown>(target: 'header' | 'footer', ops: unknown[]): Promise<T> {
-    return this.write('plan-chrome', { target, ops });
+  /** Dry run: the create/update/keep diff between a menu tree and the live menu. Writes nothing. */
+  planChrome<T = unknown>(target: 'header' | 'footer', menu: unknown[]): Promise<T> {
+    return this.write('plan-chrome', { target, menu });
   }
 
-  applyChrome<T = unknown>(target: 'header' | 'footer', ops: unknown[]): Promise<T> {
-    return this.write('apply-chrome', { target, ops });
+  applyChrome<T = unknown>(target: 'header' | 'footer', menu: unknown[]): Promise<T> {
+    return this.write('apply-chrome', { target, menu });
   }
 
   /** Product category terms via WordPress's own `/wp/v2/puffergo_product_cat` route; `lang` filters under Polylang. */

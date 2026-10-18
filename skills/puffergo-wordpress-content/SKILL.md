@@ -76,32 +76,36 @@ Node 是你的运行环境，你自己搞定，不要拿它去问客户：跑一
 
 ## 导航菜单（页头 / 页脚）
 
-网站顶部的导航和底部的链接，都是普通的 WordPress 菜单——**改的是菜单项（加一项、改名、挪位置），不是换模板、不是改配色**。客户说「Products 下面加个 CNC Milling」「把 Blog 改成 Insights」这类话，就用这个。
+网站顶部的导航和底部的链接，都是普通的 WordPress 菜单——**改的是菜单项，不是换模板、不是改配色**。客户说「Products 下面加个 CNC Milling」「把 Blog 改成 Insights」「这个链接开个新窗口」这类话，就用这个。
+
+**用法跟产品分类一模一样：导出一份树文件 → 直接改文件 → 干跑给客户看 → 写入。** 菜单本来就是一棵树，改标题、改链接、改描述、挪位置、调顺序，全都只是改文件里的字段，不用记一堆命令。
 
 | 命令 | 作用 |
 |---|---|
-| `puffergo chrome get` | 读出页头 + 页脚两棵菜单树：每一项带 `id`、`title`、`url`、父项、顺序，外加后台编辑链接 `editUrl` 和多语言状态 `polylang` |
-| `puffergo chrome plan <ops.json>` | 干跑：这批操作**会**做什么，一项一项列出来。**不写入**。先给客户看这个 |
-| `puffergo chrome apply <ops.json>` | 真正写入。返回 `applied` / `skipped`、改后的树、改前的 `previous`、`editUrl`、`polylang` |
+| `puffergo chrome get --target header --out menu.json` | 把页头菜单导出成 `menu.json`（可编辑的树）。不带 `--out` 就把页头+页脚两棵树连同 `editUrl`、多语言状态打印出来看 |
+| `puffergo chrome check <menu.json>` | 干跑：这份文件和网站现状一比，**会**新建/改哪些项、哪些保持不动。**不写入**。先给客户看这个 |
+| `puffergo chrome push <menu.json>` | 真正写入。返回 `changes` / `skipped` / `leftAlone`、改后的树、改前的 `previous` 文件、`editUrl`、`polylang` |
 
-`ops.json` 长这样（`target` 是 `header` 或 `footer`，也可以用 `--target` 指定）：
+导出的 `menu.json` 长这样，改完直接 push 回去：
 
 ```json
 { "target": "header",
-  "ops": [
-    { "op": "add",    "parent": "Products", "title": "CNC Milling", "link": { "slug": "cnc-milling" }, "position": 2 },
-    { "op": "rename", "match": "Blog",  "title": "Insights" },
-    { "op": "move",   "match": "About", "parent": "Company", "position": 1 }
+  "menu": [
+    { "id": 120, "title": "Products", "link": { "slug": "products" }, "children": [
+      { "title": "CNC Milling", "link": { "url": "/cnc-milling/" } }
+    ] },
+    { "id": 125, "title": "Blog", "link": { "slug": "blog" }, "description": "Latest news", "target": "_blank" }
   ] }
 ```
 
-- `add` 的 `link` 两种：站内页面/产品用 `{ "slug": "…" }`（按 slug 解析，保留页面关联，多语言站切语言时链接自动换）；外链/电话/邮箱用 `{ "url": "…" }`（裸电话自动变 `tel:`、裸邮箱变 `mailto:`）。不给 `link` 就是个占位项。
-- `match` 支持 **id / 标题 / 路径** 三种写法。**匹配到 0 项或 2 项以上，这一条直接跳过并报原因，绝不猜**——所以标题重名时改用 id。
-- **没有删除操作，故意不给。** 客户要删菜单项，把 `editUrl` 发给他，请他到 WordPress 后台自己删。
-- **没在 `ops` 里提到的项，一律不动。** 不存在「漏传就被删」这回事。
-- `plan` 报 `chrome_skipped`（有操作会被跳过）：先把原因念给客户、改 `ops.json` 或干脆去掉那一条，再 `plan` 一遍，确认干净了才 `apply`。
-- `apply` 返回里带了 `skipped` 就别当成全成功——把跳过的那几条如实告诉客户。
-- **多语言站（装了 Polylang）**：`apply` 改的是源语言（一般英文）菜单，其他语言的菜单是各自的副本，**不会自动跟着更新**。返回里 `polylang.stale: true` 时，必须跟客户补一句：「英文菜单改好了，中文/其他语言还是旧的，要去翻译中心重新翻译一次才会一致。」别让客户以为改一次就全站生效了。
+- **每一项能改什么**：`title`（标题）、`link`（`{slug}` 站内页面/产品，或 `{url}` 外链/电话/邮箱）、`description`（描述）、`target`（`"_blank"` 新窗口，或删掉/置空 = 当前窗口）、`attrTitle`（鼠标悬停提示）。**字段是可选的：文件里没写的字段，保持原样不动。**
+- **层级 = `children` 嵌套，顺序 = 数组顺序。** 把一项塞进另一项的 `children` 就是挂成子菜单；把节点在数组里挪位置就是调顺序。不用记什么 move/position。
+- **按 `id` 认项**：带 `id` 的节点更新那一项，不带 `id` 的是新建。所以先 `get --out` 导出（自带 id）、再改，最稳；手搓的新项不给 id 就行。
+- **`link` 用 `{slug}` 还是 `{url}`**：站内页面/产品用 `{slug}`（保留页面关联，多语言站切语言时链接自动换）；外链/电话/邮箱用 `{url}`（裸电话自动变 `tel:`、裸邮箱变 `mailto:`）。**已经是站内页面的项，不能从这儿改成任意外链**（会破坏多语言关联），check 会报 `link-type` 跳过——真要换，去后台重建。
+- **没有删除。** 树文件里没出现的项，push 时原样保留、并在 `leftAlone` 里列出来告诉你——**绝不删**。客户要删菜单项，把 `editUrl` 发给他，请他到 WordPress 后台自己删。
+- `check` 报 `chrome_skipped`（有节点会被跳过）：先把原因念给客户、改 `menu.json` 或去掉那个节点，再 `check` 一遍，干净了才 `push`。
+- `push` 返回里带了 `skipped` 就别当成全成功——把跳过的那几条如实告诉客户。`push` 把改前的菜单存成 `<menu>.previous.json`，改错了可以拿它对着还原。
+- **多语言站（装了 Polylang）**：`push` 改的是源语言（一般英文）菜单，其他语言的菜单是各自的副本，**不会自动跟着更新**。返回里 `polylang.stale: true` 时，必须跟客户补一句：「英文菜单改好了，中文/其他语言还是旧的，要去翻译中心重新翻译一次才会一致。」别让客户以为改一次就全站生效了。
 - 想让客户自己在后台核对、或拖拽排序这类你改不动的，把 `editUrl` 发给他就行。
 - 报 `update_plugin`：插件太旧没有这几个能力，转告客户升级。
 
