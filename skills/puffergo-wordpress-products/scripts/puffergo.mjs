@@ -7409,7 +7409,7 @@ function runAuthorizeServer(siteUrl, onListening, opts = {}) {
     onTimeout,
     signal
   } = opts;
-  return new Promise((resolve11, reject) => {
+  return new Promise((resolve12, reject) => {
     let settled = false;
     let timer;
     let active;
@@ -7418,7 +7418,7 @@ function runAuthorizeServer(siteUrl, onListening, opts = {}) {
       settled = true;
       if (timer) clearTimeout(timer);
       active?.close();
-      resolve11(value);
+      resolve12(value);
     };
     timer = setTimeout(() => {
       onTimeout?.();
@@ -7471,7 +7471,7 @@ div{text-align:center}</style></head><body><div>${ok ? "\u2705 \u5DF2\u6388\u674
 });
 
 // src/index.ts
-import { readFile as readFile18 } from "node:fs/promises";
+import { readFile as readFile19 } from "node:fs/promises";
 
 // ../silo-core/lib/model/types.ts
 var SILO_WORKSPACE_VERSION = 3;
@@ -12352,6 +12352,17 @@ var AgentClient = class {
   updateSiteProfile(profile2, mode) {
     return this.write("update-site-profile", { profile: profile2, ...mode ? { mode } : {} });
   }
+  /** The header + footer nav menus as the site stores them, with ids to match on and the Polylang status. */
+  getChrome() {
+    return this.read("get-chrome");
+  }
+  /** Dry run: what each op WOULD do. Writes nothing, so it is safe to show a user before applying. */
+  planChrome(target, ops) {
+    return this.write("plan-chrome", { target, ops });
+  }
+  applyChrome(target, ops) {
+    return this.write("apply-chrome", { target, ops });
+  }
   /** Product category terms via WordPress's own `/wp/v2/puffergo_product_cat` route; `lang` filters under Polylang. */
   /** @param restBase The taxonomy's own route: `puffergo_product_cat`, `categories`, `docs_category`… */
   async listCategoryTerms(restBase, lang = "") {
@@ -14062,6 +14073,164 @@ function stripJson(file) {
   return file.replace(/\.json$/i, "");
 }
 
+// src/lib/chromeCmd.ts
+import { readFile as readFile15 } from "node:fs/promises";
+import { resolve as resolve8 } from "node:path";
+var CHROME_USAGE = "puffergo chrome <get | plan <ops.json> | apply <ops.json>> [--target <header|footer>] [--dir <workdir>] [--site <url>]";
+var TARGETS = ["header", "footer"];
+function chromeError(e) {
+  if (e instanceof AgentHttpError) {
+    const code = e.body?.code;
+    if (code && ABILITIES_MISSING.has(code)) {
+      return {
+        ok: false,
+        code: "update_plugin",
+        fix: "user",
+        message: "This site's PufferGo plugin is too old to read or edit the header/footer menus. In wp-admin, update the PufferGo plugin to the latest version, then try again."
+      };
+    }
+  }
+  return null;
+}
+async function readOpsFile(file, verb, ctx) {
+  if (!file) throw new CodedError("usage", `\u7528\u6CD5\uFF1Apuffergo chrome ${verb} <ops.json>`);
+  let raw;
+  try {
+    raw = await readFile15(resolve8(file), "utf8");
+  } catch {
+    throw new CodedError("file_not_found", `\u672A\u627E\u5230 ops \u6587\u4EF6\uFF1A${file}`, "ai");
+  }
+  let json;
+  try {
+    json = JSON.parse(raw);
+  } catch (e) {
+    throw new CodedError("invalid_json", `ops \u6587\u4EF6\u4E0D\u662F\u5408\u6CD5 JSON\uFF1A${e instanceof Error ? e.message : String(e)}`);
+  }
+  let target = "";
+  let ops;
+  if (Array.isArray(json)) {
+    ops = json;
+  } else if (json && typeof json === "object") {
+    const o = json;
+    target = typeof o.target === "string" ? o.target : "";
+    ops = o.ops;
+  } else {
+    throw new CodedError("invalid_json", 'ops \u6587\u4EF6\u9876\u5C42\u5FC5\u987B\u662F {"target":\u2026,"ops":[\u2026]} \u6216\u4E00\u4E2A ops \u6570\u7EC4\u3002');
+  }
+  const flagTarget = ctx.flags.get("target") ?? "";
+  if (!target && flagTarget) target = flagTarget;
+  if (!target) {
+    throw new CodedError("invalid_json", 'ops \u6587\u4EF6\u7F3A "target"\uFF08header|footer\uFF09\uFF0C\u4E5F\u53EF\u4EE5\u7528 --target \u6307\u5B9A\u3002');
+  }
+  if (!TARGETS.includes(target)) {
+    throw new CodedError("invalid_json", `target \u53EA\u80FD\u662F ${TARGETS.join(" | ")}\uFF0C\u6536\u5230 "${target}"\u3002`);
+  }
+  if (!Array.isArray(ops) || ops.length === 0) {
+    throw new CodedError("invalid_json", '"ops" \u5FC5\u987B\u662F\u4E00\u4E2A\u975E\u7A7A\u6570\u7EC4\u3002');
+  }
+  return { target, ops };
+}
+function polylangNote(res) {
+  const p = res.polylang;
+  if (p?.active && p?.stale) {
+    return "The source menu was changed, but the translated copies (other languages) still show the OLD menu and nothing refreshes them automatically. Tell the user: the other languages need one re-translate pass in the Translation Center before they match.";
+  }
+  return void 0;
+}
+async function cmdChromeGet(ctx) {
+  let c;
+  try {
+    c = await client(ctx);
+  } catch (e) {
+    return errorOutput(e);
+  }
+  try {
+    const res = await c.getChrome();
+    return { ok: true, site: c.siteUrl, ...res };
+  } catch (e) {
+    return chromeError(e) ?? errorOutput(e);
+  }
+}
+async function cmdChromePlan(ctx) {
+  let parsed;
+  try {
+    parsed = await readOpsFile(ctx.positional[0], "plan", ctx);
+  } catch (e) {
+    return errorOutput(e);
+  }
+  let c;
+  try {
+    c = await client(ctx);
+  } catch (e) {
+    return errorOutput(e);
+  }
+  try {
+    const res = await c.planChrome(parsed.target, parsed.ops);
+    const skipped = res.skipped ?? [];
+    const out = {
+      ok: true,
+      dry: true,
+      site: c.siteUrl,
+      target: res.target,
+      menuId: res.menuId,
+      planned: res.planned ?? [],
+      skipped,
+      editUrl: res.editUrl,
+      polylang: res.polylang
+    };
+    if (skipped.length) {
+      return {
+        ...out,
+        ok: false,
+        code: "chrome_skipped",
+        fix: "ai",
+        message: `${skipped.length} of ${parsed.ops.length} op(s) would be skipped \u2014 read the reasons, fix the ops file (or drop them on purpose), and plan again before apply.`
+      };
+    }
+    return out;
+  } catch (e) {
+    return chromeError(e) ?? errorOutput(e);
+  }
+}
+async function cmdChromeApply(ctx) {
+  let parsed;
+  try {
+    parsed = await readOpsFile(ctx.positional[0], "apply", ctx);
+  } catch (e) {
+    return errorOutput(e);
+  }
+  let c;
+  try {
+    c = await client(ctx);
+  } catch (e) {
+    return errorOutput(e);
+  }
+  try {
+    const res = await c.applyChrome(parsed.target, parsed.ops);
+    const skipped = res.skipped ?? [];
+    const applied = res.applied ?? [];
+    const note = polylangNote(res);
+    return {
+      ok: true,
+      site: c.siteUrl,
+      target: res.target,
+      menuId: res.menuId,
+      applied,
+      skipped,
+      menu: res.menu,
+      previous: res.previous,
+      editUrl: res.editUrl,
+      polylang: res.polylang,
+      ...note ? { polylangNote: note } : {},
+      ...skipped.length ? {
+        skippedNote: `${skipped.length} op(s) were skipped with reasons \u2014 report them to the user, do not present this as a clean success.`
+      } : {}
+    };
+  } catch (e) {
+    return chromeError(e) ?? errorOutput(e);
+  }
+}
+
 // src/lib/siteSetupCmd.ts
 var PUFFERGO_SLUG = "puffergo";
 var RANKMATH_SLUG = "seo-by-rank-math";
@@ -14199,7 +14368,7 @@ async function cmdSiteSetup(ctx) {
 import { spawn as spawn2 } from "node:child_process";
 import * as net from "node:net";
 import { existsSync as existsSync13 } from "node:fs";
-import { readFile as readFile15, rm, writeFile as writeFile10, rename as rename2, mkdir as mkdir9, mkdtemp } from "node:fs/promises";
+import { readFile as readFile16, rm, writeFile as writeFile10, rename as rename2, mkdir as mkdir9, mkdtemp } from "node:fs/promises";
 import { tmpdir as tmpdir2 } from "node:os";
 import { dirname as dirname9, join as join11 } from "node:path";
 var WAIT_MS = 10 * 60 * 1e3;
@@ -14214,7 +14383,7 @@ async function writeLoginState(state, path = loginStatePath()) {
 }
 async function readLoginState(path = loginStatePath()) {
   try {
-    const s = JSON.parse(await readFile15(path, "utf8"));
+    const s = JSON.parse(await readFile16(path, "utf8"));
     return s && typeof s.siteUrl === "string" && typeof s.status === "string" ? s : null;
   } catch {
     return null;
@@ -14347,7 +14516,7 @@ async function writeHandshake(path, value) {
 async function readHandshake(path) {
   if (!existsSync13(path)) return "";
   try {
-    return (await readFile15(path, "utf8")).trim();
+    return (await readFile16(path, "utf8")).trim();
   } catch {
     return "";
   }
@@ -14472,17 +14641,17 @@ async function rebindLoginState(siteUrl, bound) {
 
 // src/lib/pagesCmd.ts
 import { existsSync as existsSync16 } from "node:fs";
-import { mkdir as mkdir10, readFile as readFile17, writeFile as writeFile11 } from "node:fs/promises";
-import { dirname as dirname11, join as join13, relative as relative3, resolve as resolve10 } from "node:path";
+import { mkdir as mkdir10, readFile as readFile18, writeFile as writeFile11 } from "node:fs/promises";
+import { dirname as dirname11, join as join13, relative as relative3, resolve as resolve11 } from "node:path";
 
 // src/lib/contentBlocks.ts
 import { existsSync as existsSync15 } from "node:fs";
-import { readFile as readFile16, readdir as readdir5, stat as stat3 } from "node:fs/promises";
-import { dirname as dirname10, join as join12, relative as relative2, resolve as resolve9 } from "node:path";
+import { readFile as readFile17, readdir as readdir5, stat as stat3 } from "node:fs/promises";
+import { dirname as dirname10, join as join12, relative as relative2, resolve as resolve10 } from "node:path";
 
 // src/lib/markdownImages.ts
 import { existsSync as existsSync14 } from "node:fs";
-import { isAbsolute as isAbsolute2, resolve as resolve8 } from "node:path";
+import { isAbsolute as isAbsolute2, resolve as resolve9 } from "node:path";
 var LOCAL_REF2 = /(!\[[^\]]*\]\(\s*)(?!https?:|\/\/|data:|\/|#)([^)\s]+)/g;
 function localMarkdownImageRefs(markdown) {
   return [...new Set([...markdown.matchAll(LOCAL_REF2)].map((m) => m[2]))];
@@ -14492,7 +14661,7 @@ async function uploadMarkdownImages(c, cache2, markdown, baseDir) {
   const uploaded = [];
   let reused = 0;
   for (const ref of localMarkdownImageRefs(markdown)) {
-    const abs = isAbsolute2(ref) ? ref : resolve8(baseDir, decodeURI(ref));
+    const abs = isAbsolute2(ref) ? ref : resolve9(baseDir, decodeURI(ref));
     if (!existsSync14(abs)) throw new MissingImageError(ref);
     const up = await resolveUpload(c, cache2, abs);
     if (up.reused) reused++;
@@ -14524,7 +14693,7 @@ async function blockFiles(dir2, args) {
     );
   const out = [];
   for (const a of args) {
-    const p = resolve9(dir2, a);
+    const p = resolve10(dir2, a);
     if (!existsSync15(p)) throw new FileError("file_not_found", `Not found: ${a}`);
     if ((await stat3(p)).isDirectory()) {
       const names = (await readdir5(p)).filter((n) => suffixOf(n) && !isOriginal(n)).sort();
@@ -14559,7 +14728,7 @@ async function blocksFromFiles(c, ctx, files, componentData) {
         });
         continue;
       }
-      const text = (await readFile16(file, "utf8")).replace(/\n+$/, "");
+      const text = (await readFile17(file, "utf8")).replace(/\n+$/, "");
       try {
         if (suffix === ".md") {
           const up = await uploadMarkdownImages(c, cache2, text, dirname10(file));
@@ -14597,7 +14766,7 @@ async function blockWarnings(dir2, files, blocks) {
     if (suffix === ".json") continue;
     const orig = file.replace(new RegExp(`\\${suffix}$`, "i"), `.orig${suffix}`);
     const words = (t) => suffix === ".md" ? t : t.replace(/<[^>]*>/g, " ");
-    const before = existsSync15(orig) ? words(await readFile16(orig, "utf8")) : "";
+    const before = existsSync15(orig) ? words(await readFile17(orig, "utf8")) : "";
     const w = claimWarning(relative2(dir2, file), blockText2(block2), before);
     if (w) out.push(w);
   }
@@ -14621,7 +14790,7 @@ var editable = (b) => b.kind === "prose" || b.kind === "static" || b.kind === "c
 var SUFFIX_OF_KIND = { prose: ".md", static: ".html", config: ".json" };
 async function componentInput(c, ctx, file) {
   const name = relative3(ctx.dir, file);
-  const read = async (f) => existsSync16(f) ? JSON.parse(await readFile17(f, "utf8")) : null;
+  const read = async (f) => existsSync16(f) ? JSON.parse(await readFile18(f, "utf8")) : null;
   let cf;
   try {
     cf = await read(file);
@@ -14638,7 +14807,7 @@ async function componentInput(c, ctx, file) {
   try {
     for (const { value, set } of configImages(cf.data, cf.schema)) {
       if (!isLocalImage(value)) continue;
-      const abs = [resolve10(dirname11(file), value), resolve10(ctx.dir, value)].find((p) => existsSync16(p));
+      const abs = [resolve11(dirname11(file), value), resolve11(ctx.dir, value)].find((p) => existsSync16(p));
       if (!abs)
         throw new FileError(
           "image_not_found",
@@ -14670,7 +14839,7 @@ async function blocksOf(c, ctx, files) {
   const { blocks, uploaded } = await blocksFromFiles(c, ctx, files, async (file) => {
     const { data, uploaded: up, warnings } = await componentInput(c, ctx, file);
     componentWarnings.push(...warnings);
-    const component = JSON.parse(await readFile17(file, "utf8")).component;
+    const component = JSON.parse(await readFile18(file, "utf8")).component;
     return { component, data, uploaded: up };
   });
   return { blocks, uploaded, warnings: [...await blockWarnings(ctx.dir, files, blocks), ...componentWarnings] };
@@ -15010,7 +15179,7 @@ function seoWarnings(seo, before = {}) {
 async function featuredImage(c, ctx) {
   const arg = ctx.flags.get("featured-image");
   if (!arg) return null;
-  const abs = resolve10(ctx.dir, arg);
+  const abs = resolve11(ctx.dir, arg);
   if (!existsSync16(abs)) throw new FileError("image_not_found", `The featured image "${arg}" isn't there.`);
   const cache2 = await readUploadsCache(ctx.dir, c.siteUrl);
   try {
@@ -15122,8 +15291,8 @@ function cmdSeo(ctx) {
 
 // src/index.ts
 var rawArgv = process.argv.slice(2);
-var group = ["products", "pages", "profile", "login", "site", "__login-wait"].includes(rawArgv[0] ?? "") ? rawArgv[0] : "silo";
-var argv = rawArgv[0] === "silo" || group === "products" || group === "pages" || group === "profile" || group === "site" ? rawArgv.slice(1) : rawArgv;
+var group = ["products", "pages", "profile", "chrome", "login", "site", "__login-wait"].includes(rawArgv[0] ?? "") ? rawArgv[0] : "silo";
+var argv = rawArgv[0] === "silo" || group === "products" || group === "pages" || group === "profile" || group === "chrome" || group === "site" ? rawArgv.slice(1) : rawArgv;
 var cmd = argv[0];
 var flags = /* @__PURE__ */ new Map();
 var positional = [];
@@ -15194,7 +15363,7 @@ async function cmdPlan() {
   if (!file) die("usage", "\u7528\u6CD5\uFF1Asilo plan <plan.json>");
   let raw;
   try {
-    raw = await readFile18(file, "utf8");
+    raw = await readFile19(file, "utf8");
   } catch {
     die("file_not_found", `\u672A\u627E\u5230 plan \u6587\u4EF6\uFF1A${file}`);
   }
@@ -15429,6 +15598,7 @@ async function main() {
       log("puffergo version");
       log(SITE_SETUP_USAGE);
       log(PROFILE_USAGE);
+      log(CHROME_USAGE);
       log(PRODUCTS_USAGE);
       log(PAGES_USAGE);
       if (cmd && cmd !== "help" && cmd !== "--help") process.exitCode = 1;
@@ -15511,6 +15681,19 @@ async function profile() {
       return emit({ ok: false, code: "usage", message: PROFILE_USAGE });
   }
 }
+async function chrome() {
+  const ctx = { dir, flags, positional };
+  switch (cmd) {
+    case "get":
+      return emit(await cmdChromeGet(ctx));
+    case "plan":
+      return emit(await cmdChromePlan(ctx));
+    case "apply":
+      return emit(await cmdChromeApply(ctx));
+    default:
+      return emit({ ok: false, code: "usage", message: CHROME_USAGE });
+  }
+}
 var SITE_USAGE = SITE_SETUP_USAGE;
 async function site() {
   const ctx = { dir, flags, positional };
@@ -15521,7 +15704,7 @@ async function site() {
       return emit({ ok: false, code: "usage", message: SITE_USAGE });
   }
 }
-var run2 = group === "products" ? products : group === "pages" ? pages : group === "profile" ? profile : group === "site" ? site : group === "login" ? async () => emit(
+var run2 = group === "products" ? products : group === "pages" ? pages : group === "profile" ? profile : group === "chrome" ? chrome : group === "site" ? site : group === "login" ? async () => emit(
   positional[0] === "status" ? await cmdLoginStatus(dir, flags.get("wait")) : await cmdLogin(dir, positional[0] ?? argv[1])
 ) : group === "__login-wait" ? () => cmdLoginWait(argv[1], argv[2], argv[3], argv[4]) : main;
 run2().catch((e) => {

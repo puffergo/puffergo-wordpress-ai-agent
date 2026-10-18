@@ -74,6 +74,37 @@ Node 是你的运行环境，你自己搞定，不要拿它去问客户：跑一
 - 没有删除命令，客户要清空画像请他在 WordPress 后台的站点画像页操作。
 - 报 `update_plugin`：这个站的 PufferGo 插件太旧，还没有这几个能力，把 `message` 转告客户，等他升级好再继续。
 
+## 导航菜单（页头 / 页脚）
+
+网站顶部的导航和底部的链接，都是普通的 WordPress 菜单——**改的是菜单项（加一项、改名、挪位置、删一项），不是换模板、不是改配色**。客户说「Products 下面加个 CNC Milling」「把 Blog 改成 Insights」这类话，就用这个。
+
+| 命令 | 作用 |
+|---|---|
+| `puffergo chrome get` | 读出页头 + 页脚两棵菜单树：每一项带 `id`、`title`、`url`、父项、顺序，外加后台编辑链接 `editUrl` 和多语言状态 `polylang` |
+| `puffergo chrome plan <ops.json>` | 干跑：这批操作**会**做什么，一项一项列出来。**不写入**。先给客户看这个 |
+| `puffergo chrome apply <ops.json>` | 真正写入。返回 `applied` / `skipped`、改后的树、改前的 `previous`、`editUrl`、`polylang` |
+
+`ops.json` 长这样（`target` 是 `header` 或 `footer`，也可以用 `--target` 指定）：
+
+```json
+{ "target": "header",
+  "ops": [
+    { "op": "add",    "parent": "Products", "title": "CNC Milling", "link": { "slug": "cnc-milling" }, "position": 2 },
+    { "op": "rename", "match": "Blog",  "title": "Insights" },
+    { "op": "move",   "match": "About", "parent": "Company", "position": 1 },
+    { "op": "delete", "match": "Sample Page" }
+  ] }
+```
+
+- `add` 的 `link` 两种：站内页面/产品用 `{ "slug": "…" }`（按 slug 解析，保留页面关联，多语言站切语言时链接自动换）；外链/电话/邮箱用 `{ "url": "…" }`（裸电话自动变 `tel:`、裸邮箱变 `mailto:`）。不给 `link` 就是个占位项。
+- `match` 支持 **id / 标题 / 路径** 三种写法。**匹配到 0 项或 2 项以上，这一条直接跳过并报原因，绝不猜**——所以标题重名时改用 id。
+- **没在 `ops` 里提到的项，一律不动。** 不存在「漏传就被删」这回事。
+- `plan` 报 `chrome_skipped`（有操作会被跳过）：先把原因念给客户、改 `ops.json` 或干脆去掉那一条，再 `plan` 一遍，确认干净了才 `apply`。
+- `apply` 返回里带了 `skipped` 就别当成全成功——把跳过的那几条如实告诉客户。
+- **多语言站（装了 Polylang）**：`apply` 改的是源语言（一般英文）菜单，其他语言的菜单是各自的副本，**不会自动跟着更新**。返回里 `polylang.stale: true` 时，必须跟客户补一句：「英文菜单改好了，中文/其他语言还是旧的，要去翻译中心重新翻译一次才会一致。」别让客户以为改一次就全站生效了。
+- 想让客户自己在后台核对、或拖拽排序这类你改不动的，把 `editUrl` 发给他就行。
+- 报 `update_plugin`：插件太旧没有这几个能力，转告客户升级。
+
 # 快车道
 
 ## 1. 快车道命令

@@ -52,6 +52,7 @@ import {
   cmdImages,
 } from './lib/productsCmd';
 import { cmdProfileGet, cmdProfileCheck, cmdProfileSet, PROFILE_USAGE } from './lib/profileCmd';
+import { cmdChromeGet, cmdChromePlan, cmdChromeApply, CHROME_USAGE } from './lib/chromeCmd';
 import { cmdEditLive, siteErrorOutput } from './lib/siteCmd';
 import { cmdSiteSetup, SITE_SETUP_USAGE } from './lib/siteSetupCmd';
 import { cmdLogin, cmdLoginStatus, cmdLoginWait } from './lib/loginCmd';
@@ -72,11 +73,16 @@ import {
 // `puffergo <login|products …|silo …>`; the legacy `silo <cmd>` bin calls this with no group word,
 // so anything that isn't a known group falls through to the silo commands unchanged.
 const rawArgv = process.argv.slice(2);
-const group = ['products', 'pages', 'profile', 'login', 'site', '__login-wait'].includes(rawArgv[0] ?? '')
+const group = ['products', 'pages', 'profile', 'chrome', 'login', 'site', '__login-wait'].includes(rawArgv[0] ?? '')
   ? rawArgv[0]
   : 'silo';
 const argv =
-  rawArgv[0] === 'silo' || group === 'products' || group === 'pages' || group === 'profile' || group === 'site'
+  rawArgv[0] === 'silo' ||
+  group === 'products' ||
+  group === 'pages' ||
+  group === 'profile' ||
+  group === 'chrome' ||
+  group === 'site'
     ? rawArgv.slice(1)
     : rawArgv;
 const cmd = argv[0];
@@ -451,6 +457,7 @@ async function main(): Promise<void> {
       log('puffergo version');
       log(SITE_SETUP_USAGE);
       log(PROFILE_USAGE);
+      log(CHROME_USAGE);
       log(PRODUCTS_USAGE);
       log(PAGES_USAGE);
       if (cmd && cmd !== 'help' && cmd !== '--help') process.exitCode = 1;
@@ -543,6 +550,20 @@ async function profile(): Promise<void> {
   }
 }
 
+async function chrome(): Promise<void> {
+  const ctx = { dir, flags, positional };
+  switch (cmd) {
+    case 'get':
+      return emit(await cmdChromeGet(ctx));
+    case 'plan':
+      return emit(await cmdChromePlan(ctx));
+    case 'apply':
+      return emit(await cmdChromeApply(ctx));
+    default:
+      return emit({ ok: false, code: 'usage', message: CHROME_USAGE });
+  }
+}
+
 const SITE_USAGE = SITE_SETUP_USAGE;
 
 async function site(): Promise<void> {
@@ -562,18 +583,20 @@ const run =
       ? pages
       : group === 'profile'
         ? profile
-        : group === 'site'
-          ? site
-          : group === 'login'
-            ? async () =>
-                emit(
-                  positional[0] === 'status'
-                    ? await cmdLoginStatus(dir, flags.get('wait'))
-                    : await cmdLogin(dir, positional[0] ?? argv[1]),
-                )
-            : group === '__login-wait'
-              ? () => cmdLoginWait(argv[1]!, argv[2]!, argv[3]!, argv[4])
-              : main;
+        : group === 'chrome'
+          ? chrome
+          : group === 'site'
+            ? site
+            : group === 'login'
+              ? async () =>
+                  emit(
+                    positional[0] === 'status'
+                      ? await cmdLoginStatus(dir, flags.get('wait'))
+                      : await cmdLogin(dir, positional[0] ?? argv[1]),
+                  )
+              : group === '__login-wait'
+                ? () => cmdLoginWait(argv[1]!, argv[2]!, argv[3]!, argv[4])
+                : main;
 
 run().catch(e => {
   const shared = siteErrorOutput(e);

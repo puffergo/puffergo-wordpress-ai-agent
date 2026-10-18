@@ -183,6 +183,20 @@ export class AgentClient {
     return this.write('update-site-profile', { profile, ...(mode ? { mode } : {}) });
   }
 
+  /** The header + footer nav menus as the site stores them, with ids to match on and the Polylang status. */
+  getChrome<T = unknown>(): Promise<T> {
+    return this.read('get-chrome');
+  }
+
+  /** Dry run: what each op WOULD do. Writes nothing, so it is safe to show a user before applying. */
+  planChrome<T = unknown>(target: 'header' | 'footer', ops: unknown[]): Promise<T> {
+    return this.write('plan-chrome', { target, ops });
+  }
+
+  applyChrome<T = unknown>(target: 'header' | 'footer', ops: unknown[]): Promise<T> {
+    return this.write('apply-chrome', { target, ops });
+  }
+
   /** Product category terms via WordPress's own `/wp/v2/puffergo_product_cat` route; `lang` filters under Polylang. */
   /** @param restBase The taxonomy's own route: `puffergo_product_cat`, `categories`, `docs_category`… */
   async listCategoryTerms<T = unknown>(restBase: string, lang = ''): Promise<T[]> {
