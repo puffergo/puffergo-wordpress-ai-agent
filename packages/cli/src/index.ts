@@ -14,7 +14,7 @@
  * The WP Application Password is read from silo.config.json by the CLI only and is never printed.
  */
 
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import {
   emptyWorkspace,
   healthCheck,
@@ -68,12 +68,16 @@ import {
   cmdPublish as cmdPagesPublish,
   cmdPageCategories,
 } from './lib/pagesCmd';
+import { cmdDomainCheck, renderDomainCheck, DOMAIN_USAGE } from './lib/domainCmd';
+import { renderDomainCheckHtml } from './lib/domainReport';
 
 // ---- tiny arg parsing -------------------------------------------------------
 // `puffergo <login|products …|silo …>`; the legacy `silo <cmd>` bin calls this with no group word,
 // so anything that isn't a known group falls through to the silo commands unchanged.
 const rawArgv = process.argv.slice(2);
-const group = ['products', 'pages', 'profile', 'chrome', 'login', 'site', '__login-wait'].includes(rawArgv[0] ?? '')
+const group = ['products', 'pages', 'profile', 'chrome', 'login', 'site', 'domain', '__login-wait'].includes(
+  rawArgv[0] ?? '',
+)
   ? rawArgv[0]
   : 'silo';
 const argv =
@@ -82,7 +86,8 @@ const argv =
   group === 'pages' ||
   group === 'profile' ||
   group === 'chrome' ||
-  group === 'site'
+  group === 'site' ||
+  group === 'domain'
     ? rawArgv.slice(1)
     : rawArgv;
 const cmd = argv[0];
@@ -456,6 +461,7 @@ async function main(): Promise<void> {
       log('puffergo login status [--wait <seconds>]');
       log('puffergo version');
       log(SITE_SETUP_USAGE);
+      log(DOMAIN_USAGE);
       log(PROFILE_USAGE);
       log(CHROME_USAGE);
       log(PRODUCTS_USAGE);
@@ -578,6 +584,34 @@ async function site(): Promise<void> {
   }
 }
 
+/**
+ * `puffergo domain check` — 不需要 --site、不需要登录。查的是公开数据，跟站点状态无关，
+ * 所以买域名之前（还没有站）也能跑。
+ */
+async function domain(): Promise<void> {
+  const ctx = { dir, flags, positional };
+  switch (cmd) {
+    case 'check': {
+      const res = await cmdDomainCheck(ctx);
+      if (!res.ok) return emit(res);
+      if (flags.get('json') === 'true') return emit(res);
+      // --html 是为了让客户能直接看：终端里三十行等宽字发不进微信，一份能点开的网页可以。
+      // 不给路径时自动落到当前目录，免得 AI 忘了带参数就静默只输出文本。
+      const wantHtml = flags.get('html');
+      if (wantHtml !== undefined) {
+        const path = wantHtml === 'true' ? `${res.domain}-domain-check.html` : wantHtml;
+        await mkdir(dirname(path), { recursive: true });
+        await writeFile(path, renderDomainCheckHtml(res), 'utf8');
+        return emit({ ok: true, domain: res.domain, html: path, reportId: res.reportId, checkedAt: res.checkedAt });
+      }
+      log(renderDomainCheck(res));
+      return;
+    }
+    default:
+      return emit({ ok: false, code: 'usage', message: DOMAIN_USAGE });
+  }
+}
+
 const run =
   group === 'products'
     ? products
@@ -589,16 +623,18 @@ const run =
           ? chrome
           : group === 'site'
             ? site
-            : group === 'login'
-              ? async () =>
-                  emit(
-                    positional[0] === 'status'
-                      ? await cmdLoginStatus(dir, flags.get('wait'))
-                      : await cmdLogin(dir, positional[0] ?? argv[1]),
-                  )
-              : group === '__login-wait'
-                ? () => cmdLoginWait(argv[1]!, argv[2]!, argv[3]!, argv[4])
-                : main;
+            : group === 'domain'
+              ? domain
+              : group === 'login'
+                ? async () =>
+                    emit(
+                      positional[0] === 'status'
+                        ? await cmdLoginStatus(dir, flags.get('wait'))
+                        : await cmdLogin(dir, positional[0] ?? argv[1]),
+                    )
+                : group === '__login-wait'
+                  ? () => cmdLoginWait(argv[1]!, argv[2]!, argv[3]!, argv[4])
+                  : main;
 
 run().catch(e => {
   const shared = siteErrorOutput(e);

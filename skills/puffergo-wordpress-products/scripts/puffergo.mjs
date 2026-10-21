@@ -7471,7 +7471,7 @@ div{text-align:center}</style></head><body><div>${ok ? "\u2705 \u5DF2\u6388\u674
 });
 
 // src/index.ts
-import { readFile as readFile19 } from "node:fs/promises";
+import { readFile as readFile19, writeFile as writeFile13, mkdir as mkdir11 } from "node:fs/promises";
 
 // ../silo-core/lib/model/types.ts
 var SILO_WORKSPACE_VERSION = 3;
@@ -8255,11 +8255,11 @@ function isAuthError(e) {
 var PUFFERGO_STATE_DIR = ".puffergo";
 var SITES_DIR = `${PUFFERGO_STATE_DIR}/sites`;
 var STATE_PATH = `${PUFFERGO_STATE_DIR}/state.json`;
-var siteDir = (domain) => `${SITES_DIR}/${domain}`;
-var workspacePath = (domain) => `${siteDir(domain)}/workspace.json`;
-var syncedPath = (domain) => `${siteDir(domain)}/synced.json`;
-var siteConfigPath = (domain) => `${siteDir(domain)}/config.json`;
-var siteStatePath = (domain, file) => `${siteDir(domain)}/${file}`;
+var siteDir = (domain2) => `${SITES_DIR}/${domain2}`;
+var workspacePath = (domain2) => `${siteDir(domain2)}/workspace.json`;
+var syncedPath = (domain2) => `${siteDir(domain2)}/synced.json`;
+var siteConfigPath = (domain2) => `${siteDir(domain2)}/config.json`;
+var siteStatePath = (domain2, file) => `${siteDir(domain2)}/${file}`;
 
 // ../silo-core/lib/wp/client.ts
 var decodeTermName = (s) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/&amp;/g, "&");
@@ -15341,10 +15341,1622 @@ function cmdSeo(ctx) {
   });
 }
 
+// src/lib/domainCmd.ts
+import dns from "node:dns/promises";
+var DOMAIN_USAGE = "puffergo domain check <\u57DF\u540D> [--json] [--html <\u8F93\u51FA\u8DEF\u5F84>]\n  --html \u751F\u6210\u4E00\u4EFD\u5355\u6587\u4EF6\u7F51\u9875\u62A5\u544A\uFF0C\u5BA2\u6237\u80FD\u76F4\u63A5\u70B9\u5F00\u770B\uFF08\u4E0D\u53D1\u4EFB\u4F55\u5916\u90E8\u8BF7\u6C42\uFF0C\u79BB\u7EBF\u53EF\u5F00\uFF09";
+var DNS_TIMEOUT = 6e3;
+async function withTimeout(p, ms = DNS_TIMEOUT) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(Object.assign(new Error("\u67E5\u8BE2\u8D85\u65F6"), { code: "ETIMEOUT" })), ms);
+    timer.unref?.();
+  });
+  try {
+    return await Promise.race([p, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+var dnsCode = (e) => e?.code ?? "unknown";
+async function dnsbl(name) {
+  try {
+    const codes = await withTimeout(dns.resolve4(name));
+    if (codes.some((c) => c.startsWith("127.255.255."))) {
+      return { state: "unknown", error: "resolver-blocked" };
+    }
+    return { state: "listed", codes };
+  } catch (e) {
+    const code = dnsCode(e);
+    if (code === "ENOTFOUND" || code === "ENODATA") return { state: "clean" };
+    return { state: "unknown", error: code };
+  }
+}
+var DOH_ENDPOINTS = ["https://dns.alidns.com/resolve", "https://cloudflare-dns.com/dns-query"];
+function unquoteTxt(s) {
+  if (!s.startsWith('"')) return s;
+  return s.slice(1, -1).split('" "').join("");
+}
+async function txtViaSystem(name) {
+  try {
+    const rows = await withTimeout(dns.resolveTxt(name));
+    return { state: "ok", records: rows.map((chunks) => chunks.join("")) };
+  } catch (e) {
+    const code = dnsCode(e);
+    if (code === "ENOTFOUND" || code === "ENODATA") return { state: "none", records: [] };
+    return { state: "unknown", records: [], error: code };
+  }
+}
+async function txt(name) {
+  for (const ep of DOH_ENDPOINTS) {
+    try {
+      const res = await fetch(`${ep}?name=${encodeURIComponent(name)}&type=TXT`, {
+        headers: { accept: "application/dns-json" },
+        signal: AbortSignal.timeout(7e3)
+      });
+      if (!res.ok) continue;
+      const j = await res.json();
+      if (j.Status === 3) return { state: "none", records: [] };
+      if (j.Status !== 0) return { state: "unknown", records: [], error: `doh-${j.Status}` };
+      const records = (j.Answer ?? []).filter((a) => a.type === 16).map((a) => unquoteTxt(String(a.data ?? "")));
+      return records.length ? { state: "ok", records } : { state: "none", records: [] };
+    } catch {
+    }
+  }
+  return txtViaSystem(name);
+}
+async function dohQuery(name, type) {
+  const want = type === "A" ? 1 : type === "NS" ? 2 : 15;
+  for (const ep of DOH_ENDPOINTS) {
+    try {
+      const res = await fetch(`${ep}?name=${encodeURIComponent(name)}&type=${type}`, {
+        headers: { accept: "application/dns-json" },
+        signal: AbortSignal.timeout(7e3)
+      });
+      if (!res.ok) continue;
+      const j = await res.json();
+      if (j.Status === 3) return { state: "none", records: [] };
+      if (j.Status !== 0) return { state: "unknown", records: [] };
+      const records = (j.Answer ?? []).filter((a) => a.type === want).map((a) => String(a.data ?? ""));
+      return { state: records.length ? "ok" : "none", records };
+    } catch {
+    }
+  }
+  return { state: "unknown", records: [] };
+}
+var MAIL_PROVIDERS = [
+  [/(^|\.)qiye\.aliyun\.com$/i, "\u963F\u91CC\u4E91\u4F01\u4E1A\u90AE"],
+  [/(^|\.)mx\d*\.aliyun\.com$/i, "\u963F\u91CC\u4E91\u4F01\u4E1A\u90AE"],
+  [/(^|\.)mxbiz\d*\.qq\.com$/i, "\u817E\u8BAF\u4F01\u4E1A\u90AE"],
+  [/(^|\.)mx\d*\.qq\.com$/i, "\u817E\u8BAF\u4F01\u4E1A\u90AE"],
+  [/(^|\.)163\.com$/i, "\u7F51\u6613\u4F01\u4E1A\u90AE"],
+  [/(^|\.)126\.com$/i, "\u7F51\u6613\u4F01\u4E1A\u90AE"],
+  [/(^|\.)google(mail)?\.com$/i, "Google Workspace"],
+  [/(^|\.)protection\.outlook\.com$/i, "Microsoft 365"],
+  [/(^|\.)outlook\.com$/i, "Microsoft 365"],
+  [/(^|\.)zoho\.(com|eu|in)$/i, "Zoho Mail"],
+  [/(^|\.)yandex\.net$/i, "Yandex Mail"],
+  [/(^|\.)mailgun\.org$/i, "Mailgun"],
+  [/(^|\.)sendgrid\.net$/i, "SendGrid"],
+  [/(^|\.)brevo\.com$/i, "Brevo"]
+];
+var DKIM_SELECTORS = [
+  "default",
+  "google",
+  "s1",
+  "s2",
+  "aliyun",
+  "alimail",
+  "mail",
+  "dkim",
+  "k1",
+  "selector1",
+  "selector2",
+  "smtp"
+];
+function hasRealDkimKey(record) {
+  const p = record.match(/\bp\s*=\s*([A-Za-z0-9+/=]*)/i)?.[1] ?? "";
+  return p.length >= 20;
+}
+function spfVerdict(record) {
+  const all = record.match(/[+\-~?]all\b/i)?.[0]?.toLowerCase();
+  if (!all)
+    return { state: "warn", detail: `\u5DF2\u914D\u7F6E\uFF0C\u4F46\u6CA1\u6709 all \u673A\u5236\uFF08\u6536\u4EF6\u65B9\u65E0\u6CD5\u5224\u65AD\u672A\u6388\u6743\u6765\u6E90\u8BE5\u600E\u4E48\u5904\u7406\uFF09\uFF1A${record}` };
+  if (all === "+all")
+    return { state: "invalid", detail: `\u5199\u6210\u4E86 +all\uFF0C\u7B49\u4E8E\u5141\u8BB8\u4EFB\u4F55\u4EBA\u7528\u4F60\u7684\u57DF\u540D\u53D1\u4FE1\uFF0C\u6BD4\u4E0D\u914D\u66F4\u7CDF\uFF1A${record}` };
+  if (all === "?all") return { state: "warn", detail: `\u5199\u7684\u662F ?all\uFF08\u4E2D\u6027\uFF09\uFF0C\u6536\u4EF6\u65B9\u4E0D\u4F1A\u636E\u6B64\u62E6\u622A\u4F2A\u9020\u90AE\u4EF6\uFF1A${record}` };
+  if (all === "~all") return { state: "ok", detail: `\u5DF2\u914D\u7F6E\uFF08~all \u8F6F\u5931\u8D25\uFF0C\u672A\u6388\u6743\u6765\u6E90\u8FDB\u5783\u573E\u7BB1\uFF09\uFF1A${record}` };
+  return { state: "ok", detail: `\u5DF2\u914D\u7F6E\uFF08-all \u786C\u62D2\u7EDD\uFF0C\u6700\u4E25\uFF09\uFF1A${record}` };
+}
+function dmarcVerdict(record) {
+  const policy = record.match(/\bp\s*=\s*(none|quarantine|reject)\b/i)?.[1]?.toLowerCase();
+  if (!policy) return { state: "invalid", detail: `\u8BB0\u5F55\u5B58\u5728\u4F46\u7F3A p= \u7B56\u7565\uFF0C\u7B49\u4E8E\u6CA1\u751F\u6548\uFF1A${record}` };
+  if (policy === "none")
+    return { state: "warn", detail: `p=none\uFF0C\u53EA\u89C2\u5BDF\u4E0D\u5904\u7F6E\u2014\u2014\u80FD\u6536\u62A5\u544A\uFF0C\u4F46\u4F2A\u9020\u90AE\u4EF6\u4ECD\u4F1A\u9001\u8FBE\uFF1A${record}` };
+  return { state: "ok", detail: `\u5DF2\u914D\u7F6E\uFF08p=${policy}\uFF09\uFF1A${record}` };
+}
+async function checkEmail(domain2) {
+  let mx = [];
+  let mxUnknown;
+  try {
+    mx = (await withTimeout(dns.resolveMx(domain2))).sort((a, b) => a.priority - b.priority);
+  } catch (e) {
+    const code = dnsCode(e);
+    if (code !== "ENOTFOUND" && code !== "ENODATA") mxUnknown = code;
+  }
+  const hosts = mx.map((m) => m.exchange.replace(/\.$/, "")).filter((h) => h !== "");
+  const nullMx = mx.length > 0 && hosts.length === 0;
+  const provider = hosts.length ? MAIL_PROVIDERS.find(([re]) => hosts.some((h) => re.test(h)))?.[1] ?? "\u5176\u4ED6\u670D\u52A1\u5546" : "\u2014";
+  const selfHosted = hosts.some((h) => h === domain2 || h.endsWith("." + domain2));
+  const architecture = mxUnknown ? "unknown" : nullMx ? "null" : !hosts.length ? "unknown" : selfHosted ? "self-hosted" : "third-party";
+  const [dbl, surbl, spfTxt, dmarcTxt] = await Promise.all([
+    dnsbl(`${domain2}.dbl.spamhaus.org`),
+    dnsbl(`${domain2}.multi.surbl.org`),
+    txt(domain2),
+    txt(`_dmarc.${domain2}`)
+  ]);
+  const checks = [];
+  checks.push(
+    dbl.state === "listed" ? {
+      key: "dbl",
+      label: "Spamhaus DBL",
+      state: "listed",
+      detail: `\u547D\u4E2D\uFF08\u8FD4\u56DE\u7801 ${dbl.codes?.join(", ")}\uFF09\uFF0C\u90AE\u4EF6\u4F1A\u88AB\u62D2\u6536\u6216\u964D\u6743`,
+      fix: "\u5148\u67E5\u88AB\u5217\u5165\u7684\u539F\u56E0\uFF0C\u518D\u5728 https://check.spamhaus.org/ \u7533\u8BF7\u79FB\u9664\uFF1B\u4E0D\u6E05\u6839\u56E0\uFF0C\u79FB\u9664\u540E\u51E0\u5929\u4F1A\u518D\u88AB\u5217"
+    } : dbl.state === "clean" ? { key: "dbl", label: "Spamhaus DBL", state: "clean", detail: "\u5E72\u51C0\uFF0C\u6CA1\u6709\u88AB\u5217\u5165" } : { key: "dbl", label: "Spamhaus DBL", state: "unknown", detail: `\u67E5\u4E0D\u4E86\uFF08${dbl.error}\uFF09\uFF0C\u4E0D\u80FD\u5F53\u6210\u5E72\u51C0` }
+  );
+  checks.push(
+    surbl.state === "listed" ? {
+      key: "surbl",
+      label: "SURBL",
+      state: "listed",
+      detail: `\u547D\u4E2D\uFF08\u8FD4\u56DE\u7801 ${surbl.codes?.join(", ")}\uFF09`,
+      fix: "\u68C0\u67E5\u90AE\u4EF6\u6B63\u6587\u91CC\u88AB\u4F60\u5F15\u7528\u7684\u90A3\u4E2A\u57DF\u540D\uFF0C\u901A\u5E38\u6765\u81EA\u88AB\u6302\u9A6C\u7684\u9875\u9762"
+    } : surbl.state === "clean" ? { key: "surbl", label: "SURBL", state: "clean", detail: "\u5E72\u51C0\uFF0C\u6CA1\u6709\u88AB\u5217\u5165\uFF08\u67E5\u7684\u662F\u90AE\u4EF6\u6B63\u6587\u91CC\u94FE\u63A5\u7684\u57DF\u540D\uFF09" } : { key: "surbl", label: "SURBL", state: "unknown", detail: `\u67E5\u4E0D\u4E86\uFF08${surbl.error}\uFF09\uFF0C\u4E0D\u80FD\u5F53\u6210\u5E72\u51C0` }
+  );
+  if (spfTxt.state === "unknown") {
+    checks.push({ key: "spf", label: "SPF", state: "unknown", detail: `\u67E5\u4E0D\u4E86\uFF08${spfTxt.error}\uFF09\uFF0C\u4E0D\u80FD\u5F53\u6210\u6CA1\u914D` });
+  } else {
+    const spfRecords = spfTxt.records.filter((r) => /^v=spf1\b/i.test(r.trim()));
+    if (!spfRecords.length) {
+      checks.push({
+        key: "spf",
+        label: "SPF",
+        state: "missing",
+        detail: "\u672A\u914D\u7F6E\u2014\u2014\u6536\u4EF6\u65B9\u65E0\u6CD5\u786E\u8BA4\u54EA\u4E9B\u670D\u52A1\u5668\u53EF\u4EE5\u7528\u4F60\u7684\u57DF\u540D\u53D1\u4FE1",
+        fix: "\u52A0\u4E00\u6761 TXT \u8BB0\u5F55\uFF0C\u4E3B\u673A\u8BB0\u5F55 @"
+      });
+    } else if (spfRecords.length > 1) {
+      checks.push({
+        key: "spf",
+        label: "SPF",
+        state: "invalid",
+        detail: `\u6709 ${spfRecords.length} \u6761 SPF \u8BB0\u5F55\uFF0C\u6BD4\u6CA1\u6709\u66F4\u7CDF\uFF08RFC \u53EA\u5141\u8BB8\u4E00\u6761\uFF0C\u6536\u4EF6\u65B9\u4F1A\u5224\u4E3A\u65E0\u6548\uFF09`,
+        fix: "\u5408\u5E76\u6210\u4E00\u6761"
+      });
+    } else {
+      const v = spfVerdict(spfRecords[0]);
+      checks.push({ key: "spf", label: "SPF", state: v.state, detail: v.detail });
+    }
+  }
+  const dkimHits = [];
+  let dkimUnknown = 0;
+  const dkimRows = await Promise.all(DKIM_SELECTORS.map((sel) => txt(`${sel}._domainkey.${domain2}`)));
+  dkimRows.forEach((r, i) => {
+    if (r.state === "unknown") dkimUnknown++;
+    else if (r.state === "ok" && r.records.some(hasRealDkimKey)) dkimHits.push(DKIM_SELECTORS[i]);
+  });
+  if (dkimHits.length) {
+    checks.push({ key: "dkim", label: "DKIM", state: "ok", detail: `\u5DF2\u914D\u7F6E\uFF08selector: ${dkimHits.join(", ")}\uFF09` });
+  } else if (dkimUnknown === DKIM_SELECTORS.length) {
+    checks.push({
+      key: "dkim",
+      label: "DKIM",
+      state: "unknown",
+      detail: `\u67E5\u4E0D\u4E86\uFF08${DKIM_SELECTORS.length} \u4E2A selector \u5168\u90E8\u67E5\u8BE2\u5931\u8D25\uFF09\uFF0C\u4E0D\u80FD\u5F53\u6210\u6CA1\u914D`
+    });
+  } else {
+    checks.push({
+      key: "dkim",
+      label: "DKIM",
+      state: "missing",
+      detail: `\u8BD5\u4E86 ${DKIM_SELECTORS.length} \u4E2A\u5E38\u89C1 selector \u90FD\u6CA1\u8BB0\u5F55\u3002\u53EF\u80FD\u662F\u6CA1\u914D\uFF0C\u4E5F\u53EF\u80FD\u662F\u7528\u4E86\u975E\u5E38\u89C4 selector\uFF08\u4EE5\u540E\u53F0\u4E3A\u51C6\uFF09`,
+      fix: "\u90AE\u4EF6\u670D\u52A1\u5546\u540E\u53F0\u751F\u6210\u5BC6\u94A5\u540E\uFF0C\u628A TXT \u8BB0\u5F55\u52A0\u5230\u57DF\u540D\u89E3\u6790\u91CC"
+    });
+  }
+  if (dmarcTxt.state === "unknown") {
+    checks.push({
+      key: "dmarc",
+      label: "DMARC",
+      state: "unknown",
+      detail: `\u67E5\u4E0D\u4E86\uFF08${dmarcTxt.error}\uFF09\uFF0C\u4E0D\u80FD\u5F53\u6210\u6CA1\u914D`
+    });
+  } else {
+    const rec = dmarcTxt.records.find((r) => /^v=DMARC1\b/i.test(r.trim()));
+    if (!rec) {
+      checks.push({
+        key: "dmarc",
+        label: "DMARC",
+        state: "missing",
+        detail: "\u672A\u914D\u7F6E\u2014\u2014\u6536\u4EF6\u65B9\u4E0D\u77E5\u9053\u8BE5\u600E\u4E48\u5904\u7406\u4F2A\u9020\u4F60\u57DF\u540D\u7684\u90AE\u4EF6\uFF0C\u4E5F\u6CA1\u6709\u4EBA\u7ED9\u4F60\u53D1\u62A5\u544A",
+        fix: "\u52A0\u4E00\u6761 TXT \u8BB0\u5F55\uFF0C\u4E3B\u673A\u8BB0\u5F55 _dmarc"
+      });
+    } else {
+      const v = dmarcVerdict(rec);
+      checks.push({ key: "dmarc", label: "DMARC", state: v.state, detail: v.detail });
+    }
+  }
+  let ipChecks;
+  if (architecture === "self-hosted" && hosts.length) {
+    ipChecks = [];
+    for (const host of hosts.slice(0, 2)) {
+      let ip = "";
+      try {
+        ip = (await withTimeout(dns.resolve4(host)))[0] ?? "";
+      } catch {
+        continue;
+      }
+      if (!ip) continue;
+      const rev = ip.split(".").reverse().join(".");
+      const zen = await dnsbl(`${rev}.zen.spamhaus.org`);
+      const note = zen.state === "listed" ? zen.codes?.some((c) => c === "127.0.0.10" || c === "127.0.0.11") ? "PBL \u7B56\u7565\u6807\u8BB0\uFF1A\u8FD9\u4E2A\u7F51\u6BB5\u4E0D\u8BE5\u76F4\u63A5\u53D1\u4FE1\uFF0C\u4E0D\u662F\u6EE5\u7528\u8BB0\u5F55\u3002\u8D70\u4E13\u4E1A\u53D1\u4FE1\u670D\u52A1\u5373\u53EF" : zen.codes?.some((c) => c === "127.0.0.4" || c === "127.0.0.5" || c === "127.0.0.6" || c === "127.0.0.7") ? "XBL\uFF1A\u8FD9\u53F0\u4E3B\u673A\u7591\u4F3C\u88AB\u5165\u4FB5\uFF0C\u6B63\u5728\u88AB\u4EBA\u5F53\u8DF3\u677F\u53D1\u4FE1" : "SBL\uFF1A\u88AB\u5217\u4E3A\u5783\u573E\u90AE\u4EF6\u6765\u6E90" : zen.state === "clean" ? "\u5E72\u51C0" : `\u67E5\u4E0D\u4E86\uFF08${zen.error}\uFF09`;
+      ipChecks.push({ list: "Spamhaus ZEN", ip, state: zen.state, note, codes: zen.codes });
+    }
+  }
+  const verdict = buildEmailVerdict(architecture, provider, checks, ipChecks);
+  return { architecture, provider, mx: hosts, ipChecks, checks, verdict };
+}
+function buildEmailVerdict(arch, provider, checks, ipChecks) {
+  const bad = checks.filter((c) => c.state === "listed" || c.state === "missing" || c.state === "invalid");
+  const unknown = checks.filter((c) => c.state === "unknown");
+  const ipBad = (ipChecks ?? []).filter((c) => c.state === "listed");
+  if (arch === "null") {
+    return "\u8FD9\u4E2A\u57DF\u540D\u660E\u786E\u58F0\u660E\u4E86\u4E0D\u63A5\u6536\u90AE\u4EF6\uFF08MX \u8BB0\u5F55\u662F 0 .\uFF09\u2014\u2014\u7528\u5B83\u53D1\u4FE1\uFF0C\u5927\u591A\u6570\u6536\u4EF6\u65B9\u4F1A\u76F4\u63A5\u62D2\u7EDD\u3002\u8981\u6536\u4FE1\uFF0C\u5148\u628A MX \u8BB0\u5F55\u6539\u6389\u3002";
+  }
+  if (bad.some((c) => c.state === "listed") || ipBad.length) {
+    return "\u6709\u786C\u4F24\uFF1A\u9ED1\u540D\u5355\u547D\u4E2D\uFF0C\u90AE\u4EF6\u4F1A\u88AB\u62D2\u6536\u6216\u76F4\u63A5\u4E22\u8FDB\u5783\u573E\u7BB1\u3002\u6362\u4EFB\u4F55\u90AE\u4EF6\u670D\u52A1\u5546\u90FD\u6CA1\u7528\uFF08\u57DF\u540D\u662F\u4F60\u7684\uFF09\uFF0C\u5148\u6309\u4E0B\u9762\u7684\u8DEF\u5F84\u5904\u7406\u3002";
+  }
+  if (unknown.length) return `\u6709 ${unknown.length} \u9879\u6CA1\u67E5\u901A\uFF0C\u4E0D\u80FD\u4E0B"\u5065\u5EB7"\u7684\u7ED3\u8BBA\uFF0C\u9700\u8981\u4EBA\u5DE5\u590D\u6838\u3002`;
+  if (!bad.length) {
+    return arch === "third-party" ? `\u53D1\u5F97\u51FA\u53BB\u3002\u90AE\u4EF6\u8EAB\u4EFD\u4E09\u9879\u9F50\u5168\uFF1B\u53D1\u4FE1 IP \u7531${provider === "\u5176\u4ED6\u670D\u52A1\u5546" ? "\u4F60\u7684\u90AE\u7BB1\u670D\u52A1\u5546" : provider}\u63D0\u4F9B\uFF0C\u8DDF\u4F60\u81EA\u5DF1\u7684\u670D\u52A1\u5668\u65E0\u5173\u3002` : "\u53D1\u5F97\u51FA\u53BB\u3002\u90AE\u4EF6\u8EAB\u4EFD\u4E09\u9879\u9F50\u5168\u3002";
+  }
+  const names = bad.map((c) => c.label).join("\u3001");
+  if (arch === "third-party") {
+    return `\u80FD\u53D1\u51FA\u53BB\u3002\u4F46\u6536\u4EF6\u65B9\u770B\u5230\u7684\u662F\u300C${provider}\u300D\u7684\u670D\u52A1\u5668\uFF0C\u4FE1\u4E0A\u76D6\u7684\u662F\u4F60\u7684\u57DF\u540D\u2014\u2014\u7F3A ${names} \u4F1A\u62C9\u4F4E\u8BC4\u5206\uFF0C\u66F4\u5BB9\u6613\u8FDB\u5783\u573E\u7BB1\u3002`;
+  }
+  return `\u80FD\u53D1\u51FA\u53BB\u3002\u4F46\u7F3A ${names}\uFF0C\u8FDB\u5783\u573E\u7BB1\u7684\u6982\u7387\u504F\u9AD8\u3002`;
+}
+async function probeSite(url) {
+  try {
+    const res = await fetch(url, {
+      redirect: "follow",
+      signal: AbortSignal.timeout(9e3),
+      headers: { "user-agent": "Mozilla/5.0 (compatible; puffergo-domain-check)" }
+    });
+    return { ok: res.ok, status: res.status, finalHost: new URL(res.url).hostname.replace(/^www\./, "") };
+  } catch {
+    return { ok: false };
+  }
+}
+async function checkSiteReach(domain2) {
+  const bare = domain2.replace(/^www\./, "");
+  const https = await probeSite(`https://${domain2}`);
+  if (https.ok) {
+    if (https.finalHost && https.finalHost !== bare) {
+      return { state: "redirected", detail: `\u6253\u5F00\u4F60\u7684\u57DF\u540D\u540E\u8DF3\u5230\u4E86 ${https.finalHost}\uFF0C\u786E\u8BA4\u8FD9\u662F\u4F60\u81EA\u5DF1\u8BBE\u7684\u8DF3\u8F6C` };
+    }
+    return { state: "ok", detail: "\u9996\u9875\u53EF\u4EE5\u6B63\u5E38\u6253\u5F00" };
+  }
+  const http2 = await probeSite(`http://${domain2}`);
+  if (http2.ok) {
+    return {
+      state: "insecure",
+      detail: '\u53EA\u80FD\u7528 http \u6253\u5F00\uFF0C\u6CA1\u6709\u914D HTTPS\u2014\u2014\u8BBF\u5BA2\u7684\u6D4F\u89C8\u5668\u4F1A\u5F39"\u4E0D\u5B89\u5168"\uFF0CGoogle \u6392\u540D\u4E5F\u4F1A\u5403\u4E8F\uFF0C\u8FD9\u4E00\u9879\u8981\u4FEE'
+    };
+  }
+  if (https.status && [401, 403, 405, 429].includes(https.status)) {
+    return {
+      state: "unknown",
+      detail: `\u9996\u9875\u8FD4\u56DE HTTP ${https.status}\uFF0C\u50CF\u662F\u9632\u706B\u5899\u62E6\u4E86\u68C0\u6D4B\u8BF7\u6C42\u2014\u2014\u4F60\u81EA\u5DF1\u7528\u6D4F\u89C8\u5668\u6253\u5F00\u786E\u8BA4\u4E00\u4E0B\uFF0C\u522B\u5F53\u7AD9\u70B9\u6545\u969C`
+    };
+  }
+  if (https.status) return { state: "unreachable", detail: `\u9996\u9875\u8FD4\u56DE HTTP ${https.status}\uFF0C\u8BBF\u5BA2\u53EF\u80FD\u770B\u4E0D\u5230\u5185\u5BB9` };
+  return {
+    state: "unreachable",
+    detail: "\u9996\u9875\u6253\u4E0D\u5F00\uFF08https \u548C http \u90FD\u8FDE\u4E0D\u4E0A\uFF09\uFF0C\u53EF\u80FD\u7AD9\u70B9\u505C\u4E86\uFF0C\u6216\u8005\u88AB\u62E6"
+  };
+}
+function googleSection(domain2, reach) {
+  return {
+    caveat: 'Google \u7684\u62E6\u622A\u72B6\u6001\u548C\u641C\u7D22\u5904\u7F5A\uFF0C\u7B2C\u4E09\u65B9\u62FF\u4E0D\u5230\u53EF\u9760\u6570\u636E\u3002\u8FD9\u4E00\u9879\u53EA\u7ED9\u5B98\u65B9\u5165\u53E3\uFF0C\u4E0D\u7ED9\u5224\u65AD\u2014\u2014\u4EFB\u4F55"\u6211\u5E2E\u4F60\u67E5\u8FC7\u4E86\u6CA1\u4E8B"\u7684\u8BF4\u6CD5\u90FD\u662F\u7F16\u7684\u3002',
+    safeBrowsing: {
+      url: `https://transparencyreport.google.com/safe-browsing/search?url=${encodeURIComponent(domain2)}`,
+      note: "\u70B9\u5F00\u770B\u5230\u7684\u5C31\u662F Google \u7684\u5224\u5B9A\uFF0C\u6700\u51C6\u3002\u8981\u662F\u663E\u793A\u6709\u5A01\u80C1\uFF0C\u628A\u9875\u9762\u622A\u56FE\u7ED9 AI\uFF0C\u5B83\u5E2E\u4F60\u770B\u662F\u54EA\u79CD\u3001\u600E\u4E48\u89E3\u3002"
+    },
+    searchConsole: {
+      url: "https://search.google.com/search-console",
+      note: "\u6709\u6CA1\u6709\u88AB\u641C\u7D22\u5904\u7F5A\uFF0C\u53EA\u6709\u7AD9\u4E3B\u672C\u4EBA\u80FD\u770B\uFF0C\u800C\u4E14\u5FC5\u987B\u5148\u9A8C\u8BC1\u7F51\u7AD9\u6240\u6709\u6743\uFF08\u6539 DNS \u6216\u4F20\u6587\u4EF6\uFF09\u3002\u6CA1\u9A8C\u8BC1\u8FC7\u7684\u8BDD\uFF0C\u8FD9\u4E00\u6B65\u901A\u5E38\u662F\u5361\u70B9\u3002"
+    },
+    siteReach: reach
+  };
+}
+var RDAP_BASES = {
+  com: "https://rdap.verisign.com/com/v1/domain/",
+  net: "https://rdap.verisign.com/net/v1/domain/",
+  org: "https://rdap.publicinterestregistry.org/rdap/domain/",
+  info: "https://rdap.identitydigital.services/rdap/domain/",
+  io: "https://rdap.identitydigital.services/rdap/domain/"
+};
+var ianaBootstrap;
+async function rdapBase(tld) {
+  if (RDAP_BASES[tld]) return RDAP_BASES[tld];
+  if (!ianaBootstrap) {
+    try {
+      const res = await fetch("https://data.iana.org/rdap/dns.json", { signal: AbortSignal.timeout(8e3) });
+      if (res.ok) {
+        const j = await res.json();
+        const map = {};
+        for (const [tlds, urls] of j.services ?? []) {
+          const url = urls[0];
+          if (!url) continue;
+          for (const t of tlds) map[t] = url;
+        }
+        ianaBootstrap = map;
+      }
+    } catch {
+    }
+  }
+  return ianaBootstrap?.[tld];
+}
+function registrarOf(entity) {
+  const e = entity;
+  if (e?.roles?.includes("registrar")) {
+    const vcard = e.vcardArray?.[1];
+    const fn = vcard?.find((x) => x[0] === "fn")?.[3];
+    if (fn) return fn;
+  }
+  for (const child of e?.entities ?? []) {
+    const found = registrarOf(child);
+    if (found) return found;
+  }
+  return void 0;
+}
+async function checkRegistration(domain2) {
+  const tld = domain2.split(".").pop() ?? "";
+  const ownerNote = "WHOIS \u9690\u79C1\u4FDD\u62A4\u540E\u6CE8\u518C\u4EBA\u4FE1\u606F\u5168\u90E8\u9690\u85CF\uFF0C\u5386\u53F2 WHOIS \u662F\u4ED8\u8D39\u5E93\uFF0C\u514D\u8D39\u6570\u636E\u91CC\u6CA1\u6709\u8FD9\u4E00\u9879";
+  const base = await rdapBase(tld);
+  if (!base) {
+    return {
+      state: "unknown",
+      error: `.${tld} \u540E\u7F00\u6CA1\u6709\u516C\u5F00\u7684\u6CE8\u518C\u67E5\u8BE2\u63A5\u53E3`,
+      ownerNote
+    };
+  }
+  try {
+    const res = await fetch(base + domain2, {
+      redirect: "follow",
+      signal: AbortSignal.timeout(1e4),
+      headers: { accept: "application/rdap+json" }
+    });
+    if (res.status === 404)
+      return { state: "available", kind: "fresh", kindNote: "\u8FD9\u4E2A\u57DF\u540D\u73B0\u5728\u6CA1\u4EBA\u6301\u6709\uFF0C\u53EF\u4EE5\u6CE8\u518C\u3002", ownerNote };
+    if (!res.ok) return { state: "unknown", error: `HTTP ${res.status}`, ownerNote };
+    const j = await res.json();
+    const pick = (a) => j.events?.find((e) => e.eventAction === a)?.eventDate?.slice(0, 10);
+    const created2 = pick("registration");
+    const ageDays = created2 ? Math.floor((Date.now() - new Date(created2).getTime()) / 864e5) : void 0;
+    const kind = ageDays === void 0 ? "unknown" : ageDays < 30 ? "fresh" : "existing";
+    let kindNote;
+    if (ageDays === void 0) {
+      kindNote = "\u6CE8\u518C\u65F6\u95F4\u53D6\u4E0D\u5230\uFF0C\u5224\u65AD\u4E0D\u4E86\u662F\u65B0\u57DF\u540D\u8FD8\u662F\u4E8C\u624B\u57DF\u540D\u3002";
+    } else if (ageDays < 30) {
+      kindNote = `\u521A\u6CE8\u518C ${ageDays} \u5929\uFF0C\u5168\u65B0\u57DF\u540D\u2014\u2014\u4E0D\u53EF\u80FD\u5E26\u524D\u4E3B\u4EBA\u7684\u9ED1\u540D\u5355\u8BB0\u5F55\uFF0C\u9ED1\u540D\u5355\u90A3\u51E0\u9879\u67E5\u5230\u5E72\u51C0\u662F\u5FC5\u7136\u7684\u3002`;
+    } else {
+      const years = ageDays >= 365 ? `\uFF08\u7EA6 ${Math.round(ageDays / 365)} \u5E74\uFF09` : "";
+      kindNote = `\u8FD9\u4E2A\u57DF\u540D\u5DF2\u7ECF\u5B58\u5728 ${ageDays} \u5929${years}\u3002\u6CE8\u518C\u5F97\u65E9\u4E0D\u7B49\u4E8E\u6709\u95EE\u9898\uFF0C\u53EA\u662F\u8BF4\u660E\u5B83\u88AB\u7528\u8FC7\u3002`;
+    }
+    return {
+      state: "registered",
+      created: created2,
+      expires: pick("expiration"),
+      changed: pick("last changed"),
+      registrar: registrarOf({ entities: j.entities }),
+      status: j.status,
+      ageDays,
+      kind,
+      kindNote,
+      ownerNote
+    };
+  } catch (e) {
+    return { state: "unknown", error: dnsCode(e), ownerNote };
+  }
+}
+var PARKING_HINTS = [
+  [/sedoparking|sedo\.com/i, "Sedo"],
+  [/dan\.com/i, "Dan.com"],
+  [/afternic/i, "Afternic"],
+  [/hugedomains/i, "HugeDomains"],
+  [/bodis/i, "Bodis"],
+  [/parkingcrew/i, "ParkingCrew"],
+  [/above\.com/i, "Above.com"],
+  [/cashparking|wsdns/i, "GoDaddy \u505C\u653E"],
+  [/namefind/i, "NameFind"],
+  [/buydomains/i, "BuyDomains"],
+  [/domainmarket/i, "DomainMarket"],
+  [/parklogic|rookmedia/i, "ParkLogic"],
+  [/uniregistry/i, "Uniregistry"],
+  [/parked\./i, "\u505C\u653E\u670D\u52A1\u5546"]
+];
+function detectParking(ns) {
+  for (const host of ns) {
+    for (const [re, name] of PARKING_HINTS) if (re.test(host)) return name;
+  }
+  return void 0;
+}
+async function probeCert(domain2) {
+  try {
+    const res = await fetch(`https://crt.sh/?Identity=${encodeURIComponent(domain2)}&output=json`, {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(9e3)
+    });
+    if (res.ok) {
+      const rows = await res.json();
+      if (Array.isArray(rows) && rows.length) {
+        const dates = rows.map((r) => r.not_before?.slice(0, 10)).filter(Boolean).sort();
+        return {
+          state: "hit",
+          first: dates[0],
+          last: dates[dates.length - 1],
+          count: rows.length,
+          note: `\u8BC1\u4E66\u900F\u660E\u5EA6\u65E5\u5FD7\u91CC\u6709 ${rows.length} \u6761\u7B7E\u53D1\u8BB0\u5F55\uFF0C\u6700\u65E9\u4E00\u6761\u662F ${dates[0]}\u3002`
+        };
+      }
+      if (Array.isArray(rows)) return { state: "miss", note: "\u8BC1\u4E66\u900F\u660E\u5EA6\u65E5\u5FD7\u91CC\u6CA1\u6709\u8FD9\u4E2A\u57DF\u540D\u7684\u7B7E\u53D1\u8BB0\u5F55\u3002" };
+    }
+  } catch {
+  }
+  try {
+    const res = await fetch(
+      `https://api.certspotter.com/v1/issuances?domain=${encodeURIComponent(domain2)}&include_subdomains=false&expand=dns_names`,
+      { headers: { accept: "application/json" }, signal: AbortSignal.timeout(8e3) }
+    );
+    if (res.status === 429)
+      return { state: "unknown", note: "\u8BC1\u4E66\u67E5\u8BE2\u88AB\u9650\u6D41\uFF08\u514D\u8D39\u989D\u5EA6\u6BCF\u5C0F\u65F6 100 \u6B21\uFF09\uFF0C\u8FD9\u4E00\u9879\u6CA1\u67E5\u6210\u3002" };
+    if (!res.ok) return { state: "unknown", note: `\u8BC1\u4E66\u67E5\u8BE2\u5931\u8D25\uFF08HTTP ${res.status}\uFF09\uFF0C\u8FD9\u4E00\u9879\u6CA1\u67E5\u6210\u3002` };
+    const rows = await res.json();
+    if (!Array.isArray(rows)) return { state: "unknown", note: "\u8BC1\u4E66\u67E5\u8BE2\u8FD4\u56DE\u4E86\u770B\u4E0D\u61C2\u7684\u4E1C\u897F\uFF0C\u8FD9\u4E00\u9879\u6CA1\u67E5\u6210\u3002" };
+    if (!rows.length) return { state: "miss", note: "\u8FD1\u671F\u6CA1\u6709\u67E5\u5230\u8BC1\u4E66\u7B7E\u53D1\u8BB0\u5F55\u3002" };
+    const dates = rows.map((r) => r.not_before?.slice(0, 10)).filter(Boolean).sort();
+    return {
+      state: "hit",
+      last: dates[dates.length - 1],
+      count: rows.length,
+      // 这个接口只回最近的记录，说"最早一条"就是编 —— 只能报最近一次。
+      note: `\u8FD1\u671F\u6709 ${rows.length} \u6761\u7B7E\u53D1\u8BB0\u5F55\uFF0C\u6700\u8FD1\u4E00\u6B21\u662F ${dates[dates.length - 1]}\uFF08\u514D\u8D39\u63A5\u53E3\u53EA\u7ED9\u6700\u8FD1\u7684\uFF0C\u66F4\u65E9\u7684\u770B\u4E0D\u5230\uFF09\u3002`
+    };
+  } catch {
+    return { state: "unknown", note: "\u8BC1\u4E66\u67E5\u8BE2\u6CA1\u8FDE\u4E0A\uFF0C\u8FD9\u4E00\u9879\u6CA1\u67E5\u6210\u3002" };
+  }
+}
+async function probePassiveDns(domain2) {
+  const errors = [];
+  try {
+    const res = await fetch(`https://api.hackertarget.com/hostsearch/?q=${encodeURIComponent(domain2)}`, {
+      signal: AbortSignal.timeout(9e3)
+    });
+    const text = res.ok ? (await res.text()).trim() : "";
+    const throttled = !res.ok || /error|exceeded|quota|membership/i.test(text) && !text.includes(",");
+    if (!throttled) {
+      const hosts = text.split("\n").map((line) => line.split(",")[0]?.trim()).filter((h) => Boolean(h) && h.includes("."));
+      if (hosts.length) {
+        return { state: "hit", hosts: hosts.slice(0, 6), note: `\u88AB\u52A8 DNS \u91CC\u6709 ${hosts.length} \u6761\u89E3\u6790\u5386\u53F2\u3002` };
+      }
+      return { state: "miss", note: "\u88AB\u52A8 DNS \u91CC\u6CA1\u6709\u67E5\u5230\u89E3\u6790\u5386\u53F2\u3002" };
+    }
+    errors.push("\u4E3B\u6E90\u9650\u6D41");
+  } catch {
+    errors.push("\u4E3B\u6E90\u6CA1\u8FDE\u4E0A");
+  }
+  try {
+    const res = await fetch(`https://api.subdomain.center/?domain=${encodeURIComponent(domain2)}`, {
+      signal: AbortSignal.timeout(1e4)
+    });
+    if (!res.ok) return { state: "unknown", note: `\u88AB\u52A8 DNS \u67E5\u8BE2\u5931\u8D25\uFF08${errors.join("\uFF0C")}\uFF1BHTTP ${res.status}\uFF09\u3002` };
+    const rows = await res.json();
+    if (!Array.isArray(rows)) return { state: "unknown", note: "\u88AB\u52A8 DNS \u8FD4\u56DE\u4E86\u770B\u4E0D\u61C2\u7684\u4E1C\u897F\uFF0C\u8FD9\u4E00\u9879\u6CA1\u67E5\u6210\u3002" };
+    const hosts = [...new Set(rows.map((h) => String(h)).filter((h) => h && !h.startsWith("*")))];
+    if (!hosts.length) return { state: "miss", note: "\u88AB\u52A8 DNS \u91CC\u6CA1\u6709\u67E5\u5230\u89E3\u6790\u5386\u53F2\u3002" };
+    return { state: "hit", hosts: hosts.slice(0, 6), note: `\u88AB\u52A8 DNS \u91CC\u6709 ${hosts.length} \u6761\u89E3\u6790\u5386\u53F2\u3002` };
+  } catch {
+    return { state: "unknown", note: `\u88AB\u52A8 DNS \u4E24\u4E2A\u6E90\u90FD\u6CA1\u8FDE\u4E0A\uFF08${errors.join("\uFF0C")}\uFF09\uFF0C\u8FD9\u4E00\u9879\u6CA1\u67E5\u6210\u3002` };
+  }
+}
+async function probeResidue(domain2) {
+  const [a, ns, mx, cert, passive] = await Promise.all([
+    dohQuery(domain2, "A"),
+    dohQuery(domain2, "NS"),
+    dohQuery(domain2, "MX"),
+    probeCert(domain2),
+    probePassiveDns(domain2)
+  ]);
+  const hasA = a.records.length > 0;
+  const hasNs = ns.records.length > 0;
+  const hasMx = mx.records.length > 0;
+  const hasDns = hasA || hasNs || hasMx;
+  const parked = detectParking(ns.records);
+  const dnsUnknown = [a, ns, mx].some((x) => x.state === "unknown");
+  const base = { a: a.records, ns: ns.records, mx: mx.records, cert, passive, parked };
+  const hardHits = [];
+  if (cert.state === "hit") {
+    hardHits.push(`\u8BC1\u4E66\u65E5\u5FD7\u91CC\u7559\u7740\u5B83\u7684\u7B7E\u53D1\u8BB0\u5F55\uFF08\u6700\u8FD1\u4E00\u6B21 ${cert.last ?? cert.first ?? "\u65F6\u95F4\u4E0D\u660E"}\uFF09`);
+  }
+  if (passive.state === "hit") hardHits.push("\u88AB\u52A8 DNS \u91CC\u7559\u7740\u5B83\u89E3\u6790\u8FC7\u7684\u5386\u53F2");
+  if (hardHits.length) {
+    const dnsBit = hasDns ? "\u5F53\u524D DNS \u91CC\u4E5F\u8FD8\u914D\u7740\u89E3\u6790\u3002" : "\u5F53\u524D DNS \u662F\u7A7A\u7684\uFF0C\u53EA\u770B DNS \u4F1A\u6F0F\u3002";
+    const parkBit = parked ? `\u5B83\u73B0\u5728\u6B63\u6302\u5728 ${parked} \u7684\u505C\u653E\u9875\u4E0A\u2014\u2014\u6709\u4EBA\u5728\u56E4\u7740\u7B49\u5356\u3002` : "";
+    return {
+      ...base,
+      state: "traces",
+      strength: "hard",
+      note: `${hardHits.join("\uFF0C")}\u3002${dnsBit}${parkBit}\u4EE5\u524D\u7528\u8FC7\u4E0D\u7B49\u4E8E\u6709\u6C61\u70B9\u2014\u2014\u6709\u6CA1\u6709\u9ED1\u540D\u5355\u8BB0\u5F55\uFF0C\u770B\u7B2C 2 \u8282\u7684\u5B9E\u67E5\u7ED3\u679C\u3002`
+    };
+  }
+  if (hasDns) {
+    const bits = [];
+    if (hasA) bits.push(`\u7F51\u7AD9\u8FD8\u6307\u5411 ${a.records.slice(0, 2).join("\u3001")}`);
+    if (hasNs) bits.push(`\u89E3\u6790\u8FD8\u6258\u7BA1\u5728 ${ns.records.slice(0, 2).join("\u3001")}`);
+    if (hasMx) bits.push(`\u90AE\u4EF6\u8FD8\u6307\u5411 ${mx.records.slice(0, 2).join("\u3001")}`);
+    const parkBit = parked ? `\u6258\u7BA1\u65B9 ${parked} \u662F\u57DF\u540D\u505C\u653E\u5546\u2014\u2014\u6709\u4EBA\u5728\u56E4\u7740\u7B49\u5356\u3002` : "";
+    return {
+      ...base,
+      state: "traces",
+      strength: "weak",
+      note: `DNS \u91CC\u8FD8\u7559\u7740\u8BB0\u5F55\uFF1A${bits.join("\uFF1B")}\u3002${parkBit}\u8BF4\u660E\u5B83\u4EE5\u524D\u6709\u4EBA\u5728\u7528\u3001\u53EA\u662F\u5230\u671F\u6CA1\u4EBA\u7EED\u6389\u51FA\u6765\u7684\u3002\u4EE5\u524D\u7528\u8FC7\u4E0D\u7B49\u4E8E\u6709\u6C61\u70B9\uFF0C\u770B\u7B2C 2 \u8282\u7684\u5B9E\u67E5\u7ED3\u679C\u3002`
+    };
+  }
+  const unknownBits = [];
+  if (dnsUnknown) unknownBits.push("\u5F53\u524D DNS");
+  if (cert.state === "unknown") unknownBits.push("\u8BC1\u4E66\u65E5\u5FD7");
+  if (passive.state === "unknown") unknownBits.push("\u88AB\u52A8 DNS");
+  if (unknownBits.length) {
+    return {
+      ...base,
+      state: "unknown",
+      strength: "unknown",
+      note: `\u5DF2\u7ECF\u67E5\u5230\u7684\u51E0\u5904\u90FD\u6CA1\u75D5\u8FF9\uFF0C\u4F46${unknownBits.join("\u3001")}\u6CA1\u67E5\u6210\u2014\u2014\u4E0D\u80FD\u62FF\u8FD9\u4E2A\u5F53"\u5E72\u51C0"\u3002\u8FC7\u4E00\u4F1A\u513F\u91CD\u8DD1\u4E00\u6B21\u3002`
+    };
+  }
+  return {
+    ...base,
+    state: "clean",
+    strength: "none",
+    note: "DNS\u3001\u8BC1\u4E66\u65E5\u5FD7\u3001\u89E3\u6790\u5386\u53F2\u4E09\u5904\u90FD\u6CA1\u6709\u75D5\u8FF9\u3002\u5B83\u4E5F\u53EF\u80FD\u4EE5\u524D\u88AB\u4EBA\u56E4\u7740\u4F46\u4E00\u8DEF\u6CA1\u5EFA\u7AD9\u2014\u2014\u90A3\u79CD\u60C5\u51B5\u6CA1\u6709\u9ED1\u540D\u5355\u5386\u53F2\u53EF\u7EE7\u627F\uFF0C\u5BF9\u4F60\u662F\u597D\u4E8B\u3002"
+  };
+}
+function reportIdOf(domain2, iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "PG-00000000-0000-0000";
+  const p = (n) => String(n).padStart(2, "0");
+  let h = 2166136261;
+  for (const ch of domain2) {
+    h ^= ch.codePointAt(0) ?? 0;
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  const tail = h.toString(16).toUpperCase().padStart(8, "0").slice(0, 4);
+  return `PG-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}-${tail}`;
+}
+function buildHeadline(email, google, reg) {
+  if (reg.state === "available") {
+    const res = reg.residue;
+    const listChecks = email.checks.filter((c) => c.key === "dbl" || c.key === "surbl");
+    const listed = listChecks.filter((c) => c.state === "listed");
+    const listUnknown = listChecks.filter((c) => c.state === "unknown");
+    if (listed.length) {
+      return {
+        scenario: "buy",
+        tone: "bad",
+        title: "\u4E0D\u80FD\u6CE8\u518C",
+        detail: `\u53EF\u80FD\u6709\u95EE\u9898\uFF1A${listed.map((c) => c.label).join("\u3001")} \u91CC\u8FD8\u7559\u7740\u5B83\u7684\u8BB0\u5F55\uFF0C\u4E70\u4E0B\u6765\u4E5F\u53D1\u4E0D\u51FA\u4FE1\u3002\u6CE8\u518C\u5546\u90A3\u80FD\u4E0B\u5355\uFF0C\u4F46\u4E70\u4E86\u7528\u4E0D\u4E86\u3002`
+      };
+    }
+    if (listUnknown.length) {
+      return {
+        scenario: "buy",
+        tone: "warn",
+        title: "\u5224\u65AD\u4E0D\u4E86",
+        detail: `\u9ED1\u540D\u5355\u8FD9\u4E00\u9879\u6CA1\u67E5\u901A\uFF08${listUnknown.map((c) => c.label).join("\u3001")}\uFF09\uFF0C\u5224\u65AD\u4E0D\u4E86\u5B83\u6709\u6CA1\u6709\u9ED1\u5386\u53F2\u3002\u91CD\u8DD1\u4E00\u6B21\u518D\u770B\u3002`
+      };
+    }
+    if (res?.state === "traces") {
+      const why = [];
+      if (res.cert?.state === "hit") why.push("\u8BC1\u4E66\u65E5\u5FD7");
+      if (res.passive?.state === "hit") why.push("\u89E3\u6790\u5386\u53F2");
+      if (!why.length) why.push("DNS");
+      return {
+        scenario: "buy",
+        tone: "warn",
+        title: "\u53EF\u4EE5\u6CE8\u518C",
+        detail: `\u6CA1\u67E5\u5230\u9ED1\u540D\u5355\u8BB0\u5F55\uFF0C\u53EF\u4EE5\u6CE8\u518C\u3002\u4F46\u8FD9\u540D\u5B57\u4EE5\u524D\u88AB\u4EBA\u7528\u8FC7\uFF08${why.join("\u3001")}\u91CC\u7559\u7740\u8BB0\u5F55\uFF09\u2014\u2014\u7528\u8FC7\u4E0D\u7B49\u4E8E\u6709\u95EE\u9898\uFF0C\u4ECB\u610F\u7684\u8BDD\u6362\u4E2A\u6CA1\u4EBA\u78B0\u8FC7\u7684\u66F4\u7701\u5FC3\u3002`
+      };
+    }
+    if (res?.state === "unknown") {
+      return {
+        scenario: "buy",
+        tone: "warn",
+        title: "\u53EF\u4EE5\u6CE8\u518C",
+        detail: "\u6CA1\u67E5\u5230\u9ED1\u540D\u5355\u8BB0\u5F55\uFF0C\u53EF\u4EE5\u6CE8\u518C\u3002\u4F46\u5B83\u4EE5\u524D\u6709\u6CA1\u6709\u88AB\u7528\u8FC7\u6CA1\u67E5\u901A\u2014\u2014\u75D5\u8FF9\u4E5F\u53EF\u80FD\u65E9\u88AB\u6E05\u6389\u4E86\uFF0C\u8FD9\u4E00\u70B9\u4E0D\u6253\u5305\u7968\u3002"
+      };
+    }
+    return {
+      scenario: "buy",
+      tone: "ok",
+      title: "\u53EF\u4EE5\u6CE8\u518C",
+      detail: "\u6CA1\u53D1\u73B0\u95EE\u9898\uFF1A\u73B0\u5728\u6CA1\u4EBA\u6301\u6709\uFF0C\u4E5F\u6CA1\u67E5\u5230\u9ED1\u5386\u53F2\u3002"
+    };
+  }
+  if (reg.state === "unknown") {
+    if ((reg.error ?? "").includes("\u6CA1\u6709\u516C\u5F00\u7684\u6CE8\u518C\u67E5\u8BE2\u63A5\u53E3")) {
+      const r = reg.residue;
+      const inUse = Boolean(r && (r.a.length || r.ns.length || r.mx.length));
+      if (inUse) {
+        return {
+          scenario: "diagnose",
+          tone: "warn",
+          title: "\u5224\u65AD\u4E0D\u4E86",
+          detail: `${reg.error}\uFF0C\u80FD\u4E0D\u80FD\u6CE8\u518C\u53EA\u6709\u6CE8\u518C\u5546\u80FD\u56DE\u7B54\u3002\u4E0D\u8FC7\u5B83\u7684\u89E3\u6790\u548C\u90AE\u7BB1\u90FD\u5728\u8DD1\uFF0C\u8BF4\u660E\u73B0\u5728\u6709\u4EBA\u6301\u6709\u2014\u2014\u60F3\u63A5\u624B\u5F97\u5148\u95EE\u62A5\u4EF7\u3002`
+        };
+      }
+      return {
+        scenario: "diagnose",
+        tone: "warn",
+        title: "\u5224\u65AD\u4E0D\u4E86",
+        detail: `${reg.error}\uFF0CDNS \u91CC\u4E5F\u6CA1\u6709\u8BB0\u5F55\u3002\u80FD\u4E0D\u80FD\u6CE8\u518C\u53EA\u80FD\u53BB\u6CE8\u518C\u5546\u7F51\u7AD9\u641C\u3002`
+      };
+    }
+    return {
+      scenario: "diagnose",
+      tone: "warn",
+      title: "\u5224\u65AD\u4E0D\u4E86",
+      detail: `\u6CE8\u518C\u4FE1\u606F\u53D6\u4E0D\u5230\uFF08${reg.error ?? "\u672A\u77E5\u539F\u56E0"}\uFF09\uFF0C\u4E0D\u77E5\u9053\u8FD9\u57DF\u540D\u5F52\u8C01\u3002`
+    };
+  }
+  const hard = [];
+  if (email.checks.some((c) => c.state === "listed")) hard.push("\u57DF\u540D\u5728\u9ED1\u540D\u5355\u91CC");
+  if (google.siteReach.state === "unreachable") hard.push("\u7F51\u7AD9\u6253\u4E0D\u5F00");
+  if (email.checks.some((c) => c.key === "spf" && c.state === "invalid")) hard.push("SPF \u653E\u884C\u4E86\u4F2A\u9020\u90AE\u4EF6");
+  const softMail = email.checks.filter((c) => c.state === "missing" || c.state === "invalid" && c.key !== "spf").map((c) => c.label);
+  const softSite = google.siteReach.state === "insecure";
+  const soft = [...softMail, ...softSite ? ["\u7AD9\u70B9\u6CA1\u914D HTTPS"] : []];
+  const unknown = email.checks.filter((c) => c.state === "unknown");
+  if (hard.length) {
+    return {
+      scenario: "diagnose",
+      tone: "bad",
+      title: "\u6709\u95EE\u9898",
+      detail: `${hard.join("\u3001")}\u3002\u5927\u95EE\u9898\u8FD8\u662F\u5C0F\u95EE\u9898\u3001\u600E\u4E48\u4FEE\uFF0C\u5F80\u4E0B\u770B 02\u300104 \u6BB5\uFF0C\u4E00\u6B21\u6539\u4E00\u5904\u3002`
+    };
+  }
+  if (soft.length) {
+    const bits = [];
+    if (softMail.length) bits.push(`${softMail.join("\u3001")} \u6CA1\u914D\u597D`);
+    if (softSite) bits.push("\u7AD9\u70B9\u6CA1\u914D HTTPS\uFF08\u8BBF\u5BA2\u6D4F\u89C8\u5668\u4F1A\u63D0\u793A\u4E0D\u5B89\u5168\uFF09");
+    return {
+      scenario: "diagnose",
+      tone: "warn",
+      title: "\u6709\u95EE\u9898",
+      detail: `\u5C0F\u95EE\u9898\uFF1A${bits.join("\uFF1B")}\u3002\u4E0D\u5F71\u54CD\u73B0\u5728\u80FD\u4E0D\u80FD\u7528\uFF0C\u4F46\u90FD\u4F1A\u6263\u5206\uFF0C\u5F80\u4E0B\u770B\u5177\u4F53\u662F\u54EA\u4E00\u6BB5\u3002`
+    };
+  }
+  if (unknown.length) {
+    const checked = email.checks.filter((c) => c.state !== "unknown");
+    if (!checked.length) {
+      return {
+        scenario: "diagnose",
+        tone: "warn",
+        title: "\u5224\u65AD\u4E0D\u4E86",
+        detail: `\u6709 ${unknown.length} \u9879\u6CA1\u67E5\u901A\uFF0C\u4E00\u9879\u90FD\u6CA1\u62FF\u5230\u7ED3\u679C\uFF0C\u6CA1\u6CD5\u4E0B\u5224\u65AD\u3002\u7A0D\u540E\u91CD\u8DD1\u4E00\u6B21\u3002`
+      };
+    }
+    return {
+      scenario: "diagnose",
+      tone: "ok",
+      title: "\u6CA1\u53D1\u73B0\u95EE\u9898",
+      detail: `\u67E5\u5230\u7684 ${checked.length} \u9879\u90FD\u6B63\u5E38\u3002\u53E6\u6709 ${unknown.length} \u9879\u6CA1\u67E5\u901A\uFF0C\u4E0B\u9762\u6807\u4E86\u300C\u6CA1\u67E5\u6210\u300D\u2014\u2014\u90A3\u51E0\u9879\u4E0D\u7B97\u5E72\u51C0\uFF0C\u8FC7\u4E00\u4F1A\u513F\u91CD\u8DD1\u4E00\u6B21\u5C31\u80FD\u8865\u4E0A\u3002`
+    };
+  }
+  return {
+    scenario: "diagnose",
+    tone: "ok",
+    title: "\u6CA1\u53D1\u73B0\u95EE\u9898",
+    detail: "\u9ED1\u540D\u5355\u3001\u90AE\u4EF6\u914D\u7F6E\u3001\u7F51\u7AD9\u90FD\u67E5\u4E86\uFF0C\u6CA1\u53D1\u73B0\u5F02\u5E38\u3002"
+  };
+}
+function buildNext(email, google, reg) {
+  const out = [];
+  if (reg.state === "available") {
+    if (reg.residue?.state === "traces") {
+      out.push({
+        who: "self",
+        text: "\u60F3\u66F4\u653E\u5FC3\u5C31\u6362\u4E2A\u6CA1\u4EBA\u78B0\u8FC7\u7684\u540D\u5B57\uFF1B\u6267\u610F\u7528\u8FD9\u4E2A\uFF0C\u6CE8\u518C\u5546\u4E00\u822C\u7ED9 3\u20135 \u5929\u5220\u9664\u9000\u6B3E\u671F\uFF0C\u5148\u95EE\u6E05"
+      });
+      out.push({ who: "self", text: "\u6CE8\u518C\u540E\u5934\u4E24\u5929\u53D1\u4E00\u5C01\u6D4B\u8BD5\u4FE1\u9A8C\u8BC1\u2014\u2014\u4EE5\u524D\u7528\u8FC7\u4E0D\u7B49\u4E8E\u53D1\u4E0D\u51FA\u4FE1\uFF0C\u8BD5\u4E00\u6B21\u5C31\u6709\u7B54\u6848" });
+      out.push({ who: "us", text: "\u60F3\u7528\u8FD9\u4E2A\u57DF\u540D\u3001\u53C8\u6015\u5B83\u6709\u5386\u53F2\u5305\u88B1\uFF0C\u6211\u4EEC\u53EF\u4EE5\u5148\u628A\u5B83\u7684\u5386\u53F2\u75D5\u8FF9\u8FC7\u4E00\u904D\u518D\u51B3\u5B9A" });
+    } else if (reg.residue?.state === "unknown") {
+      out.push({ who: "self", text: "\u8FC7\u4E00\u4F1A\u513F\u91CD\u8DD1\u4E00\u6B21\u8FD9\u4E2A\u547D\u4EE4\u2014\u2014\u521A\u624D\u6709\u51E0\u5904\u6CA1\u67E5\u901A\uFF0C\u6CA1\u67E5\u901A\u4E0D\u7B49\u4E8E\u5E72\u51C0" });
+      out.push({ who: "self", text: "\u6CE8\u518C\u65F6\u5C31\u628A\u81EA\u52A8\u7EED\u8D39\u6253\u5F00\uFF1A\u57DF\u540D\u8FC7\u671F\u88AB\u522B\u4EBA\u62A2\u6CE8\uFF0C\u518D\u4E70\u56DE\u6765\u901A\u5E38\u8981\u51E0\u5343\u5757" });
+    } else {
+      out.push({ who: "self", text: "\u6CE8\u518C\u65F6\u5C31\u628A\u81EA\u52A8\u7EED\u8D39\u6253\u5F00\uFF1A\u57DF\u540D\u8FC7\u671F\u88AB\u522B\u4EBA\u62A2\u6CE8\uFF0C\u518D\u4E70\u56DE\u6765\u901A\u5E38\u8981\u51E0\u5343\u5757" });
+      out.push({ who: "self", text: "\u6CE8\u518C\u524D\u628A\u540D\u5B57\u5FF5\u7ED9\u540C\u4E8B\u542C\u4E00\u904D\u2014\u2014\u592A\u957F\u6216\u5E26\u8FDE\u5B57\u7B26\u7684\u57DF\u540D\uFF0C\u7535\u8BDD\u91CC\u62A5\u51FA\u6765\u5BB9\u6613\u62FC\u9519" });
+    }
+    out.push({ who: "us", text: "\u6CE8\u518C\u5B8C\u628A\u4F01\u4E1A\u90AE\u914D\u597D\u3001\u518D\u8DD1\u4E00\u6B21\u8FD9\u4E2A\u547D\u4EE4\uFF0C\u624D\u77E5\u9053\u90AE\u4EF6\u5230\u5E95\u53D1\u4E0D\u53D1\u5F97\u51FA\u53BB" });
+    out.push({ who: "us", text: "\u57DF\u540D\u3001\u4F01\u4E1A\u90AE\u3001CF\u3001\u5EFA\u7AD9\u8FD9\u4E00\u5957\u4E0D\u60F3\u81EA\u5DF1\u6298\u817E\uFF0C\u6211\u4EEC\u53EF\u4EE5\u4E00\u8D77\u914D\u597D" });
+    return out;
+  }
+  const seemsUnused = !reg.residue || !reg.residue.a.length && !reg.residue.ns.length && !reg.residue.mx.length;
+  if (reg.state === "unknown" && seemsUnused && (reg.error ?? "").includes("\u6CA1\u6709\u516C\u5F00\u7684\u6CE8\u518C\u67E5\u8BE2\u63A5\u53E3")) {
+    out.push({ who: "self", text: `${reg.error}\u2014\u2014\u53BB\u6CE8\u518C\u5546\u7F51\u7AD9\u641C\u4E00\u4E0B\u8FD9\u4E2A\u57DF\u540D\uFF0C\u80FD\u4E0D\u80FD\u6CE8\u518C\u53EA\u6709\u4ED6\u4EEC\u80FD\u544A\u8BC9\u4F60` });
+  }
+  const missing = email.checks.filter((c) => c.state === "missing" || c.state === "invalid" && c.key !== "spf");
+  if (missing.length) {
+    out.push({
+      who: "self",
+      text: `\u8865\u9F50 ${missing.map((c) => c.label).join(" / ")}\uFF1A\u5728\u57DF\u540D\u89E3\u6790\u540E\u53F0\u52A0 TXT \u8BB0\u5F55\uFF0C\u5341\u5206\u949F\u80FD\u751F\u6548`
+    });
+  }
+  if (email.checks.some((c) => c.state === "invalid" && c.key === "spf")) {
+    out.push({ who: "self", text: 'SPF \u91CC\u7684 +all \u5FC5\u987B\u6539\u6389\uFF1A\u5B83\u7B49\u4E8E\u544A\u8BC9\u5168\u4E16\u754C"\u8C01\u90FD\u53EF\u4EE5\u7528\u6211\u7684\u57DF\u540D\u53D1\u4FE1"' });
+  }
+  if (email.checks.some((c) => c.state === "listed")) {
+    out.push({ who: "self", text: "\u5148\u53BB check.spamhaus.org \u770B\u88AB\u5217\u5165\u7684\u539F\u56E0\uFF0C\u518D\u7533\u8BF7\u79FB\u9664\uFF1B\u6839\u56E0\u4E0D\u9664\u4F1A\u53CD\u590D\u88AB\u5217" });
+  }
+  if (google.siteReach.state === "insecure") {
+    out.push({
+      who: "self",
+      text: "\u7ED9\u7AD9\u70B9\u88C5\u4E00\u5F20 SSL \u8BC1\u4E66\uFF08\u4E3B\u673A\u5546\u540E\u53F0\u57FA\u672C\u4E00\u952E\uFF0C\u5F88\u591A\u8FD8\u514D\u8D39\uFF09\uFF0C\u88C5\u5B8C\u628A http \u5F3A\u5236\u8DF3 https"
+    });
+  } else if (google.siteReach.state !== "ok") {
+    out.push({ who: "self", text: "\u5148\u786E\u8BA4\u7F51\u7AD9\u672C\u8EAB\u6253\u5F97\u5F00\uFF08\u6362\u7F51\u7EDC\u3001\u6362\u8BBE\u5907\u5404\u8BD5\u4E00\u6B21\uFF09\uFF0C\u7AD9\u4E0D\u901A\u7684\u65F6\u5019\u522B\u7684\u68C0\u6D4B\u90FD\u6CA1\u610F\u4E49" });
+  }
+  out.push({ who: "self", text: "\u81EA\u5DF1\u70B9\u5F00 Safe Browsing \u67E5\u8BE2\u9875\u770B\u4E00\u773C\uFF0CGoogle \u7684\u5224\u5B9A\u662F\u5B9E\u65F6\u7684\uFF08\u94FE\u63A5\u5728 02 \u6BB5\uFF09" });
+  out.push({
+    who: "us",
+    text: "\u60F3\u628A Search Console \u90A3\u8FB9\u6253\u901A\uFF08\u8981\u5148\u9A8C\u8BC1\u7F51\u7AD9\u6240\u6709\u6743\uFF09\uFF0C\u6216\u8005\u7AD9\u5EFA\u597D\u4E86\u5374\u4E00\u76F4\u6CA1\u8BE2\u76D8\uFF0C\u8FD9\u4E9B\u662F\u6211\u4EEC\u65E5\u5E38\u5728\u505A\u7684\u6D3B"
+  });
+  return out;
+}
+function normalizeDomain(input) {
+  let d = input.trim().toLowerCase();
+  d = d.replace(/^https?:\/\//, "").replace(/^www\./, "");
+  d = d.split("/")[0].split("?")[0].split("#")[0].split(":")[0];
+  return d;
+}
+function isValidDomain(d) {
+  return /^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$/.test(d) && d.includes(".");
+}
+async function cmdDomainCheck(ctx) {
+  const raw = ctx.positional[0];
+  if (!raw) {
+    return {
+      ok: false,
+      code: "usage",
+      message: DOMAIN_USAGE,
+      checkedAt: "",
+      domain: ""
+    };
+  }
+  const domain2 = normalizeDomain(raw);
+  if (!isValidDomain(domain2)) {
+    return {
+      ok: false,
+      code: "bad_domain",
+      message: `\u8FD9\u4E0D\u662F\u4E00\u4E2A\u5408\u6CD5\u57DF\u540D\uFF1A${raw}`,
+      checkedAt: "",
+      domain: domain2
+    };
+  }
+  const [email, siteReach, registration] = await Promise.all([
+    checkEmail(domain2),
+    checkSiteReach(domain2),
+    checkRegistration(domain2)
+  ]);
+  let reach = siteReach;
+  if (registration.state === "available") {
+    registration.residue = await probeResidue(domain2);
+    email.skipped = "\u57DF\u540D\u8FD8\u6CA1\u6CE8\u518C\uFF0C\u6CA1\u6709\u90AE\u7BB1\u914D\u7F6E\u53EF\u67E5\u2014\u2014\u8FD9\u4E00\u9879\u7B49\u6CE8\u518C\u5B8C\u3001\u90AE\u7BB1\u914D\u597D\u4E4B\u540E\u518D\u8DD1\u3002";
+    email.verdict = "\u57DF\u540D\u8FD8\u6CA1\u6CE8\u518C\uFF0C\u73B0\u5728\u5224\u65AD\u4E0D\u4E86\u90AE\u4EF6\u53D1\u4E0D\u53D1\u5F97\u51FA\u53BB\u3002";
+    reach = { state: "unknown", detail: "\u57DF\u540D\u8FD8\u6CA1\u6CE8\u518C\uFF0C\u6CA1\u6709\u7AD9\u70B9\u53EF\u67E5" };
+  } else if (registration.state === "unknown") {
+    registration.residue = await probeResidue(domain2);
+    const r = registration.residue;
+    if (!r.a.length && !r.ns.length && !r.mx.length) {
+      email.skipped = "\u8FD9\u4E2A\u57DF\u540D\u73B0\u5728\u6CA1\u6709\u4EFB\u4F55\u89E3\u6790\u8BB0\u5F55\uFF0C\u6CA1\u6709\u90AE\u7BB1\u914D\u7F6E\u53EF\u67E5\u3002";
+      email.verdict = "\u57DF\u540D\u6CA1\u5728\u89E3\u6790\uFF0C\u5224\u65AD\u4E0D\u4E86\u90AE\u4EF6\u53D1\u4E0D\u53D1\u5F97\u51FA\u53BB\u3002";
+      reach = { state: "unknown", detail: "\u57DF\u540D\u6CA1\u6709\u89E3\u6790\u8BB0\u5F55\uFF0C\u6CA1\u6709\u7AD9\u70B9\u53EF\u67E5" };
+    }
+  }
+  const google = googleSection(domain2, reach);
+  const checkedAt = (/* @__PURE__ */ new Date()).toISOString();
+  return {
+    ok: true,
+    domain: domain2,
+    checkedAt,
+    reportId: reportIdOf(domain2, checkedAt),
+    headline: buildHeadline(email, google, registration),
+    email,
+    google,
+    registration,
+    next: buildNext(email, google, registration)
+  };
+}
+var ICON = {
+  ok: "\u2705",
+  clean: "\u2705",
+  warn: "\u26A0\uFE0F",
+  missing: "\u274C",
+  invalid: "\u274C",
+  listed: "\u274C",
+  unknown: "\u26A0\uFE0F"
+};
+var ARCH_TEXT = {
+  "third-party": "\u7B2C\u4E09\u65B9\u4F01\u4E1A\u90AE",
+  "self-hosted": "\u4E3B\u673A\u81EA\u5E26\u90AE\u4EF6",
+  null: "\u58F0\u660E\u4E86\u4E0D\u63A5\u6536\u90AE\u4EF6\uFF08MX \u662F 0 .\uFF09",
+  unknown: "\u5224\u65AD\u4E0D\u4E86\uFF08MX \u6CA1\u67E5\u5230\uFF09"
+};
+var STATUS_TEXT = {
+  active: "\u6B63\u5E38\u6301\u6709",
+  ok: "\u6B63\u5E38",
+  inactive: "\u672A\u914D\u7F6E\u89E3\u6790",
+  clienttransferprohibited: "\u7981\u6B62\u8F6C\u79FB",
+  clientdeleteprohibited: "\u7981\u6B62\u5220\u9664",
+  clientupdateprohibited: "\u7981\u6B62\u4FEE\u6539",
+  clientrenewprohibited: "\u7981\u6B62\u7EED\u8D39",
+  clienthold: "\u6CE8\u518C\u5546\u6682\u505C\u89E3\u6790",
+  serverhold: "\u6CE8\u518C\u5C40\u6682\u505C\u89E3\u6790",
+  pendingdelete: "\u5F85\u5220\u9664",
+  pendingtransfer: "\u8F6C\u79FB\u4E2D",
+  redemptionperiod: "\u8D4E\u56DE\u671F",
+  autorenewperiod: "\u81EA\u52A8\u7EED\u8D39\u5BBD\u9650\u671F",
+  addperiod: "\u65B0\u6CE8\u518C\u5BBD\u9650\u671F"
+};
+function statusText(code) {
+  const t = STATUS_TEXT[code.toLowerCase()];
+  return t ? `${t}\uFF08${code}\uFF09` : code;
+}
+function displayWidth(s) {
+  let w = 0;
+  for (const ch of s) {
+    const c = ch.codePointAt(0) ?? 0;
+    const wide = c >= 4352 && (c <= 4447 || c >= 11904 && c <= 42191 || c >= 44032 && c <= 55203 || c >= 63744 && c <= 64255 || c >= 65072 && c <= 65135 || c >= 65280 && c <= 65376 || c >= 65504 && c <= 65510);
+    w += wide ? 2 : 1;
+  }
+  return w;
+}
+var padDisplay = (s, width) => s + " ".repeat(Math.max(0, width - displayWidth(s)));
+function stampOf(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).format(d).replace(/\//g, "-");
+}
+var RULE = "  " + "\u2500".repeat(60);
+function renderDomainCheck(r) {
+  const L = [];
+  const line = (s = "") => void L.push(s);
+  const g = r.registration;
+  const h = r.headline;
+  const renderNext = (no) => {
+    const self = r.next.filter((s) => s.who === "self");
+    const us = r.next.filter((s) => s.who === "us");
+    line();
+    line(`\u3010${no} \u63A5\u4E0B\u6765\u505A\u4EC0\u4E48\u3011`);
+    if (self.length) {
+      line();
+      line("  \u4F60\u81EA\u5DF1\u5341\u5206\u949F\u80FD\u641E\u5B9A");
+      self.forEach((s, i) => line(`    ${i + 1}. ${s.text}`));
+    }
+    if (us.length) {
+      line();
+      line("  \u8981\u4EBA\u5E2E\u5FD9\u7684\uFF08\u8FD9\u4E9B\u662F\u6211\u4EEC\u65E5\u5E38\u5728\u505A\u7684\uFF09");
+      us.forEach((s, i) => line(`    ${i + 1}. ${s.text}`));
+    }
+  };
+  line();
+  line(`  ${r.domain}`);
+  line(`  ${r.reportId} \xB7 \u68C0\u6D4B\u4E8E ${stampOf(r.checkedAt)}`);
+  line(RULE);
+  line();
+  line(`\u3010\u7ED3\u8BBA\u3011${h.title}`);
+  line(`  ${h.detail}`);
+  if (g.state === "available") {
+    const res = g.residue;
+    const hasDnsRecords = Boolean(res && (res.a.length || res.ns.length || res.mx.length));
+    line();
+    line("\u30101 \u80FD\u4E0D\u80FD\u6CE8\u518C\u3011");
+    line(
+      `  \u6301\u6709\u72B6\u6001    ${res?.state === "traces" ? "\u73B0\u5728\u6CA1\u4EBA\u6301\u6709 \u2192 \u80FD\u6CE8\u518C\uFF08\u4EE5\u524D\u88AB\u7528\u8FC7\uFF0C\u770B\u7B2C 2 \u8282\u6709\u6CA1\u6709\u6C61\u70B9\uFF09" : res?.state === "clean" ? "\u73B0\u5728\u6CA1\u4EBA\u6301\u6709 \u2192 \u80FD\u6CE8\u518C" : "\u73B0\u5728\u6CA1\u4EBA\u6301\u6709\uFF0C\u5386\u53F2\u6709\u4E00\u9879\u6CA1\u67E5\u901A"}`
+    );
+    const dnsBit = hasDnsRecords ? `\u8FD8\u7559\u7740\u8BB0\u5F55\uFF08A ${res.a.length} / NS ${res.ns.length} / MX ${res.mx.length}\uFF09` : "\u73B0\u5728\u662F\u7A7A\u7684";
+    line(`  \u5F53\u524D DNS    ${hasDnsRecords ? "\u26A0\uFE0F " : "\xB7  "} ${dnsBit}`);
+    if (res?.cert) {
+      const mark = res.cert.state === "hit" ? "\u26A0\uFE0F " : res.cert.state === "miss" ? "\u2705 " : "\u26A0\uFE0F ";
+      line(`  \u8BC1\u4E66\u65E5\u5FD7    ${mark} ${res.cert.note}`);
+    }
+    if (res?.passive) {
+      const mark = res.passive.state === "hit" ? "\u26A0\uFE0F " : res.passive.state === "miss" ? "\u2705 " : "\u26A0\uFE0F ";
+      line(`  \u88AB\u52A8 DNS    ${mark} ${res.passive.note}`);
+      if (res.passive.hosts?.length) line(`              ${res.passive.hosts.slice(0, 4).join("\u3001")}`);
+    }
+    if (res?.parked) line(`  \u505C\u653E\u75D5\u8FF9    \u26A0\uFE0F  \u6B63\u6302\u5728 ${res.parked} \u7684\u505C\u653E\u9875\u4E0A\uFF0C\u6709\u4EBA\u5728\u56E4\u7740\u7B49\u5356`);
+    if (res) {
+      const verdict = res.strength === "hard" ? "\u26A0\uFE0F  \u7528\u8FC7" : res.strength === "weak" ? "\u26A0\uFE0F  \u7528\u8FC7\uFF08\u53EA\u6709 DNS \u8BC1\u636E\uFF09" : res.strength === "none" ? "\u2705  \u4E09\u5904\u90FD\u6CA1\u75D5\u8FF9" : "\u26A0\uFE0F  \u6709\u9879\u6CA1\u67E5\u6210";
+      line(`  \u5224\u5B9A        ${verdict}`);
+      line(`              ${res.note}`);
+    }
+    line();
+    line("\u30102 \u6709\u6CA1\u6709\u5386\u53F2\u6C61\u70B9\u3011");
+    if (res?.state === "traces") line("  \u4EE5\u524D\u88AB\u7528\u8FC7\u4E0D\u7B49\u4E8E\u6709\u6C61\u70B9\uFF0C\u8FD9\u4E00\u8282\u624D\u662F\u5224\u636E\uFF1A");
+    for (const c of r.email.checks.filter((c2) => c2.key === "dbl" || c2.key === "surbl")) {
+      line(`  ${padDisplay(c.label, 20)} ${ICON[c.state] ?? "\xB7"} ${c.detail}`);
+    }
+    line("  \u4EE5\u524D\u88AB\u7F5A\u8FC7  \u26A0\uFE0F  \u67E5\u4E0D\u5230\uFF1A\u53EA\u6709\u539F\u7AD9\u4E3B\u7684 Search Console \u80FD\u770B");
+    line("  \u4EE5\u524D\u505A\u4EC0\u4E48  \u26A0\uFE0F  \u67E5\u4E0D\u5230\uFF1A\u4E0D\u5B58\u5728\u8FD9\u79CD\u540D\u5355");
+    line();
+    line("\u30103 \u6CE8\u518C\u4E4B\u540E\u3011");
+    line("  \u90AE\u4EF6        \u914D\u597D\u4F01\u4E1A\u90AE\u518D\u8DD1\u4E00\u6B21\u8FD9\u4E2A\u547D\u4EE4\uFF0C\u624D\u77E5\u9053\u90AE\u4EF6\u53D1\u4E0D\u53D1\u5F97\u51FA\u53BB");
+    line("  Google      \u7AD9\u5EFA\u8D77\u6765\u4E4B\u540E\u518D\u770B\uFF0C\u73B0\u5728\u6CA1\u6709\u7AD9\u53EF\u62E6\uFF08\u63D0\u65E9\u67E5\u662F\u7A7A\u8F6C\uFF09");
+    line("  \u6CE8\u518C\u5546      \u6311\u4E00\u5BB6\u80FD\u6539 DNS \u7684\uFF0CSPF/DKIM/DMARC \u90FD\u8981\u5728\u8FD9\u91CC\u52A0");
+    renderNext("4");
+  } else {
+    line();
+    line("  " + (h.scenario === "diagnose" ? "\u4F60\u5728\u62C5\u5FC3\u7684\u901A\u5E38\u662F\u8FD9\u4E09\u4EF6\u4E8B\uFF0C\u9010\u6761\u7ED9\u7ED3\u679C\uFF1A" : ""));
+    line();
+    line("\u30101 \u90AE\u4EF6\u80FD\u4E0D\u80FD\u9001\u5230\u522B\u4EBA\u624B\u4E0A\u3011");
+    if (r.email.skipped) {
+      line(`  ${r.email.skipped}`);
+      line(`  \u7ED3\u8BBA        ${r.email.verdict}`);
+    } else {
+      if (r.email.architecture === "third-party") {
+        line(`  \u90AE\u7BB1\u6258\u7BA1    ${r.email.provider}`);
+        line("              \u53D1\u4FE1 IP \u662F\u670D\u52A1\u5546\u7684\uFF0C\u4E0D\u662F\u4F60\u72EC\u5360\u7684\u2014\u2014IP \u9ED1\u540D\u5355\u67E5\u4E86\u4E5F\u6CA1\u7528\uFF0C\u8FD9\u9879\u8DF3\u8FC7");
+      } else if (r.email.architecture === "self-hosted") {
+        line(`  \u90AE\u7BB1\u6258\u7BA1    \u4E3B\u673A\u81EA\u5E26\u90AE\u4EF6\uFF08${r.email.mx.join(", ")}\uFF09`);
+        line("              \u53D1\u4FE1 IP \u662F\u4F60\u81EA\u5DF1\u7684\uFF0C\u6240\u4EE5\u8981\u8FDE IP \u4E00\u8D77\u67E5");
+      } else {
+        line(`  \u90AE\u7BB1\u6258\u7BA1    ${ARCH_TEXT[r.email.architecture]}`);
+      }
+      for (const c of r.email.checks) {
+        line(`  ${padDisplay(c.label, 20)} ${ICON[c.state] ?? "\xB7"} ${c.detail}`);
+        if (c.fix && c.state !== "ok" && c.state !== "clean") line(`  ${" ".repeat(20)}   \u2192 ${c.fix}`);
+      }
+      for (const ip of r.email.ipChecks ?? []) {
+        line(`  \u53D1\u4FE1 IP ${ip.ip.padEnd(14)} ${ICON[ip.state] ?? "\xB7"} ${ip.note}`);
+      }
+      line(`  \u7ED3\u8BBA        ${r.email.verdict}`);
+    }
+    line();
+    line("\u30102 \u4F1A\u4E0D\u4F1A\u88AB Google \u62E6\u3011");
+    line("  \u6253\u5F00\u4F1A\u4E0D\u4F1A\u5F39\u8B66\u544A");
+    line(`      ${r.google.safeBrowsing.url}`);
+    line("      Google \u81EA\u5DF1\u7684\u5224\u5B9A\u6700\u51C6\uFF0C\u70B9\u5F00\u770B\u5230\u7684\u5C31\u662F\u5B9E\u65F6\u7684\u3002\u7B2C\u4E09\u65B9\u8F6C\u8FF0\u90FD\u53EF\u80FD\u8FC7\u65F6\uFF0C\u6240\u4EE5\u8FD9\u4E00\u9879\u6211\u4E0D\u7ED9\u7ED3\u8BBA\u3002");
+    line("  \u6709\u6CA1\u6709\u88AB\u641C\u7D22\u5904\u7F5A");
+    line(`      ${r.google.searchConsole.url}`);
+    line("      \u53EA\u6709\u7AD9\u4E3B\u672C\u4EBA\u80FD\u770B\uFF0C\u800C\u4E14\u8981\u5148\u9A8C\u8BC1\u7F51\u7AD9\u6240\u6709\u6743\u3002\u7B2C\u4E09\u65B9\u6C38\u8FDC\u770B\u4E0D\u5230\uFF0C\u8FD9\u662F Google \u7684\u8BBE\u8BA1\u3002");
+    line(`  \u7AD9\u70B9\u73B0\u5728\u80FD\u4E0D\u80FD\u6253\u5F00  ${r.google.siteReach.detail}`);
+    line();
+    line("\u30103 \u8FD9\u4E2A\u57DF\u540D\u4EC0\u4E48\u6765\u8DEF\u3011");
+    if (g.state === "registered") {
+      line("  \u6CE8\u518C\u60C5\u51B5    \u5DF2\u7ECF\u88AB\u6301\u6709\uFF0C\u6CE8\u518C\u4E0D\u4E86 \u2014\u2014 \u60F3\u63A5\u624B\u8FD9\u4E2A\u57DF\u540D\u7684\u8BDD\uFF0C\u4E0B\u9762\u8FD9\u4E9B\u4FE1\u606F\u624D\u662F\u5224\u65AD\u4F9D\u636E");
+      line(`  \u6CE8\u518C        ${g.created ?? "\u2014"}${g.ageDays !== void 0 ? `\uFF08${g.ageDays} \u5929\uFF09` : ""}`);
+      line(`  \u5230\u671F        ${g.expires ?? "\u2014"}${g.registrar ? `  \xB7  \u6CE8\u518C\u5546 ${g.registrar}` : ""}`);
+      if (g.changed) line(`  \u6700\u8FD1\u53D8\u66F4    ${g.changed}`);
+      if (g.status?.length) line(`  \u57DF\u540D\u72B6\u6001    ${g.status.map(statusText).join(", ")}`);
+      line(`  \u5224\u65AD        ${g.kindNote ?? "\u2014"}`);
+      line(`  \u4EE5\u524D\u662F\u8C01\u7684  \u67E5\u4E0D\u5230 \u2014\u2014 ${g.ownerNote}`);
+    } else {
+      line(`  \u67E5\u4E0D\u4E86      ${g.error ?? "\u672A\u77E5\u539F\u56E0"}`);
+      line("  \u4EE5\u524D\u662F\u8C01\u7684  \u67E5\u4E0D\u5230");
+    }
+    renderNext("4");
+  }
+  line();
+  line(RULE);
+  line("\u672C\u6B21\u67E5\u4E86\u4EC0\u4E48");
+  line("  RDAP \u6CE8\u518C\u4FE1\u606F \xB7 Spamhaus DBL / SURBL \u57DF\u540D\u540D\u5355 \xB7 SPF / DKIM / DMARC\uFF08DoH\uFF09\xB7 \u7AD9\u70B9\u53EF\u8FBE\u6027");
+  if (g.state === "available") {
+    line("  \u5386\u53F2\u75D5\u8FF9\u4E09\u5904\uFF1A\u5F53\u524D DNS\uFF08A / NS / MX\uFF09\xB7 \u8BC1\u4E66\u900F\u660E\u5EA6\u65E5\u5FD7 \xB7 \u88AB\u52A8 DNS");
+  }
+  line("\u6CA1\u67E5\u4EC0\u4E48");
+  line("  IP \u9ED1\u540D\u5355\uFF08\u90AE\u7BB1\u6258\u7BA1\u5728\u7B2C\u4E09\u65B9\uFF0CIP \u4E0D\u5F52\u4F60\uFF0C\u67E5\u4E86\u4E5F\u6362\u4E0D\u4E86\uFF09\xB7 Google \u641C\u7D22\u5904\u7F5A\uFF08\u65E0\u516C\u5F00\u63A5\u53E3\uFF09");
+  line(
+    g.state === "available" ? "  \u5386\u53F2 WHOIS\uFF08\u4ED8\u8D39\u5E93\uFF09\xB7 \u7F51\u9875\u5FEB\u7167\uFF08archive.org \u5728\u56FD\u5185\u4E0D\u53EF\u8FBE\uFF0C\u5DF2\u7528\u8BC1\u4E66\u548C\u88AB\u52A8 DNS \u66FF\u4EE3\uFF09" : "  \u5386\u53F2 WHOIS \u4E0E\u7F51\u9875\u5FEB\u7167\uFF08\u9690\u79C1\u4FDD\u62A4 / \u6570\u636E\u6E90\u5728\u56FD\u5185\u4E0D\u53EF\u8FBE\uFF09"
+  );
+  line('  \u67E5\u4E0D\u5230\u7684\u9879\u5DF2\u5355\u72EC\u6807\u6CE8\uFF0C\u6CA1\u6709\u6309"\u5E72\u51C0"\u5904\u7406\u3002');
+  line();
+  line("  \u514D\u8D39\u7684\u57DF\u540D\u4F53\u68C0\uFF0C\u7531 PufferGo \u63D0\u4F9B \u2014\u2014 https://puffergo.com");
+  line();
+  return L.join("\n");
+}
+
+// src/lib/domainReport.ts
+var ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+var esc2 = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ESC[c]);
+var STATE_MAP = {
+  ok: { tone: "ok", text: "\u901A\u8FC7" },
+  clean: { tone: "ok", text: "\u5E72\u51C0" },
+  missing: { tone: "bad", text: "\u7F3A\u5931" },
+  invalid: { tone: "bad", text: "\u6709\u95EE\u9898" },
+  listed: { tone: "bad", text: "\u547D\u4E2D" },
+  unknown: { tone: "warn", text: "\u6CA1\u67E5\u6210" },
+  // 历史痕迹专用的两态：查到痕迹 / 查通了但没记录。别和"命中黑名单"混用。
+  hit: { tone: "warn", text: "\u6709\u75D5\u8FF9" },
+  miss: { tone: "ok", text: "\u65E0\u8BB0\u5F55" },
+  // 跟 unknown 分开：这一项不是我们没查通，是根本不存在可查的接口 —— 别让客户以为换个网络就能查到
+  cannot: { tone: "warn", text: "\u67E5\u4E0D\u5230" },
+  unreachable: { tone: "bad", text: "\u6253\u4E0D\u5F00" },
+  redirected: { tone: "warn", text: "\u6709\u8DF3\u8F6C" },
+  insecure: { tone: "warn", text: "\u6CA1\u914D HTTPS" }
+};
+var ICONS = {
+  ok: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.6l3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  bad: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.6 4.6l6.8 6.8M11.4 4.6l-6.8 6.8" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>',
+  warn: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.2v5.6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="8" cy="12.2" r="1.05" fill="currentColor"/></svg>'
+};
+var ARCH_LABEL = {
+  "third-party": "\u7B2C\u4E09\u65B9\u4F01\u4E1A\u90AE",
+  "self-hosted": "\u4E3B\u673A\u81EA\u5E26\u90AE\u4EF6",
+  null: "\u672C\u57DF\u4E0D\u6536\u4FE1",
+  unknown: "\u65E0\u6CD5\u5224\u65AD"
+};
+function pill(state) {
+  const s = STATE_MAP[state] ?? { tone: "warn", text: state };
+  return `<span class="pill ${s.tone}">${ICONS[s.tone]}<b>${esc2(s.text)}</b></span>`;
+}
+function checkRow(label, state, detail, fix) {
+  const s = STATE_MAP[state] ?? { tone: "warn", text: state };
+  return `<div class="row">
+      <div class="row-label">${esc2(label)}</div>
+      <div class="row-body">
+        <div class="row-head">${pill(state)}<span class="row-text">${esc2(detail)}</span></div>
+        ${fix ? `<div class="row-fix"><span>\u600E\u4E48\u6539</span>${esc2(fix)}</div>` : ""}
+      </div>
+    </div>`;
+}
+function kv(k, v, dim = false) {
+  return `<div class="kv"><dt>${esc2(k)}</dt><dd${dim ? ' class="dim"' : ""}>${esc2(v || "\u2014")}</dd></div>`;
+}
+function linkCard(title, url, note) {
+  return `<a class="linkcard" href="${esc2(url)}" target="_blank" rel="noopener">
+      <div class="linkcard-main">
+        <div class="linkcard-title">${esc2(title)}</div>
+        <div class="linkcard-note">${esc2(note)}</div>
+        <div class="linkcard-url">${esc2(url)}</div>
+      </div>
+      <svg class="arrow" viewBox="0 0 20 20" aria-hidden="true"><path d="M5 15L15 5M8.4 5H15v6.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </a>`;
+}
+function renderDomainCheckHtml(r) {
+  const built = new Date(r.checkedAt);
+  const stamp = Number.isNaN(built.getTime()) ? r.checkedAt : new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).format(built).replace(/\//g, "-");
+  const e = r.email;
+  const h = r.headline;
+  const unregistered = r.registration.state === "available";
+  const listed = e.checks.some((c) => c.state === "listed");
+  const gaps = e.checks.filter((c) => c.state === "missing" || c.state === "invalid");
+  const residue = r.registration.residue;
+  const listUnknown = e.checks.some((c) => (c.key === "dbl" || c.key === "surbl") && c.state === "unknown");
+  const chips = [];
+  if (unregistered) {
+    if (listed) chips.push({ tone: "bad", text: "\u9ED1\u540D\u5355\u5DF2\u547D\u4E2D" });
+    else if (listUnknown) chips.push({ tone: "warn", text: "\u9ED1\u540D\u5355\u6CA1\u67E5\u901A" });
+    else chips.push({ tone: "ok", text: "\u9ED1\u540D\u5355\u5E72\u51C0" });
+    if (residue?.state === "traces") chips.push({ tone: "warn", text: "\u4EE5\u524D\u88AB\u4EBA\u7528\u8FC7" });
+    else if (residue?.state === "unknown") chips.push({ tone: "warn", text: "\u5386\u53F2\u6709\u51E0\u9879\u6CA1\u67E5\u901A" });
+  } else {
+    if (e.skipped) chips.push({ tone: "warn", text: "\u90AE\u7BB1\u914D\u7F6E\u672A\u67E5" });
+    else if (listed) chips.push({ tone: "bad", text: "\u90AE\u4EF6\u9ED1\u540D\u5355\u5DF2\u547D\u4E2D" });
+    else chips.push({ tone: "ok", text: "\u90AE\u4EF6\u9ED1\u540D\u5355\u5E72\u51C0" });
+    if (!e.skipped) {
+      chips.push(
+        gaps.length ? { tone: "bad", text: `\u90AE\u4EF6\u8EAB\u4EFD\u7F3A ${gaps.length} \u9879` } : { tone: "ok", text: "\u90AE\u4EF6\u8EAB\u4EFD\u9F50\u5168" }
+      );
+    }
+    const reach = r.google.siteReach.state;
+    chips.push(
+      reach === "ok" ? { tone: "ok", text: "\u7AD9\u70B9\u53EF\u8BBF\u95EE" } : reach === "redirected" ? { tone: "warn", text: "\u7AD9\u70B9\u6709\u8DF3\u8F6C" } : reach === "insecure" ? { tone: "warn", text: "\u7AD9\u70B9\u6CA1\u914D HTTPS" } : reach === "unknown" ? { tone: "warn", text: "\u7AD9\u70B9\u672A\u68C0\u6D4B" } : { tone: "bad", text: "\u7AD9\u70B9\u6253\u4E0D\u5F00" }
+    );
+  }
+  const emailBlock = e.skipped ? `<div class="note warn">${esc2(e.skipped)}</div>` : `
+      <div class="arch">
+        <div class="arch-icon">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3.8 6.6L12 12.4l8.2-5.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div>
+          <div class="arch-title">${e.architecture === "unknown" ? "\u6CA1\u6709 MX \u8BB0\u5F55\uFF0C\u90AE\u4EF6\u4E0D\u8D70\u8FD9\u4E2A\u57DF\u540D" : e.architecture === "null" ? "\u8FD9\u4E2A\u57DF\u540D\u58F0\u660E\u4E86\u4E0D\u6536\u4FE1\uFF08MX \u8BB0 0 .\uFF09" : `\u90AE\u7BB1\u6258\u7BA1\u5728 <b>${esc2(e.provider)}</b>\uFF08${esc2(ARCH_LABEL[e.architecture] ?? e.architecture)}\uFF09`}</div>
+          <div class="arch-sub">${e.architecture === "third-party" ? "\u53D1\u4FE1 IP \u5F52\u670D\u52A1\u5546\uFF0C\u4E0D\u662F\u4F60\u72EC\u5360\u7684 \u2014\u2014 IP \u9ED1\u540D\u5355\u67E5\u4E86\u4E5F\u505A\u4E0D\u4E86\u4EC0\u4E48\uFF0C\u8FD9\u4E00\u9879\u6211\u4EEC\u4E3B\u52A8\u8DF3\u8FC7\uFF0C\u4E0B\u9762\u53EA\u67E5\u5C5E\u4E8E\u4F60\u7684\u4E1C\u897F\u3002" : e.architecture === "self-hosted" ? "\u53D1\u4FE1 IP \u662F\u4F60\u81EA\u5DF1\u7684\uFF08\u591A\u534A\u662F\u5171\u4EAB\u4E3B\u673A\uFF09\uFF0C\u90BB\u5C45\u51FA\u4E8B\u4F1A\u8FDE\u7D2F\u4F60\uFF0C\u6240\u4EE5\u8981\u8FDE IP \u4E00\u8D77\u67E5\u3002" : e.architecture === "null" ? "\u7A7A MX\uFF08RFC 7505\uFF09\u7684\u610F\u601D\u662F\u300C\u672C\u57DF\u672C\u6765\u5C31\u4E0D\u63A5\u4FE1\u300D\u3002\u6CA1\u6709\u53D1\u4FE1 IP \u53EF\u67E5\uFF0C\u57DF\u540D\u7EA7\u540D\u5355\u548C DNS \u914D\u7F6E\u4ECD\u7136\u7167\u67E5\u3002" : "\u6CA1\u6709\u53D1\u4FE1 IP \u53EF\u67E5\uFF0C\u4F46\u57DF\u540D\u7EA7\u540D\u5355\u548C DNS \u914D\u7F6E\u7167\u6837\u80FD\u67E5\u2014\u2014\u4E0B\u9762\u8FD9\u51E0\u9879\u90FD\u5C5E\u4E8E\u4F60\u7684\u57DF\u540D\u672C\u8EAB\u3002"}</div>
+        </div>
+      </div>
+      <div class="rows">
+        ${e.checks.map((c) => checkRow(c.label, c.state, c.detail, c.fix)).join("")}
+        ${(e.ipChecks ?? []).map(
+    (c) => `<div class="row"><div class="row-label">IP ${esc2(c.ip)}</div><div class="row-body"><div class="row-head">${pill(c.state)}<span class="row-text">${esc2(c.note)}</span></div></div></div>`
+  ).join("")}
+      </div>
+      <div class="verdict">
+        <div class="verdict-label">\u7ED3\u8BBA</div>
+        <p>${esc2(e.verdict)}</p>
+      </div>`;
+  const reg = r.registration;
+  const mailRows = r.email.checks.filter((c) => c.key === "dbl" || c.key === "surbl").map((c) => checkRow(c.label, c.state, c.detail, c.fix)).join("");
+  const hasDnsRecords = Boolean(residue && (residue.a.length || residue.ns.length || residue.mx.length));
+  const dnsDetail = hasDnsRecords ? `\u8FD8\u7559\u7740\u8BB0\u5F55\uFF1AA ${residue.a.join("\u3001") || "\u65E0"}\uFF1BNS ${residue.ns.join("\u3001") || "\u65E0"}\uFF1BMX ${residue.mx.join("\u3001") || "\u65E0"}` : "A\u3001NS\u3001MX \u90FD\u6CA1\u6709\u8BB0\u5F55";
+  const traceRows = residue ? [
+    checkRow("\u5F53\u524D DNS\uFF08\u5F31\u8BC1\u636E\uFF09", hasDnsRecords ? "hit" : "miss", dnsDetail),
+    residue.cert ? checkRow("\u8BC1\u4E66\u65E5\u5FD7\uFF08\u5F3A\u8BC1\u636E\uFF09", residue.cert.state, residue.cert.note) : "",
+    residue.passive ? checkRow("\u88AB\u52A8 DNS\uFF08\u5F3A\u8BC1\u636E\uFF09", residue.passive.state, residue.passive.note) : "",
+    residue.parked ? checkRow("\u505C\u653E / \u6302\u724C", "hit", `\u6B63\u6302\u5728 ${residue.parked} \u7684\u505C\u653E\u9875\u4E0A \u2014\u2014 \u6709\u4EBA\u5728\u56E4\u7740\u7B49\u5356`) : ""
+  ].join("") : "";
+  const buySections = () => `
+    <section>
+      <div class="sec-head">
+        <div class="sec-no">01</div>
+        <div>
+          <h2 class="sec-title">\u80FD\u4E0D\u80FD\u6CE8\u518C</h2>
+          <p class="sec-sub">\u53EA\u8981\u6CA1\u4EBA\u6301\u6709\u5C31\u80FD\u6CE8\u518C\u3002\u80FD\u4E0D\u80FD\u7528\uFF0C\u770B 02 \u6BB5\u7684\u9ED1\u540D\u5355\u2014\u2014\u6709\u6CA1\u6709\u88AB\u524D\u4E3B\u4EBA\u7528\u8FC7\uFF0C\u662F\u53E6\u4E00\u4EF6\u4E8B\u3002</p>
+        </div>
+      </div>
+      <div class="bigstate ${residue?.state === "clean" ? "ok" : "warn"}">
+        <div class="bigstate-title">${residue?.state === "traces" ? "\u4EE5\u524D\u88AB\u4EBA\u7528\u8FC7" : residue?.state === "clean" ? "\u6CA1\u4EBA\u7528\u8FC7\uFF0C\u662F\u5E72\u51C0\u7684" : "\u5386\u53F2\u6709\u51E0\u9879\u6CA1\u67E5\u6210"}</div>
+        <div class="bigstate-sub">${esc2(residue?.note ?? "")}</div>
+      </div>
+      <div class="rows" style="margin-top:16px">${traceRows}</div>
+      <div class="note warn" style="margin-top:14px">
+        \u4E0B\u9762\u4E09\u5904\u6309\u53EF\u4FE1\u5EA6\u6392\uFF1ADNS \u53EA\u662F\u914D\u7F6E\uFF0C\u6362\u4E86\u4EBA\u5C31\u80FD\u6E05\u7A7A\uFF1B\u8BC1\u4E66\u548C\u89E3\u6790\u5386\u53F2\u662F\u522B\u4EBA\u8BB0\u7684\u8D26\uFF0C\u5220\u4E0D\u6389\u3002
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head">
+        <div class="sec-no">02</div>
+        <div>
+          <h2 class="sec-title">\u6709\u6CA1\u6709\u5386\u53F2\u6C61\u70B9</h2>
+          <p class="sec-sub">\u80FD\u67E5\u7684\u548C\u67E5\u4E0D\u5230\u7684\u90FD\u5199\u6E05\u695A \u2014\u2014 \u4E0D\u62FF\u67E5\u5F97\u5230\u7684\u90A3\u90E8\u5206\u5192\u5145\u5F53\u5168\u67E5\u8FC7\u4E86\u3002</p>
+        </div>
+      </div>
+      <div class="rows">
+        ${mailRows}
+        ${checkRow("Google \u641C\u7D22\u5904\u7F5A", "cannot", "\u53EA\u6709\u539F\u7AD9\u4E3B\u7684 Search Console \u80FD\u770B\uFF0C\u7B2C\u4E09\u65B9\u6CA1\u6709\u63A5\u53E3 \u2014\u2014 \u8FD9\u4E00\u9879\u8C01\u90FD\u67E5\u4E0D\u5230")}
+        ${checkRow("\u5386\u53F2\u884C\u4E1A\uFF08\u6210\u4EBA / \u535A\u5F69\uFF09", "cannot", "\u4E0D\u5B58\u5728\u8FD9\u79CD\u540D\u5355\u3002\u6CA1\u6709\u673A\u6784\u767B\u8BB0\u8FC7\uFF0C\u53EA\u80FD\u9760\u7F51\u9875\u5FEB\u7167\u63A8\u65AD")}
+        ${checkRow("\u7F51\u9875\u5386\u53F2\u5FEB\u7167", "cannot", "archive.org \u5728\u56FD\u5185\u7F51\u7EDC\u8FDE\u4E0D\u4E0A\u3002\u66FF\u4EE3\u529E\u6CD5\u662F\u67E5\u8BC1\u4E66\u548C\u88AB\u52A8 DNS\uFF08\u89C1 01 \u6BB5\uFF09\uFF0C\u6709\u7AD9\u5C31\u4E00\u5B9A\u4F1A\u7559\u75D5")}
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head">
+        <div class="sec-no">03</div>
+        <div>
+          <h2 class="sec-title">\u6CE8\u518C\u4E4B\u540E</h2>
+          <p class="sec-sub">\u8FD9\u51E0\u9879\u73B0\u5728\u8FD8\u67E5\u4E0D\u4E86 \u2014\u2014 \u57DF\u540D\u8FD8\u6CA1\u5230\u624B\uFF0C\u67E5\u4E86\u4E5F\u662F\u7A7A\u8F6C\u3002</p>
+        </div>
+      </div>
+      <dl class="kvs">
+        ${kv("\u90AE\u4EF6\u80FD\u4E0D\u80FD\u53D1", "\u914D\u597D\u4F01\u4E1A\u90AE\u540E\u91CD\u8DD1\u4E00\u6B21\u8FD9\u4E2A\u547D\u4EE4\uFF0C\u624D\u77E5\u9053\u53D1\u4E0D\u53D1\u5F97\u51FA\u53BB")}
+        ${kv("\u4F1A\u4E0D\u4F1A\u88AB Google \u62E6", "\u7AD9\u5EFA\u8D77\u6765\u4E4B\u540E\u518D\u770B\uFF0C\u73B0\u5728\u6CA1\u6709\u7AD9\u53EF\u62E6")}
+      </dl>
+      <div class="note info">
+        \u6CE8\u518C\u5546\u8981\u6311\u4E00\u5BB6\u80FD\u6539 DNS \u7684\uFF1ASPF\u3001DKIM\u3001DMARC \u90FD\u662F DNS \u8BB0\u5F55\uFF0C\u5168\u90FD\u8981\u5728\u89E3\u6790\u540E\u53F0\u52A0\u3002
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head">
+        <div class="sec-no">04</div>
+        <div>
+          <h2 class="sec-title">\u63A5\u4E0B\u6765\u505A\u4EC0\u4E48</h2>
+          <p class="sec-sub">\u5DE6\u8FB9\u8FD9\u4E9B\u4F60\u81EA\u5DF1\u5341\u5206\u949F\u80FD\u505A\u5B8C\uFF0C\u4E0D\u7528\u627E\u4EBA\uFF1B\u53F3\u8FB9\u8FD9\u4E9B\u624D\u662F\u9700\u8981\u4EBA\u5E2E\u5FD9\u7684\u3002</p>
+        </div>
+      </div>
+      ${nextBlock}
+    </section>`;
+  const diagSections = () => `
+    <section>
+      <div class="sec-head">
+        <div class="sec-no">01</div>
+        <div>
+          <h2 class="sec-title">\u90AE\u4EF6\u80FD\u4E0D\u80FD\u9001\u5230\u522B\u4EBA\u624B\u4E0A</h2>
+          <p class="sec-sub">\u53D1\u4E0D\u8FDB\u53BB\u53EA\u6709\u4E09\u4E2A\u539F\u56E0\uFF1A\u57DF\u540D\u5728\u9ED1\u540D\u5355\u3001IP \u5728\u9ED1\u540D\u5355\u3001\u90AE\u4EF6\u8EAB\u4EFD\u6CA1\u914D\u597D\u3002\u524D\u4E24\u4E2A\u67E5\u540D\u5355\uFF0C\u7B2C\u4E09\u4E2A\u67E5 DNS\u3002</p>
+        </div>
+      </div>
+      ${emailBlock}
+    </section>
+
+    <section>
+      <div class="sec-head">
+        <div class="sec-no">02</div>
+        <div>
+          <h2 class="sec-title">\u4F1A\u4E0D\u4F1A\u88AB Google \u62E6</h2>
+          <p class="sec-sub">\u8FD9\u4E00\u9879\u6211\u4EEC\u4E0D\u7ED9\u5224\u65AD\uFF0C\u53EA\u7ED9\u5B98\u65B9\u5165\u53E3 \u2014\u2014 \u56E0\u4E3A\u7B2C\u4E09\u65B9\u62FF\u4E0D\u5230\u53EF\u9760\u6570\u636E\uFF0C\u8BF4\u4E86\u5C31\u662F\u7F16\u3002</p>
+        </div>
+      </div>
+      ${linkCard("Safe Browsing \u67E5\u8BE2\u9875", r.google.safeBrowsing.url, r.google.safeBrowsing.note)}
+      ${linkCard("Search Console \u540E\u53F0", r.google.searchConsole.url, r.google.searchConsole.note)}
+      <div class="rows" style="margin-top:14px">
+        ${checkRow("\u7AD9\u70B9\u80FD\u4E0D\u80FD\u5F00", r.google.siteReach.state, r.google.siteReach.detail)}
+      </div>
+      <div class="note warn" style="margin-top:14px">${esc2(r.google.caveat)}</div>
+    </section>
+
+    <section>
+      <div class="sec-head">
+        <div class="sec-no">03</div>
+        <div>
+          <h2 class="sec-title">\u8FD9\u4E2A\u57DF\u540D\u4EC0\u4E48\u6765\u8DEF</h2>
+          <p class="sec-sub">\u5DF2\u7ECF\u5728\u7528\u5C31\u8981\u77E5\u9053\uFF1A\u5B83\u4EC0\u4E48\u65F6\u5019\u6CE8\u518C\u7684\u3001\u6709\u6CA1\u6709\u8F6C\u8FC7\u624B\u3001\u8FD8\u80FD\u7528\u591A\u4E45\u3002</p>
+        </div>
+      </div>
+      <div class="note ${reg.state === "registered" ? "info" : "warn"}" style="margin-bottom:14px">${reg.state === "registered" ? "\u5DF2\u7ECF\u88AB\u6301\u6709\uFF0C\u6CE8\u518C\u4E0D\u4E86 \u2014\u2014 \u60F3\u63A5\u624B\u8FD9\u4E2A\u57DF\u540D\u7684\u8BDD\uFF0C\u4E0B\u9762\u8FD9\u4E9B\u624D\u662F\u5224\u65AD\u4F9D\u636E\u3002" : '\u67E5\u4E0D\u5230\u6CE8\u518C\u72B6\u6001\uFF0C\u4E0D\u80FD\u65AD\u8A00\u5B83\u5DF2\u7ECF\u88AB\u6301\u6709 \u2014\u2014 \u4E0B\u9762\u53EA\u5217\u80FD\u67E5\u5230\u7684\u4E1C\u897F\uFF0C\u522B\u628A"\u67E5\u4E0D\u5230"\u5F53\u6210"\u6CA1\u4EBA\u8981"\u3002'}</div>
+      ${regBlock}
+      <div class="note warn" style="margin-top:14px">\u4EE5\u524D\u662F\u8C01\u7684\uFF1A\u67E5\u4E0D\u5230 \u2014\u2014 ${esc2(reg.ownerNote)}</div>
+    </section>
+
+    <section>
+      <div class="sec-head">
+        <div class="sec-no">04</div>
+        <div>
+          <h2 class="sec-title">\u63A5\u4E0B\u6765\u505A\u4EC0\u4E48</h2>
+          <p class="sec-sub">\u5DE6\u8FB9\u8FD9\u4E9B\u4F60\u81EA\u5DF1\u5341\u5206\u949F\u80FD\u505A\u5B8C\uFF0C\u4E0D\u7528\u627E\u4EBA\uFF1B\u53F3\u8FB9\u8FD9\u4E9B\u624D\u662F\u9700\u8981\u4EBA\u5E2E\u5FD9\u7684\u3002</p>
+        </div>
+      </div>
+      ${nextBlock}
+    </section>`;
+  const regBlock = reg.state === "registered" ? `<dl class="kvs">
+            ${kv("\u6CE8\u518C\u65F6\u95F4", reg.created ?? "")}
+            ${kv("\u5230\u671F\u65F6\u95F4", reg.expires ?? "")}
+            ${kv("\u6CE8\u518C\u5546", reg.registrar ?? "")}
+            ${kv("\u6700\u8FD1\u53D8\u66F4", reg.changed ?? "")}
+            ${kv("\u57DF\u540D\u72B6\u6001", (reg.status ?? []).map(statusText).join(" \xB7 "))}
+          </dl>
+          <div class="note info">${esc2(reg.kindNote ?? "")}</div>` : `<div class="note warn">\u6CE8\u518C\u4FE1\u606F\u53D6\u4E0D\u5230\uFF1A${esc2(reg.error ?? "\u672A\u77E5\u539F\u56E0")}</div>`;
+  const nextSelf = r.next.filter((s) => s.who === "self");
+  const nextUs = r.next.filter((s) => s.who === "us");
+  const nextBlock = `<div class="twocol">
+    <div class="col">
+      <div class="col-head">\u4F60\u81EA\u5DF1\u5341\u5206\u949F\u80FD\u641E\u5B9A</div>
+      <div class="col-sub">\u8FD9\u4E9B\u4E0D\u7528\u627E\u4EBA\uFF0C\u4E5F\u4E0D\u7528\u82B1\u94B1</div>
+      <ol>${nextSelf.map((s) => `<li>${esc2(s.text)}</li>`).join("")}</ol>
+    </div>
+    <div class="col ours">
+      <div class="col-head">\u8981\u4EBA\u5E2E\u5FD9\u7684</div>
+      <div class="col-sub">\u8FD9\u4E9B\u662F\u6211\u4EEC\u65E5\u5E38\u5728\u505A\u7684\u6D3B</div>
+      <ol>${nextUs.map((s) => `<li>${esc2(s.text)}</li>`).join("")}</ol>
+    </div>
+  </div>`;
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>\u57DF\u540D\u4F53\u68C0\u62A5\u544A \xB7 ${esc2(r.domain)}</title>
+<style>
+  :root {
+    --ink: #0c1a2b;
+    --ink-2: #33475f;
+    --muted: #6b7f96;
+    --line: #e3e9f1;
+    --bg: #f4f7fb;
+    --brand: #0ea5e9;
+    --brand-deep: #0369a1;
+    --ok: #0f9d70;
+    --ok-bg: #e8f7f1;
+    --bad: #d93a3a;
+    --bad-bg: #fdeded;
+    --warn: #b06f06;
+    --warn-bg: #fdf3e2;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background:
+      radial-gradient(1100px 420px at 12% -8%, #e2f2fd 0%, rgba(226,242,253,0) 62%),
+      radial-gradient(900px 400px at 100% 0%, #eef4ff 0%, rgba(238,244,255,0) 55%),
+      var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif;
+    font-size: 15px;
+    line-height: 1.72;
+    -webkit-font-smoothing: antialiased;
+    padding: 40px 20px 64px;
+  }
+  .sheet { max-width: 900px; margin: 0 auto; }
+
+  /* \u9876\u90E8 */
+  .hero {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 18px 18px 0 0;
+    border-bottom: none;
+    padding: 30px 38px 26px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: "";
+    position: absolute; inset: 0 0 auto 0; height: 4px;
+    background: linear-gradient(90deg, var(--brand) 0%, #38bdf8 42%, var(--brand-deep) 100%);
+  }
+  .hero-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .brandline { display: flex; align-items: center; gap: 9px; color: var(--brand-deep); font-size: 12.5px; font-weight: 650; letter-spacing: .06em; }
+  .brandline svg { width: 20px; height: 20px; }
+  .stamp { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  h1 {
+    margin: 18px 0 6px;
+    font-size: 34px;
+    line-height: 1.24;
+    letter-spacing: -.02em;
+    font-weight: 700;
+    word-break: break-all;
+  }
+  .lede { margin: 0; color: var(--muted); font-size: 14px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    border-radius: 999px; padding: 5px 13px;
+    font-size: 12.5px; font-weight: 600; border: 1px solid;
+  }
+  .chip svg { width: 13px; height: 13px; }
+  .chip.ok { color: var(--ok); background: var(--ok-bg); border-color: #bfe9d8; }
+  .chip.bad { color: var(--bad); background: var(--bad-bg); border-color: #f6cdcd; }
+  .chip.warn { color: var(--warn); background: var(--warn-bg); border-color: #f3ddb7; }
+
+  /* \u7ED3\u8BBA\u6761\uFF1A\u5BA2\u6237\u4E0D\u4F1A\u8BFB\u5B8C\u4E09\u5C4F\u518D\u81EA\u5DF1\u5F52\u7EB3\uFF0C\u7B54\u6848\u5FC5\u987B\u5728\u7B2C\u4E00\u5C4F */
+  .verdictbar { margin-top: 20px; border-radius: 14px; padding: 17px 19px; border: 1px solid; }
+  .verdictbar.ok { background: var(--ok-bg); border-color: #bfe9d8; }
+  .verdictbar.warn { background: var(--warn-bg); border-color: #f3ddb7; }
+  .verdictbar.bad { background: var(--bad-bg); border-color: #f6cdcd; }
+  .vb-label { font-size: 10.5px; font-weight: 700; letter-spacing: .14em; margin-bottom: 5px; }
+  .verdictbar.ok .vb-label { color: var(--ok); }
+  .verdictbar.warn .vb-label { color: var(--warn); }
+  .verdictbar.bad .vb-label { color: var(--bad); }
+  .vb-title { font-size: 21px; font-weight: 700; line-height: 1.36; color: var(--ink); letter-spacing: -.01em; }
+  .vb-detail { margin: 7px 0 0; font-size: 13.5px; color: var(--ink-2); line-height: 1.72; }
+
+  /* \u4E3B\u4F53 */
+  .body {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-top: none;
+    padding: 4px 38px 8px;
+  }
+  section { padding: 30px 0; border-top: 1px solid #eef2f7; }
+  section:first-of-type { border-top: 1px solid var(--line); }
+  .sec-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 18px; }
+  .sec-no {
+    flex: 0 0 auto; width: 34px; height: 34px; border-radius: 10px;
+    background: linear-gradient(160deg, #e6f5fe, #f2f9ff);
+    border: 1px solid #cfe8f8;
+    color: var(--brand-deep);
+    font-size: 13px; font-weight: 700; letter-spacing: .02em;
+    display: flex; align-items: center; justify-content: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .sec-title { margin: 0; font-size: 18.5px; font-weight: 700; letter-spacing: -.01em; line-height: 1.5; }
+  .sec-sub { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
+
+  /* \u67B6\u6784\u8BF4\u660E */
+  .arch {
+    display: flex; gap: 13px; align-items: flex-start;
+    background: #f7fbff; border: 1px solid #dceaf7; border-radius: 12px;
+    padding: 15px 17px; margin-bottom: 18px;
+  }
+  .arch-icon { flex: 0 0 auto; width: 34px; height: 34px; border-radius: 9px; background: #fff; border: 1px solid #d9e8f5; color: var(--brand-deep); display: flex; align-items: center; justify-content: center; }
+  .arch-icon svg { width: 19px; height: 19px; }
+  .arch-title { font-size: 14.5px; font-weight: 620; }
+  .arch-sub { color: var(--ink-2); font-size: 13px; margin-top: 4px; line-height: 1.65; }
+
+  /* \u68C0\u67E5\u884C */
+  .rows { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .row { display: grid; grid-template-columns: 152px 1fr; gap: 4px 16px; padding: 13px 16px; }
+  .row + .row { border-top: 1px solid #eff3f8; }
+  .row:nth-child(odd) { background: #fcfdff; }
+  .row-label { font-size: 13.5px; font-weight: 650; color: var(--ink-2); padding-top: 1px; }
+  .row-head { display: flex; gap: 10px; align-items: flex-start; }
+  .row-text { font-size: 13.5px; color: var(--ink-2); }
+  .row-fix {
+    margin-top: 8px; font-size: 12.5px; color: var(--ink-2);
+    background: #fbfcfe; border-left: 2px solid var(--brand);
+    border-radius: 0 6px 6px 0; padding: 6px 10px;
+  }
+  .row-fix span { color: var(--brand-deep); font-weight: 650; margin-right: 8px; }
+
+  .pill {
+    flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px;
+    border-radius: 6px; padding: 2px 7px; font-size: 12px; font-weight: 650; border: 1px solid;
+  }
+  .pill svg { width: 12px; height: 12px; }
+  .pill b { font-weight: 650; }
+  .pill.ok { color: var(--ok); background: var(--ok-bg); border-color: #c8ecdd; }
+  .pill.bad { color: var(--bad); background: var(--bad-bg); border-color: #f7d4d4; }
+  .pill.warn { color: var(--warn); background: var(--warn-bg); border-color: #f4e0c0; }
+
+  .verdict {
+    margin-top: 16px; border-radius: 12px; padding: 15px 17px;
+    background: linear-gradient(180deg, #f8fbff, #f4f9ff);
+    border: 1px solid #dbe9f7;
+  }
+  .verdict-label { font-size: 11.5px; font-weight: 700; letter-spacing: .12em; color: var(--brand-deep); margin-bottom: 5px; }
+  .verdict p { margin: 0; font-size: 14.5px; font-weight: 550; color: var(--ink); line-height: 1.72; }
+
+  /* \u94FE\u63A5\u5361 */
+  .note { border-radius: 10px; padding: 12px 15px; font-size: 13px; line-height: 1.68; }
+  .note.warn { background: var(--warn-bg); border: 1px solid #f3ddb7; color: #7a4e05; }
+  .note.info { background: #f7fbff; border: 1px solid #dceaf7; color: var(--ink-2); margin-top: 16px; }
+  .linkcard {
+    display: flex; align-items: center; gap: 14px; justify-content: space-between;
+    text-decoration: none; color: inherit;
+    border: 1px solid var(--line); border-radius: 12px; padding: 14px 17px;
+    background: #fff; transition: border-color .16s, box-shadow .16s, transform .16s;
+  }
+  .linkcard + .linkcard { margin-top: 10px; }
+  .linkcard:hover { border-color: #b9dcf5; box-shadow: 0 6px 18px -10px rgba(3,105,161,.35); transform: translateY(-1px); }
+  .linkcard-title { font-size: 14.5px; font-weight: 650; }
+  .linkcard-note { font-size: 12.5px; color: var(--ink-2); margin-top: 3px; }
+  .linkcard-url { font-size: 11.5px; color: var(--muted); margin-top: 6px; word-break: break-all; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .arrow { flex: 0 0 auto; width: 18px; height: 18px; color: var(--brand); }
+
+  /* \u952E\u503C */
+  .kvs { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; margin: 0; background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .kv { background: #fff; padding: 12px 16px; }
+  /* \u5947\u6570\u9879\u65F6\u6700\u540E\u4E00\u683C\u6A2A\u8DE8\u4E24\u5217\uFF0C\u5426\u5219\u53F3\u534A\u8FB9\u4F1A\u9732\u51FA\u7F51\u683C\u7EBF\u7684\u7070\u8272\uFF0C\u50CF\u5C11\u586B\u4E86\u4E00\u683C */
+  .kv:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .kv dt { font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+  .kv dd { margin: 0; font-size: 13.5px; font-weight: 600; color: var(--ink); word-break: break-word; }
+  .kv dd.dim { font-weight: 500; color: var(--ink-2); }
+
+  .bigstate { border-radius: 12px; padding: 18px 20px; border: 1px solid; }
+  .bigstate.ok { background: var(--ok-bg); border-color: #c8ecdd; }
+  .bigstate.warn { background: var(--warn-bg); border-color: #f3ddb7; }
+  .bigstate-title { font-size: 15.5px; font-weight: 650; color: var(--ink); }
+  .bigstate-sub { font-size: 13px; color: var(--ink-2); margin-top: 5px; }
+
+  /* \u4E0B\u4E00\u6B65 */
+  .todo { list-style: none; margin: 0; padding: 0; counter-reset: t; }
+  .todo li { counter-increment: t; display: flex; gap: 12px; padding: 11px 0; font-size: 14px; color: var(--ink-2); }
+  .todo li + li { border-top: 1px dashed var(--line); }
+  .todo li::before {
+    content: counter(t); flex: 0 0 auto; width: 22px; height: 22px; border-radius: 7px;
+    background: #f1f7fd; border: 1px solid #d9e8f5; color: var(--brand-deep);
+    font-size: 11.5px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+    margin-top: 2px;
+  }
+
+  /* \u4E0B\u4E00\u6B65\u5206\u4E24\u680F\uFF1A\u80FD\u81EA\u5DF1\u505A\u7684\u522B\u6D6A\u8D39\u5BA2\u6237\u65F6\u95F4\uFF0C\u505A\u4E0D\u4E86\u7684\u624D\u662F\u6211\u4EEC\u80FD\u63A5\u7684\u6D3B */
+  .twocol { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .col { border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; background: #fff; }
+  .col.ours { background: #f7fbff; border-color: #dceaf7; }
+  .col-head { font-size: 13px; font-weight: 700; color: var(--ink-2); }
+  .col.ours .col-head { color: var(--brand-deep); }
+  .col-sub { font-size: 12px; color: var(--muted); margin: 3px 0 9px; line-height: 1.6; }
+  .col ol { margin: 0; padding-left: 17px; }
+  .col li { font-size: 13px; color: var(--ink-2); line-height: 1.66; padding: 5px 0; }
+
+  /* \u65B9\u6CD5\u811A\u6CE8\uFF1A\u5BA2\u6237\u62FF\u62A5\u544A\u53BB\u95EE\u4EFB\u4F55\u4EBA\uFF0C\u8FD9\u4E9B\u6570\u636E\u6E90\u90FD\u7ECF\u5F97\u8D77\u6838 */
+  .method { margin-top: 6px; padding-top: 18px; border-top: 1px solid #eef2f7; font-size: 12px; color: var(--muted); line-height: 1.78; }
+  .method div + div { margin-top: 7px; }
+  .method b { color: var(--ink-2); font-weight: 650; }
+
+  /* \u9875\u811A */
+  .foot {
+    background: linear-gradient(140deg, #0c2338 0%, #10375a 58%, #0b4f74 100%);
+    border-radius: 0 0 18px 18px;
+    padding: 24px 38px 26px;
+    color: #cfe4f4;
+    display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap;
+  }
+  .foot-brand { font-size: 14.5px; font-weight: 650; color: #fff; letter-spacing: .01em; }
+  .foot-sub { font-size: 12.5px; margin-top: 4px; color: #a8c7de; max-width: 470px; line-height: 1.65; }
+  .foot-cta {
+    text-decoration: none; color: #062338; background: #7dd3fc; font-weight: 700; font-size: 13px;
+    padding: 10px 18px; border-radius: 10px; white-space: nowrap;
+  }
+
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+  @media (max-width: 680px) {
+    body { padding: 18px 12px 40px; font-size: 14px; }
+    .hero, .body, .foot { padding-left: 20px; padding-right: 20px; border-radius: 0; }
+    .hero { border-radius: 14px 14px 0 0; }
+    .foot { border-radius: 0 0 14px 14px; }
+    h1 { font-size: 25px; }
+    .row { grid-template-columns: 1fr; gap: 6px; }
+    .row-label { font-size: 12.5px; color: var(--muted); }
+    .kvs { grid-template-columns: 1fr; }
+    .twocol { grid-template-columns: 1fr; }
+    .vb-title { font-size: 18.5px; }
+    .foot { flex-direction: column; align-items: flex-start; }
+  }
+  @media print {
+    body { background: #fff; padding: 0; }
+    .sheet { max-width: none; }
+    section { break-inside: avoid; }
+    .linkcard:hover { transform: none; box-shadow: none; }
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="hero">
+    <div class="hero-top">
+      <div class="brandline">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="13" r="6.4" fill="none" stroke="currentColor" stroke-width="1.7"/>
+          <path d="M12 6.6V3.2M9.4 9.6l-3.1-2.4M14.6 9.6l3.1-2.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          <circle cx="9.9" cy="12.6" r="1" fill="currentColor"/>
+          <circle cx="14.1" cy="12.6" r="1" fill="currentColor"/>
+          <path d="M6.2 16.2c-1.6 1.3-2.4 2.9-2.4 4.6 1.7 0 3.2-.7 4.4-2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+        </svg>
+        PUFFERGO \xB7 \u57DF\u540D\u4F53\u68C0
+      </div>
+      <div class="stamp">${esc2(r.reportId)} \xB7 ${esc2(stamp)}</div>
+    </div>
+    <h1>${esc2(r.domain)}</h1>
+    <p class="lede">${unregistered ? "\u4E70\u4E4B\u524D\u7684\u4F53\u68C0\uFF1A\u8FD9\u4E2A\u57DF\u540D\u80FD\u4E0D\u80FD\u6CE8\u518C\u3001\u6709\u6CA1\u6709\u88AB\u524D\u4E3B\u4EBA\u7559\u4E0B\u7684\u6C61\u70B9\u3002" : "\u53EA\u67E5\u4E09\u4EF6\u4E8B\uFF1A\u90AE\u4EF6\u80FD\u4E0D\u80FD\u9001\u5230\u3001\u7AD9\u4F1A\u4E0D\u4F1A\u88AB Google \u62E6\u3001\u8FD9\u4E2A\u57DF\u540D\u662F\u4EC0\u4E48\u6765\u8DEF\u3002"}</p>
+    <div class="verdictbar ${h.tone}">
+      <div class="vb-label">\u7ED3\u8BBA</div>
+      <div class="vb-title">${esc2(h.title)}</div>
+      <p class="vb-detail">${esc2(h.detail)}</p>
+    </div>
+    <div class="chips">
+      ${chips.map((c) => `<span class="chip ${c.tone}">${ICONS[c.tone]}${esc2(c.text)}</span>`).join("")}
+    </div>
+  </header>
+
+  <div class="body">
+
+    ${unregistered ? buySections() : diagSections()}
+
+    <div class="method">
+      <div><b>\u672C\u6B21\u67E5\u4E86\u4EC0\u4E48</b>\u3000RDAP \u6CE8\u518C\u4FE1\u606F \xB7 \u5F53\u524D DNS\uFF08A / NS / MX\uFF09\xB7 \u8BC1\u4E66\u900F\u660E\u5EA6\u65E5\u5FD7\uFF08crt.sh / Cert Spotter\uFF09\xB7 \u88AB\u52A8 DNS \u5386\u53F2\uFF08HackerTarget / subdomain.center\uFF09\xB7 Spamhaus DBL / SURBL \u57DF\u540D\u540D\u5355 \xB7 SPF / DKIM / DMARC\uFF08DoH\uFF09\xB7 \u7AD9\u70B9\u53EF\u8FBE\u6027\uFF08https\uFF0C\u4E0D\u901A\u518D\u8BD5 http\uFF09</div>
+      <div><b>\u6CA1\u67E5\u4EC0\u4E48</b>\u3000IP \u9ED1\u540D\u5355\uFF08\u90AE\u7BB1\u6258\u7BA1\u5728\u7B2C\u4E09\u65B9\uFF0CIP \u4E0D\u5F52\u4F60\uFF0C\u67E5\u4E86\u4E5F\u6362\u4E0D\u4E86\uFF09\xB7 Google \u641C\u7D22\u5904\u7F5A\uFF08\u65E0\u516C\u5F00\u63A5\u53E3\uFF09\xB7 \u5386\u53F2 WHOIS\uFF08\u4ED8\u8D39\u5E93\uFF09\xB7 \u7F51\u9875\u5FEB\u7167\uFF08archive.org \u5728\u56FD\u5185\u4E0D\u53EF\u8FBE\uFF0C\u5DF2\u7528\u8BC1\u4E66\u548C\u88AB\u52A8 DNS \u66FF\u4EE3\uFF09</div>
+      <div>\u67E5\u4E0D\u5230\u7684\u9879\u5DF2\u9010\u6761\u6807\u6CE8\uFF0C\u6CA1\u6709\u6309\u300C\u5E72\u51C0\u300D\u5904\u7406\u3002\u4E09\u5904\u5386\u53F2\u75D5\u8FF9\u90FD\u4E0D\u4FDD\u8BC1\u8986\u76D6\u5168\u91CF\uFF1A\u65E9\u5E74\u53EA\u6709 HTTP \u7684\u7AD9\u6CA1\u6709\u8BC1\u4E66\u8BB0\u5F55\uFF0C\u75D5\u8FF9\u4E5F\u4F1A\u968F\u65F6\u95F4\u88AB\u6E05\u6389\u3002</div>
+    </div>
+
+  </div>
+
+  <footer class="foot">
+    <div>
+      <div class="foot-brand">PufferGo \xB7 \u5916\u8D38\u72EC\u7ACB\u7AD9</div>
+      <div class="foot-sub">\u8FD9\u4EFD\u4F53\u68C0\u514D\u8D39\uFF0C\u968F\u4FBF\u67E5\u3002\u6211\u4EEC\u505A\u7684\u662F\u5916\u8D38\u72EC\u7ACB\u7AD9\u548C Google SEO \u2014\u2014 \u57DF\u540D\u3001\u4F01\u4E1A\u90AE\u3001\u5EFA\u7AD9\u3001\u4E0A\u7EBF\u3001\u5F15\u6D41\u3002\u67E5\u51FA\u6765\u7684\u95EE\u9898\uFF0C\u81EA\u5DF1\u80FD\u6539\u7684\u81EA\u5DF1\u6539\uFF1B\u6539\u4E0D\u52A8\u7684\uFF0C\u627E\u6211\u4EEC\u3002</div>
+    </div>
+    <a class="foot-cta" href="https://puffergo.com" target="_blank" rel="noopener">puffergo.com</a>
+  </footer>
+
+</div>
+</body>
+</html>
+`;
+}
+
 // src/index.ts
 var rawArgv = process.argv.slice(2);
-var group = ["products", "pages", "profile", "chrome", "login", "site", "__login-wait"].includes(rawArgv[0] ?? "") ? rawArgv[0] : "silo";
-var argv = rawArgv[0] === "silo" || group === "products" || group === "pages" || group === "profile" || group === "chrome" || group === "site" ? rawArgv.slice(1) : rawArgv;
+var group = ["products", "pages", "profile", "chrome", "login", "site", "domain", "__login-wait"].includes(
+  rawArgv[0] ?? ""
+) ? rawArgv[0] : "silo";
+var argv = rawArgv[0] === "silo" || group === "products" || group === "pages" || group === "profile" || group === "chrome" || group === "site" || group === "domain" ? rawArgv.slice(1) : rawArgv;
 var cmd = argv[0];
 var flags = /* @__PURE__ */ new Map();
 var positional = [];
@@ -15649,6 +17261,7 @@ async function main() {
       log("puffergo login status [--wait <seconds>]");
       log("puffergo version");
       log(SITE_SETUP_USAGE);
+      log(DOMAIN_USAGE);
       log(PROFILE_USAGE);
       log(CHROME_USAGE);
       log(PRODUCTS_USAGE);
@@ -15758,7 +17371,28 @@ async function site() {
       return emit({ ok: false, code: "usage", message: SITE_USAGE });
   }
 }
-var run2 = group === "products" ? products : group === "pages" ? pages : group === "profile" ? profile : group === "chrome" ? chrome : group === "site" ? site : group === "login" ? async () => emit(
+async function domain() {
+  const ctx = { dir, flags, positional };
+  switch (cmd) {
+    case "check": {
+      const res = await cmdDomainCheck(ctx);
+      if (!res.ok) return emit(res);
+      if (flags.get("json") === "true") return emit(res);
+      const wantHtml = flags.get("html");
+      if (wantHtml !== void 0) {
+        const path = wantHtml === "true" ? `${res.domain}-domain-check.html` : wantHtml;
+        await mkdir11(dirname13(path), { recursive: true });
+        await writeFile13(path, renderDomainCheckHtml(res), "utf8");
+        return emit({ ok: true, domain: res.domain, html: path, reportId: res.reportId, checkedAt: res.checkedAt });
+      }
+      log(renderDomainCheck(res));
+      return;
+    }
+    default:
+      return emit({ ok: false, code: "usage", message: DOMAIN_USAGE });
+  }
+}
+var run2 = group === "products" ? products : group === "pages" ? pages : group === "profile" ? profile : group === "chrome" ? chrome : group === "site" ? site : group === "domain" ? domain : group === "login" ? async () => emit(
   positional[0] === "status" ? await cmdLoginStatus(dir, flags.get("wait")) : await cmdLogin(dir, positional[0] ?? argv[1])
 ) : group === "__login-wait" ? () => cmdLoginWait(argv[1], argv[2], argv[3], argv[4]) : main;
 run2().catch((e) => {
