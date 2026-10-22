@@ -16,6 +16,10 @@ const SITE = 'http://setup.test';
 interface Answers {
   index?: { namespaces: string[] };
   me?: number; // HTTP status for /wp/v2/users/me
+  /** capabilities returned by /users/me?context=edit; omit to model a site that hides them. */
+  meCaps?: Record<string, boolean>;
+  /** `context=edit` blocked by a security plugin while the password itself is fine. */
+  meEditForbidden?: boolean;
   plugins?: { status: number; body: unknown };
   schema?: { status: number; body: unknown };
   install?: Array<{ url: string; body: unknown }>; // recorded POST bodies
@@ -48,7 +52,17 @@ function stubEndpoints(a: Answers) {
       ];
       return new Response(JSON.stringify(rows), { status: 200 });
     }
-    if (url.includes('/users/me')) return new Response('{}', { status: a.me ?? 200 });
+    if (url.includes('/users/me')) {
+      const status = a.me ?? 200;
+      if (status !== 200) return new Response('{}', { status });
+      const wantsCaps = url.includes('context=edit');
+      if (wantsCaps && a.meEditForbidden)
+        return new Response(JSON.stringify({ code: 'rest_forbidden' }), { status: 403 });
+      // WordPress only returns `capabilities` in the edit context — a bare /users/me must not carry them.
+      return new Response(JSON.stringify(wantsCaps && a.meCaps ? { id: 1, capabilities: a.meCaps } : { id: 1 }), {
+        status: 200,
+      });
+    }
     if (url.includes('/wp-json/')) return new Response(JSON.stringify(a.index ?? { namespaces: [] }));
     return new Response('{}', { status: 404 });
   });
@@ -98,7 +112,12 @@ describe('puffergo site setup (probe)', () => {
       plugins: { status: 200, body: [] },
     });
     const out = (await cmdSiteSetup(ctx(dir))) as Record<string, unknown>;
-    expect(out).toMatchObject({ ok: true, ready: false, puffergoPlugin: { state: 'missing' }, seoPlugin: { active: null } });
+    expect(out).toMatchObject({
+      ok: true,
+      ready: false,
+      puffergoPlugin: { state: 'missing' },
+      seoPlugin: { active: null },
+    });
     expect(out.needsInstall).toEqual(['puffergo', 'seo-by-rank-math']);
     expect(String(out.next)).toContain('install --customer-said');
   });
@@ -150,8 +169,67 @@ describe('puffergo site setup (probe)', () => {
   });
 });
 
+describe("wp-admin links follow the account's capabilities", () => {
+  const ADMIN = { edit_posts: true, manage_options: true, install_plugins: true, activate_plugins: true };
+  const EDITOR = { edit_posts: true, manage_options: false, install_plugins: false, activate_plugins: false };
+  interface LinksOut extends Record<string, unknown> {
+    wpAdmin: { links: Record<string, string>; reachableFor: string; note?: string };
+    account?: { reach: string; canManageOptions: boolean; canInstallPlugins: boolean };
+  }
+
+  it('an administrator gets the builder, the site profile and the settings links', async () => {
+    const dir = await workdir();
+    stubEndpoints({ ...READY, meCaps: ADMIN });
+    const out = (await cmdSiteSetup(ctx(dir))) as unknown as LinksOut;
+    expect(out.account).toMatchObject({ reach: 'administrator', canManageOptions: true, canInstallPlugins: true });
+    expect(out.wpAdmin.reachableFor).toBe('administrator');
+    expect(Object.keys(out.wpAdmin.links).sort()).toEqual(['aiSiteBuilder', 'settings', 'siteProfile']);
+    expect(out.wpAdmin.links.settings).toBe(`${SITE}/wp-admin/admin.php?page=puffergo-settings`);
+  });
+
+  it('an editor only gets the AI site builder link — a manage_options page would 403 on them', async () => {
+    const dir = await workdir();
+    stubEndpoints({ ...READY, meCaps: EDITOR });
+    const out = (await cmdSiteSetup(ctx(dir))) as unknown as LinksOut;
+    expect(out.account).toMatchObject({ reach: 'editor', canManageOptions: false });
+    expect(out.wpAdmin.reachableFor).toBe('editor');
+    expect(Object.keys(out.wpAdmin.links)).toEqual(['aiSiteBuilder']);
+  });
+
+  it('an editor who is missing the plugin is told an administrator has to install it', async () => {
+    const dir = await workdir();
+    stubEndpoints({
+      index: { namespaces: ['wp/v2', 'wp-abilities/v1', 'rankmath/v1'] },
+      plugins: { status: 200, body: [] },
+      meCaps: EDITOR,
+    });
+    const out = (await cmdSiteSetup(ctx(dir))) as Record<string, unknown>;
+    expect(out.needsInstall).toEqual(['puffergo']);
+    expect(JSON.stringify(out.problems)).toContain('administrator');
+  });
+
+  it('a site that hides capabilities still yields the builder link, reach unknown', async () => {
+    const dir = await workdir();
+    stubEndpoints(READY); // no meCaps → WordPress returns no `capabilities` field
+    const out = (await cmdSiteSetup(ctx(dir))) as unknown as LinksOut;
+    expect(out.account).toBeUndefined();
+    expect(out.wpAdmin.reachableFor).toBe('unknown');
+    expect(Object.keys(out.wpAdmin.links)).toEqual(['aiSiteBuilder']);
+    expect(String(out.wpAdmin.note)).toContain('did not disclose');
+  });
+
+  it('a blocked context=edit is not mistaken for a dead Application Password', async () => {
+    const dir = await workdir();
+    stubEndpoints({ ...READY, meEditForbidden: true });
+    const out = (await cmdSiteSetup(ctx(dir))) as unknown as LinksOut;
+    expect(out.connected).toBe(true); // the plain /users/me still answers
+    expect(out.account).toBeUndefined();
+    expect(out.wpAdmin.links.aiSiteBuilder).toContain('/wp-admin/admin.php?page=puffergo-ai-site-builder');
+  });
+});
+
 describe('puffergo site setup install', () => {
-  it('refuses without the customer\'s own words', async () => {
+  it("refuses without the customer's own words", async () => {
     const dir = await workdir();
     stubEndpoints(READY);
     const out = await cmdSiteSetup(ctx(dir, ['install']));

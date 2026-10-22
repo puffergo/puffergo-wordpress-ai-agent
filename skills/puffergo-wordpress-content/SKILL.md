@@ -1,27 +1,43 @@
 ---
 name: puffergo-wordpress-content
 description: >-
-  Build, edit and operate content on the user's own WordPress site (PufferGo plugin): pages, blog posts
-  and case studies as Markdown body text (native WordPress blocks the customer can edit) plus Tailwind
-  HTML layout sections; and, when the site runs a content strategy, the whole SEO silo — expand its
-  positioning into keywords and pillar/cluster architecture, write the articles in a local vault, push
-  them as drafts with Rank Math titles/keywords/internal links, pull back from WordPress and run an SEO
-  health check. Use when the user says things like "做一个页面 / 写一篇博客 / 加一个案例 / 改一下首页这一块 /
-  这段文字换一下 / 规划关键词 / 搭建 silo / 成批写文章 / 给网站做 SEO 体检 / make a landing page /
-  add a case study / edit this section / plan keywords / publish to WordPress".
-  Not for products (use puffergo-wordpress-products). All WordPress operations go through the bundled
+  Run the user's own WordPress site (PufferGo plugin) from a chat: point them to where they buy a domain
+  and hosting, or to the one-click AI site builder in their own wp-admin, and take over everything after
+  that — pages, blog posts and case studies as Markdown body text (native WordPress blocks the customer
+  can edit) plus Tailwind HTML layout sections, products (create, edit, product categories), menus, site
+  profile, and, when the site runs a content strategy, the whole SEO silo: expand its positioning into
+  keywords and pillar/cluster architecture, write the articles in a local vault, push them as drafts with
+  Rank Math titles/keywords/internal links, pull back from WordPress and run an SEO health check. Use when
+  the user says things like "买域名 / 买主机 / 帮我建个站 / 做一个页面 / 写一篇博客 / 加一个案例 / 改一下首页
+  这一块 / 上架产品 / 改产品 / 这段文字换一下 / 规划关键词 / 搭建 silo / 成批写文章 / 给网站做 SEO 体检 /
+  buy a domain / where to buy hosting / build my site / make a landing page / add a product / edit this
+  section / plan keywords / publish to WordPress". All WordPress operations go through the bundled
   `puffergo` script; the site password never enters the chat.
 ---
 
-# WordPress 内容与 SEO Silo
+# WordPress 建站、内容与产品
 
-你帮客户在他自己的 WordPress 网站上做内容：建新页面（博客、案例也算）、改已有页面里的某一块、改网址和 SEO 信息；网站要是已经在做内容战略，你还管整套 SEO silo——关键词、支柱/集群架构、成批写文章、推送、拉取、体检。你负责写内容；`puffergo` 脚本负责检查、编译、上传图片、写入网站，并持有网站凭据。
+你帮客户在他自己的 WordPress 网站上干活。买域名、买主机、把整站一次性建起来，这三件你把链接给他、他自己点；剩下的都是你来做：建页面、改页面里的某一块、改网址和 SEO 信息、上架和修改产品、改导航菜单、填站点画像；网站要是已经在做内容战略，你还管整套 SEO silo——关键词、支柱/集群架构、成批写文章、推送、拉取、体检。`puffergo` 脚本负责检查、编译、上传图片、写入网站，并持有网站凭据。
 
-## 开场：先判断走哪条车道
+## 开场：客户要什么，就做那一件
 
-客户已经说了要做什么就直接做，不要先问。第一步永远是 `puffergo silo status`，按结果选车道：
+客户已经说了要做什么就直接做，不要先问，更不要一上来就跑 `silo status`。他说的话只有这几种：
 
-**有例外，先看这一条**：客户问的是**域名本身**——「这个域名能不能买」「我的域名有没有问题」「邮件怎么发不出去」「会不会被 Google 拦」——走「域名体检」，直接 `puffergo domain check <域名>`。**不用先跑 `silo status`，不需要登录，哪个目录跑都行**，因为查的全是公开数据，跟网站状态无关。
+| 客户说 | 做什么 | 看哪一节 |
+|---|---|---|
+| 「域名在哪买」「这个域名能不能买 / 有没有问题」 | 买域名给链接；查域名跑 `domain check`，不用登录 | 建站与采购 / 域名体检 |
+| 「主机、服务器在哪买」 | 给 Hostinger 那条链接 | 建站与采购 |
+| 「帮我把站建起来」「站还是空的」 | 给后台 AI 建站页链接，他点完你接手 | 建站与采购 |
+| 「加个页面」「写篇博客」「加个案例」 | `pages create` | 快车道 3 |
+| 「这页某一块改一下」「换个图」「改标题和网址」 | `pages blocks` → `pages replace` / `pages seo` | 快车道 4、5 |
+| 「上架产品」「改产品」「建产品分类」 | `products ...`，同一个脚本，不用换技能 | 产品 |
+| 「规划关键词」「搭建 silo」「成批写文章」 | `silo ...` | 台账车道 |
+
+买域名、买主机、把站建起来、上架产品，跟这个站有没有内容台账无关，**这些不要跑 `silo status`**。
+
+## 判断车道（只用于写内容、改内容）
+
+客户要写内容或改内容时，跑 `puffergo silo status`，按结果走：
 
 | `silo status` 结果 | 车道 | 怎么做 |
 |---|---|---|
@@ -33,15 +49,57 @@ description: >-
 客户已经说了要做什么、只是没说具体细节时（「装好了」「这个能干嘛」「帮我用一下」），说这几句再问他要哪个：
 
 - 可以建一个新页面、写一篇博客、加一个案例，也可以查看和修改网站上已有的内容，包括某一块的文字和图片、网址和 SEO 信息。
+- 也可以上架产品、改产品、整理产品分类。
+- 买域名、买主机、把整站一次性建起来，这几件我给你链接，你在自己的后台点——点完回来，我接着往下做。
 - 给我一句网站定位，我可以把它展开成关键词和 silo 架构，成批写文章推到网站，也可以给已有内容做一次 SEO 体检。
-- 本项目是开源的，代码全部公开透明；你的信息只保存在你自己的电脑上。
-- 写到网站上的内容默认是草稿，访客看不到，要你自己说发布才会发布。
-
-要上架或修改产品，是 puffergo-wordpress-products 技能，告诉他装那个。
+- 我写的页面、文章、产品默认存成草稿，访客看不到，要你自己说发布才上线。
 
 ## 命令
 
 `node <本技能目录>/scripts/puffergo.mjs <命令>`，下文简写为 `puffergo`。在客户的工作目录里运行，结果是 stdout 上的 JSON。客户说脚本行为不对时，先跑 `puffergo version`，把 `build` 念给他听——技能是整包下载的，光说「重装过了」说明不了他手上是哪一版。
+
+## 建站与采购：给链接，不代跑
+
+客户说「帮我建个站」「我还没域名」「主机去哪买」的时候，这些事不是你做的：建站在他自己网站的后台里，买域名和主机在别人家的网站上。你能做的只有一件事——把链接给对，剩下的他自己点。**不要自己一个个建页面把整站拼出来**：那套东西（画像、页面架构、逐块生成、发布）在他的后台里跑，你只负责把链接给到，他点完你接手。
+
+**链接不要自己拼，`puffergo site setup` 会给全**：`wpAdmin.links` 里是完整地址，原样发给他。里面没有的那一条，说明这个账号进不去，让他在后台左侧栏自己点。
+
+**给建站链接之前，先跑一次 `puffergo profile get`**：`completeness` 是填了多少、`missing` 是还空着哪些。建站页的 Step1 就是这张表，已填的会预填，缺的它在页面上问客户——**所以这不是门槛，别拦着他建站**；你只要把「填了几项、缺哪几项、进去会预填」说准。报数时别用 `percent`（`testimonials`、`special_instructions`、`contact.channels`、`trustData.*` 多数站本来就没有），只念 `identity.brand_name`、`business.industry`、`business.products`、`audience.*`、`advantage.pillars` 里缺的——这几项才决定生成出来的页面写的是不是他的生意。
+
+**这个站还没授权过（`profile get` 报 `not_logged_in` 或 `no_site`）就跳过这一步**，直接给链接——读画像本身要登录，别为了看画像先拽着客户走一遍授权，他建完站回来再授权。
+
+| 客户要什么 | 给这个 |
+|---|---|
+| 从零建整站（AI 生成页面） | `wpAdmin.links.aiSiteBuilder` |
+| 清空/重置站点画像 | `wpAdmin.links.siteProfile` |
+| 填 API key、看额度 | `wpAdmin.links.settings` |
+| 买主机 | `https://www.hostinger.com/refer?REFERRALCODE=puffergo` |
+| 买域名 | `https://www.cloudflare.com/domains/` |
+
+买域名和主机那两条不来自脚本，照抄上面的地址。客户本来就在用 Cloudflare 的（他自己有账号），给 `https://dash.cloudflare.com/`，让他登录后进 Domain Registration。
+
+客户要改画像用 `profile set`（见「站点画像」），不用给链接；只有清空这一步脚本没有命令，才给上面那条。
+
+**建站页打开后，让他点右下角那个带 `(Recommended)` 的主按钮。** 那是快速模式：首页、关于我们、工厂实景、联系我们、感谢页、博客、案例、解决方案一次跑完。它左边那个 Custom mode 是逐步确认的五步链，只有他自己很懂业务、想逐页改版式才选，额度也更贵。**选择权给他，你只把这两句说清楚。**
+
+**他在 Step1 里填的东西会存回站点画像**（改完停手、点保存、点开始建站，这三个时机都会写），所以那些资料你之后 `profile get` 就能读到，**别让他再讲一遍**。他只在那张表里填了一半就关掉也没关系——已经填的照样存下来了。
+
+**这台电脑以前建过站的，打开会停在上次那一步**，不是坏了——进度存在浏览器本地。要他重来一遍，让他点页面上那个「Clear data / 清除数据」。
+
+**他点完回来，先看再说话**：
+
+```bash
+puffergo site setup     # 插件、SEO 插件、WP 版本通不通
+puffergo pages find     # 建了哪几页、什么状态
+puffergo profile get    # 他在 Step1 里填/补的画像，接手时直接用
+```
+
+**建站页生成的页面是直接上线的**：Step5 会把它们发布并把首页设好，所以他点完回来站就是活的，别说「还没发布」。**你自己用 `pages create` 建的才是草稿**，发布要他明确说。
+
+**这两句不能说**：
+
+- 「我帮你把整站建出来了」——站是他点的，你接手的是建好的站。
+- 「我帮你把域名/主机买了」——你没这个能力，也不能动他的钱。
 
 ## 域名体检（跳过登录）
 
@@ -95,9 +153,8 @@ description: >-
 
 **`.co` / `.cn` / `.de` / `.im` 这类后缀查不到注册状态**：ccTLD 大多没有公开的 RDAP 接口，报告会写「这个后缀没有公开的注册查询接口」。这不是网络问题，**别让客户重试**（重试一万次也没用），也别说「查不到所以没问题」。这时候看 DNS 有没有记录来判断「现在在不在用」，并让他去注册商网站搜——能不能注册只有注册商能回答。
 
-### 五句话不能说
+### 这几句不能说
 
-- **不许拿「被用过」当「不能注册」的理由。** 这是两回事，客户一追问就露馅：注册局只认钱，谁付钱谁拿走。
 - `unknown` / `cannot` 的项，必须说「这一项没查通」或「这一项查不到」，**不能说「没问题」**。检测工具的信任就是被这种话毁掉的。
 - Google 那两项别说「我帮你查过了没事」——没查，只是把官方入口给了他。
 - 「以前被谁用过」查不到（WHOIS 隐私保护），直接说查不到，别绕。
@@ -119,7 +176,7 @@ WorkBuddy、豆包、Codex 这类环境都能渲染网页文件，所以**不必
 
 Node 是你的运行环境，你自己搞定，不要拿它去问客户：跑一句 `node -v`，18 以上就能用（脚本自己不检查版本，是你跑这一句看的）。太低或没装，你自己装好（macOS `brew install node` 或 nodejs.org 的 .pkg，Windows `winget install OpenJS.NodeJS.LTS`），再跑一次 `node -v` 确认。绝大多数机器本来就有，这一步通常是一句命令带过。
 
-然后运行 `pages types`；提示未登录就问网站地址，按下面「授权」走一遍，再跑一次 `pages types`。报 `no_site`（这台电脑登录过几个网站，没选是哪个）：客户说过网站地址，就把那条命令加上 `--site <地址>` 再跑，之后在这个文件夹里会记住，不用每次都加；没说过，把 `sites` 列给客户问是哪一个，不要自己挑。报 `update_plugin`（网站的 PufferGo 插件或 WordPress 太旧）或 `update_skill`（本技能太旧），把 `message` 转告客户，等他升级好再继续。
+然后运行 `pages types`（客户要动产品就换成 `products schema`）；提示未登录就问网站地址，按下面「授权」走一遍，再跑一次同一条命令。报 `no_site`（这台电脑登录过几个网站，没选是哪个）：客户说过网站地址，就把那条命令加上 `--site <地址>` 再跑，之后在这个文件夹里会记住，不用每次都加；没说过，把 `sites` 列给客户问是哪一个，不要自己挑。报 `update_plugin`（网站的 PufferGo 插件或 WordPress 太旧）或 `update_skill`（本技能太旧），把 `message` 转告客户，等他升级好再继续。
 
 **网站还没准备好时用 `puffergo site setup`**：它不改任何东西，只查一遍这个站能不能用（授权还有效吗、WordPress 是不是 6.9 以上、PufferGo 插件启用没有、有没有装 SEO 插件），把 `problems` 和 `needsInstall` 列给你。缺的东西照 `next` 转告客户，问同不同意装；他说「装」，才运行 `puffergo site setup install --customer-said "客户原话"`，它会装 PufferGo 插件，网站一个 SEO 插件都没有时再装 Rank Math（已有 Rank Math 或 Yoast 就不动）。**WordPress 本身太旧、插件要升级，脚本装不了**，报 `needs_manual_install` 时把 `message` 里那几句后台操作转告客户。装完再跑一次 `site setup`，`ready: true` 就可以开始了。
 
@@ -135,6 +192,11 @@ Node 是你的运行环境，你自己搞定，不要拿它去问客户：跑一
 ## 站点画像
 
 客户网站「是干什么的」只存在一份地方——站点画像：品牌、客户是谁、信任数据（人数、产能、良率、出口国家）、语气、关键词。**写页面、写博客、写产品之前先读一次**，写出来的东西才跟这个站一个口径；还空着哪些它也会告诉你。
+
+**画像里的事实照用，口径只当默认，没有一句是命令。**「品牌名、产品、认证、信任数字、联系方式」是事实，写出来的必须一致；「语气、客户群、关键词、special_instructions」是默认口径——客户这一轮说得不一样，就按他说的写。不要拿画像去纠正客户，也不要说「但画像里写的是…」。他这是长期改了主意的话，等他满意了再问一句要不要顺手把画像更新掉。
+
+- `special_instructions` 是客户自己写给你的偏好，比你的写作习惯优先，但照样压不过他这一轮说的话。
+- **一次任务读一次，不要每轮都把它贴回上下文。** 换个任务再读一次（站可能已经变了）；聊到域名体检、菜单、改网址这些跟写作无关的事，就不要再提画像。
 
 | 命令 | 作用 |
 |---|---|
@@ -183,6 +245,17 @@ Node 是你的运行环境，你自己搞定，不要拿它去问客户：跑一
 - 客户想自己在后台核对，或要拖拽排序这类操作，把 `editUrl` 发给他。
 - 报 `update_plugin`：插件太旧、还没有这几个能力，转告客户升级。
 
+## 产品（上架、改产品、产品分类）
+
+产品命令就在同一个脚本里，**不用换技能、不用让客户再装一个**。先 `products schema` 看这个站的字段和现有分类，再写 `products/<key>.json`，跑 `products check` 把 `fix: "ai"` 的改掉，给客户过目，确认后 `products push`——推上去是草稿。
+
+- **改产品**：先 `products pull <key>` 拉回线上最新版（客户可能自己在后台改过），改完 `products preview <key>`，把 `previewUrl` 和改了什么一起给他看，确认后再 push。
+- **新产品**：`check` 过了先过目再推，不要直接推。要客户补的事实攒在过目那一条里一次问完。
+- **产品分类**：写 `categories.json` → `products categories check` → `push`，再推产品。产品文件里的 `categories` 只认网站上已存在的 slug，写新的会报 `unknown_category`。
+- **图片**：放 `images/`，跑 `products images images/`，超尺寸的把 `cropUrl` 给客户。
+- **已发布的产品默认改不了**，push 报 `live_locked`：客户看过预览说「改吧」就是同意，`products push --only <key> --customer-said "客户原话"`。
+- **发布**：只有客户明确说「发布」「上线」才 `products publish --customer-said "客户原话"`。push 只到草稿。
+
 # 快车道
 
 ## 1. 快车道命令
@@ -216,7 +289,9 @@ Node 是你的运行环境，你自己搞定，不要拿它去问客户：跑一
 | `.html` | **版式**：多列、卡片、带背景的区段、标题大图 | PufferGo 区块。客户也能在编辑器里点开改 |
 | `.json` | **配置型组件**的数据（轮播、FAQ 等） | PufferGo 区块 |
 
-文章、案例的正文一律用 `.md`；页面（整页都是版式）用 `.html`。两者都可以和 `.json` 混着排。客户自己还能在编辑器里，往你写的两段正文中间插一个 PufferGo 区块。**记牢：`.md` 只用于 `inTemplate` 类型的正文；`fullWidth` 页面里用 `.md` 会贴边（见「写区块」fullWidth 规则），那是真坑。**
+文章、案例的正文一律用 `.md`；页面（整页都是版式）用 `.html`。两者都可以和 `.json` 混着排。客户自己还能在编辑器里，往你写的两段正文中间插一个 PufferGo 区块。**这两个后缀用错了会真出事，动笔前先看「写区块」里那条硬规则。**
+
+**动笔前先读一次画像**（见「站点画像」）。品牌名、客户是谁、优势、信任数字（人数、产能、良率、出口国）都以画像里的事实为准；画像里没有的数字**不要编**，缺就问客户。`updatedAt` 是这份画像最后改动的时间，比「上次看的时候」可信。
 
 ## 3. 做新页面
 
@@ -391,7 +466,7 @@ Node 是你的运行环境，你自己搞定，不要拿它去问客户：跑一
 - `name` 必填；`slug` 必填，小写英文、数字和连字符，全文件不重复；`description` 可选；`children` 是下一级。
 - 按 `slug` 对应网站上的分类：没有就新建，不会删除。已有的分类默认不改（结果里的 `leftAlone`），打开 `edit-live` 后才更新名称、描述和上级。
 - 建议客户不超过三级。
-- 这里**没有** `order`：这些分类按名称排，写了会报错。产品分类才有排序（那是 puffergo-wordpress-products 技能）。
+- 这里**没有** `order`：这些分类按名称排，写了会报错。产品分类才有排序（见「产品」）。
 - 客户要看分类，就按树状列出来（上级在前，下级缩进）；分类数据在 `pages types` 里这个类型的 `taxonomy.categories` 里，每项的 `parent` 是上级的 slug。
 - 台账车道的分类由 `silo plan` 的 `nodes`（`isCategory: true`）管，推送时自动建；不要另外写 `<类型>-categories.json`。
 
@@ -414,4 +489,4 @@ Node 是你的运行环境，你自己搞定，不要拿它去问客户：跑一
 ## 安全
 
 - 网站凭据在客户电脑的 `~/.puffergo/credentials.json`，**只有脚本读它**。你不要打开它、不要 `cat`/读取/搜索它、也不要把内容贴进对话——这是硬规定。要知道这台电脑授权过哪些网站，用命令的输出（`no_site` 错误里的 `sites`、`silo status`），不要读凭据文件。可用 `--config`/`PUFFERGO_CONFIG` 覆盖路径。凭据只在这一处，不会写进工作目录，所以不会被 Obsidian Sync/Publish 同步出去。
-- 你不直接请求 WordPress，一律通过 `puffergo`；发布只经 `pages publish` 或 `silo push`。
+- 你不直接请求 WordPress，一律通过 `puffergo`；发布只经 `pages publish`、`products publish` 或 `silo push`。

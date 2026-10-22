@@ -12,10 +12,15 @@
  *                                                          (an active Rank Math or Yoast is kept)
  *
  * Probes escalate by privilege so a non-admin account still gets a useful report:
- *   GET /wp-json/                        (public)  → namespaces: abilities API? SEO plugin active?
- *   GET /wp/v2/users/me                  (authed)  → does the Application Password still work?
- *   GET /wp/v2/plugins                   (admin)   → exact plugin states; 403 degrades to 'unknown'
- *   GET  …/puffergo/get-product-schema   (authed)  → the functional check that matters: abilities answer
+ *   GET /wp-json/                                    (public)  → namespaces: abilities API? SEO plugin active?
+ *   GET /wp/v2/users/me?context=edit                 (authed)  → password works? what may this account reach?
+ *   GET /wp/v2/plugins                               (admin)   → exact plugin states; 403 degrades to 'unknown'
+ *   GET  …/puffergo/get-product-schema               (authed)  → the functional check that matters: abilities answer
+ *
+ * The account's capabilities decide which wp-admin pages the report links to: the AI site builder only
+ * needs `edit_posts`, while the site profile and the API-key settings need `manage_options`. Handing an
+ * editor a manage_options link lands them on "Sorry, you are not allowed to access this page" — so the
+ * URLs are built here, from the capabilities, instead of being assembled by the model.
  *
  * Installing needs `activate_plugins` + `install_plugins`; without them the command refuses with
  * `needs_manual_install` and the wp-admin walkthrough instead of half-installing.
@@ -37,6 +42,14 @@ export const SITE_SETUP_USAGE =
 
 type PluginState = 'active' | 'inactive' | 'missing' | 'unknown';
 
+/** Which wp-admin pages this account may open — read from `/wp/v2/users/me?context=edit`. */
+interface AccountCaps {
+  editPosts: boolean;
+  manageOptions: boolean;
+  /** Installing a plugin needs both `install_plugins` and `activate_plugins`. */
+  installPlugins: boolean;
+}
+
 interface ProbeResult {
   siteUrl: string;
   /** The Application Password authenticates. */
@@ -50,6 +63,19 @@ interface ProbeResult {
   seo: 'rankmath' | 'yoast' | null;
   /** Plugin states couldn't be listed (non-admin) — states stay 'unknown' unless abilities answered. */
   canListPlugins: boolean;
+  /** null when the site refused to disclose capabilities (security plugins do) — links then stay safe. */
+  caps: AccountCaps | null;
+}
+
+function readCaps(json: unknown): AccountCaps | null {
+  const caps = (json as { capabilities?: Record<string, boolean> } | undefined)?.capabilities;
+  if (!caps || typeof caps !== 'object') return null;
+  return {
+    editPosts: !!caps.edit_posts,
+    manageOptions: !!caps.manage_options,
+    // PufferGo is installed and activated in one call, so both permissions are required.
+    installPlugins: !!caps.install_plugins && !!caps.activate_plugins,
+  };
 }
 
 async function probe(cfg: SiloConfig): Promise<ProbeResult> {
@@ -61,10 +87,16 @@ async function probe(cfg: SiloConfig): Promise<ProbeResult> {
 
   const [index, me, pluginRes, schemaRes] = await Promise.all([
     get(`${base}/wp-json/`),
-    get(`${base}/wp-json/wp/v2/users/me?_fields=id`),
+    get(`${base}/wp-json/wp/v2/users/me?context=edit&_fields=id,capabilities`),
     get(`${base}/wp-json/wp/v2/plugins?_fields=plugin,textdomain,status,version`),
     get(`${base}/wp-json/wp-abilities/v1/abilities/puffergo/get-product-schema/run`),
   ]);
+
+  const caps = ok(me.status) ? readCaps(me.json) : null;
+  // `context=edit` can be blocked outright by a security plugin while the password itself is fine, so a
+  // failed capabilities read must not be mistaken for a dead credential.
+  let connected = ok(me.status);
+  if (!connected) connected = ok((await get(`${base}/wp-json/wp/v2/users/me?_fields=id`)).status);
 
   const namespaces = (index.json as { namespaces?: string[] } | undefined)?.namespaces ?? [];
   const plugins =
@@ -86,7 +118,7 @@ async function probe(cfg: SiloConfig): Promise<ProbeResult> {
 
   return {
     siteUrl: cfg.siteUrl,
-    connected: ok(me.status),
+    connected,
     abilitiesApi: namespaces.includes('wp-abilities/v1'),
     // The abilities answering IS the proof the plugin is active, whatever the (possibly forbidden)
     // plugin list says; 'unknown' stays only when neither source could tell.
@@ -102,6 +134,7 @@ async function probe(cfg: SiloConfig): Promise<ProbeResult> {
             ? 'yoast'
             : null,
     canListPlugins: plugins !== null,
+    caps,
   };
 }
 
@@ -115,21 +148,71 @@ function report(p: ProbeResult): Record<string, unknown> {
     p.schemaVersion !== null && (p.schemaVersion < MIN_SCHEMA_VERSION || p.schemaVersion > SUPPORTED_SCHEMA_VERSION);
 
   const problems: string[] = [];
-  if (!p.connected) problems.push('The saved Application Password does not authenticate — run `puffergo login <siteUrl>` again.');
-  if (!p.abilitiesApi) problems.push('WordPress is older than 6.9 (no Abilities API) — update WordPress itself; the CLI cannot.');
+  if (!p.connected)
+    problems.push('The saved Application Password does not authenticate — run `puffergo login <siteUrl>` again.');
+  if (!p.abilitiesApi)
+    problems.push('WordPress is older than 6.9 (no Abilities API) — update WordPress itself; the CLI cannot.');
   if (pluginTooOld)
     problems.push(
       `The PufferGo plugin's product-file version is ${p.schemaVersion}; this CLI understands ${MIN_SCHEMA_VERSION}–${SUPPORTED_SCHEMA_VERSION} — update the PufferGo plugin in wp-admin.`,
     );
   if (p.puffergo !== 'active' && !pluginTooOld) problems.push('The PufferGo plugin is not active.');
-  if (!p.seo) problems.push('No SEO plugin is active, so SEO fields (title/description/focus keyword) have nowhere to be written.');
+  if (!p.seo)
+    problems.push(
+      'No SEO plugin is active, so SEO fields (title/description/focus keyword) have nowhere to be written.',
+    );
+  if (p.caps && !p.caps.installPlugins && needs.filter(n => n !== 'wordpress-6.9').length)
+    problems.push(
+      'This account cannot install or activate plugins — a WordPress administrator has to do it in wp-admin (Plugins → Add New).',
+    );
+
+  // wp-admin entries, built here so the AI never assembles a URL itself: an editor handed a
+  // manage_options link only ever sees "Sorry, you are not allowed to access this page".
+  const base = p.siteUrl.replace(/\/+$/, '');
+  const adminPage = (slug: string) => `${base}/wp-admin/admin.php?page=${slug}`;
+  const links: Record<string, string> = {};
+  if (!p.caps || p.caps.editPosts || p.caps.manageOptions) links.aiSiteBuilder = adminPage('puffergo-ai-site-builder');
+  if (p.caps?.manageOptions) {
+    links.siteProfile = adminPage('puffergo-site-profile');
+    links.settings = adminPage('puffergo-settings');
+  }
 
   return {
     site: p.siteUrl,
     connected: p.connected,
+    ...(p.caps
+      ? {
+          account: {
+            canEditPosts: p.caps.editPosts,
+            canManageOptions: p.caps.manageOptions,
+            canInstallPlugins: p.caps.installPlugins,
+            reach: p.caps.manageOptions ? 'administrator' : p.caps.editPosts ? 'editor' : 'none',
+          },
+        }
+      : {}),
     wordpress: { abilitiesApi: p.abilitiesApi },
     puffergoPlugin: { state: p.puffergo, schemaVersion: p.schemaVersion },
     seoPlugin: { active: p.seo },
+    ...(Object.keys(links).length
+      ? {
+          wpAdmin: {
+            links,
+            // 'unknown' means the site hid the capabilities — the builder link is still safe (edit_posts).
+            reachableFor: p.caps
+              ? p.caps.manageOptions
+                ? 'administrator'
+                : p.caps.editPosts
+                  ? 'editor'
+                  : 'none'
+              : 'unknown',
+            ...(p.caps
+              ? {}
+              : {
+                  note: "The site did not disclose this account's capabilities, so only the AI site builder link is given — it is the one page that needs nothing beyond edit_posts.",
+                }),
+          },
+        }
+      : {}),
     needsInstall: needs.filter(n => n !== 'wordpress-6.9'),
     ...(problems.length ? { problems } : {}),
     ready: p.connected && p.abilitiesApi && p.puffergo === 'active' && !!p.seo && !pluginTooOld,
@@ -166,7 +249,9 @@ async function install(ctx: CmdCtx, cfg: SiloConfig): Promise<Out> {
     actions.puffergo =
       before.puffergo === 'active' ? 'already_active' : (await client.ensurePluginActive(PUFFERGO_SLUG)).action;
     // An active Rank Math or Yoast is kept — PufferGo writes through whichever SEO plugin the site runs.
-    actions.rankMath = before.seo ? `skipped_${before.seo}_active` : (await client.ensurePluginActive(RANKMATH_SLUG)).action;
+    actions.rankMath = before.seo
+      ? `skipped_${before.seo}_active`
+      : (await client.ensurePluginActive(RANKMATH_SLUG)).action;
   } catch (e) {
     if (e instanceof WpHttpError && (e.status === 401 || e.status === 403))
       return {
@@ -212,8 +297,7 @@ export async function cmdSiteSetup(ctx: CmdCtx): Promise<Out> {
       ...(r.ready
         ? { next: 'The site is ready for PufferGo.' }
         : {
-            next:
-              'Show the customer what is missing (problems/needsInstall) and ask to install. If they agree, run `puffergo site setup install --customer-said "<their exact words>"`. WordPress core and plugin UPDATES cannot be installed from here — guide the customer through wp-admin for those.',
+            next: 'Show the customer what is missing (problems/needsInstall) and ask to install. If they agree, run `puffergo site setup install --customer-said "<their exact words>"`. WordPress core and plugin UPDATES cannot be installed from here — guide the customer through wp-admin for those.',
           }),
     };
   } catch (e) {

@@ -434,7 +434,7 @@ async function cmdView(): Promise<void> {
 /** Which shipped build this is. The script travels inside the Skill folder, so "I reinstalled it" proves
  *  nothing on its own — this is what a customer's AI quotes back when a fix did or did not arrive. Bump it
  *  whenever the bundle the build script writes into the Skills changes behavior. */
-const BUILD = '2026-10-09.1';
+const BUILD = '2026-10-22.1';
 
 async function main(): Promise<void> {
   switch (cmd) {
