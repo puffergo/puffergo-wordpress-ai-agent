@@ -27,6 +27,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { upsertCredential, PUFFERGO_DIR } from '../adapters/credentials';
 import { writeActiveDomain } from '../adapters/fileStore';
+import { siteKey } from '@puffergo/silo-core';
 
 const WAIT_MS = 10 * 60 * 1000;
 /** How long `login status` blocks by default — under the 2-minute command timeout AI tools use. */
@@ -417,4 +418,16 @@ async function rebindLoginState(siteUrl: string, bound: number): Promise<void> {
     startedAt: current?.startedAt ?? Date.now(),
     port: bound,
   });
+}
+
+/**
+ * Forget the authorization record when it belongs to `siteUrl` — `logout` calls this so a later
+ * `login status` cannot read back an `approved` record for a site this machine no longer has, and
+ * report a connection that is gone. A record for a different site is left alone (one file, one flow).
+ */
+export async function forgetLoginState(siteUrl: string): Promise<boolean> {
+  const state = await readLoginState();
+  if (!state || siteKey(state.siteUrl) !== siteKey(siteUrl)) return false;
+  await rm(loginStatePath(), { force: true });
+  return true;
 }

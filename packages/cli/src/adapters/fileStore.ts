@@ -16,7 +16,7 @@
  * and `silo init` writes it directly.
  */
 
-import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, readdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { siteKey, SITES_DIR, STATE_PATH, workspacePath, type SiloWorkspace } from '@puffergo/silo-core';
@@ -53,6 +53,20 @@ export async function writeActiveDomain(dir: string, siteUrl: string): Promise<v
   const p = join(dir, STATE_PATH);
   await mkdir(dirname(p), { recursive: true });
   await writeFile(p, JSON.stringify({ activeDomain: siteKey(siteUrl) }, null, 2), 'utf8');
+}
+
+/**
+ * Drop the active-site pointer, but ONLY when it points at `siteUrl` — `logout` calls this so a
+ * disconnected site cannot leave a dead pointer behind. That pointer is what `resolveSite` reads first:
+ * left in place, every later command in this folder fails as `not_logged_in` even when this machine is
+ * still connected to other sites. `state.json` holds nothing but this pointer, so removing it is the
+ * whole reset. Returns whether it was pointing at that site.
+ */
+export async function clearActiveDomain(dir: string, siteUrl: string): Promise<boolean> {
+  const active = await readActiveDomain(dir);
+  if (!active || active !== siteKey(siteUrl)) return false;
+  await rm(join(dir, STATE_PATH), { force: true });
+  return true;
 }
 
 /**

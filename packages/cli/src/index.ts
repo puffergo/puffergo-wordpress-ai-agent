@@ -56,6 +56,7 @@ import { cmdChromeGet, cmdChromeCheck, cmdChromePush, CHROME_USAGE } from './lib
 import { cmdEditLive, siteErrorOutput } from './lib/siteCmd';
 import { cmdSiteSetup, SITE_SETUP_USAGE } from './lib/siteSetupCmd';
 import { cmdLogin, cmdLoginStatus, cmdLoginWait } from './lib/loginCmd';
+import { cmdLogout, LOGOUT_USAGE } from './lib/logoutCmd';
 import {
   cmdTypes,
   cmdFind,
@@ -70,14 +71,24 @@ import {
 } from './lib/pagesCmd';
 import { cmdDomainCheck, renderDomainCheck, DOMAIN_USAGE } from './lib/domainCmd';
 import { renderDomainCheckHtml } from './lib/domainReport';
+import { cmdApi, API_USAGE } from './lib/apiCmd';
 
 // ---- tiny arg parsing -------------------------------------------------------
 // `puffergo <login|products …|silo …>`; the legacy `silo <cmd>` bin calls this with no group word,
 // so anything that isn't a known group falls through to the silo commands unchanged.
 const rawArgv = process.argv.slice(2);
-const group = ['products', 'pages', 'profile', 'chrome', 'login', 'site', 'domain', '__login-wait'].includes(
-  rawArgv[0] ?? '',
-)
+const group = [
+  'products',
+  'pages',
+  'profile',
+  'chrome',
+  'login',
+  'logout',
+  'site',
+  'domain',
+  'api',
+  '__login-wait',
+].includes(rawArgv[0] ?? '')
   ? rawArgv[0]
   : 'silo';
 const argv =
@@ -87,7 +98,8 @@ const argv =
   group === 'profile' ||
   group === 'chrome' ||
   group === 'site' ||
-  group === 'domain'
+  group === 'domain' ||
+  group === 'api'
     ? rawArgv.slice(1)
     : rawArgv;
 const cmd = argv[0];
@@ -434,7 +446,7 @@ async function cmdView(): Promise<void> {
 /** Which shipped build this is. The script travels inside the Skill folder, so "I reinstalled it" proves
  *  nothing on its own — this is what a customer's AI quotes back when a fix did or did not arrive. Bump it
  *  whenever the bundle the build script writes into the Skills changes behavior. */
-const BUILD = '2026-10-22.1';
+const BUILD = '2026-10-23.1';
 
 async function main(): Promise<void> {
   switch (cmd) {
@@ -459,9 +471,11 @@ async function main(): Promise<void> {
       log('puffergo silo <init|plan|push|pull|health|status|view> [--dir <vault>] [--config <path>]');
       log('puffergo login <siteUrl>');
       log('puffergo login status [--wait <seconds>]');
+      log(LOGOUT_USAGE);
       log('puffergo version');
       log(SITE_SETUP_USAGE);
       log(DOMAIN_USAGE);
+      log(API_USAGE);
       log(PROFILE_USAGE);
       log(CHROME_USAGE);
       log(PRODUCTS_USAGE);
@@ -572,6 +586,12 @@ async function chrome(): Promise<void> {
   }
 }
 
+/** The raw-REST escape hatch. `api` is a group word, so `cmd` holds the METHOD and positional holds the
+ *  path; hand cmdApi a ctx with the method prepended so it reads [method, path] like any other command. */
+async function apiGroup(): Promise<void> {
+  return emit(await cmdApi({ dir, flags, positional: [cmd, ...positional] }, configPath));
+}
+
 const SITE_USAGE = SITE_SETUP_USAGE;
 
 async function site(): Promise<void> {
@@ -625,16 +645,20 @@ const run =
             ? site
             : group === 'domain'
               ? domain
-              : group === 'login'
-                ? async () =>
-                    emit(
-                      positional[0] === 'status'
-                        ? await cmdLoginStatus(dir, flags.get('wait'))
-                        : await cmdLogin(dir, positional[0] ?? argv[1]),
-                    )
-                : group === '__login-wait'
-                  ? () => cmdLoginWait(argv[1]!, argv[2]!, argv[3]!, argv[4])
-                  : main;
+              : group === 'api'
+                ? apiGroup
+                : group === 'login'
+                  ? async () =>
+                      emit(
+                        positional[0] === 'status'
+                          ? await cmdLoginStatus(dir, flags.get('wait'))
+                          : await cmdLogin(dir, positional[0] ?? argv[1]),
+                      )
+                  : group === 'logout'
+                    ? async () => emit(await cmdLogout(dir, positional[0], configPath))
+                    : group === '__login-wait'
+                      ? () => cmdLoginWait(argv[1]!, argv[2]!, argv[3]!, argv[4])
+                      : main;
 
 run().catch(e => {
   const shared = siteErrorOutput(e);

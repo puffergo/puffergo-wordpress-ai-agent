@@ -96,10 +96,35 @@ export async function resolveCredential(
 }
 
 /** List every site URL known to the credential store in effect — used to report `code:"no_site"` with
- *  the sites the user IS logged into, so the AI can ask "which one?" instead of guessing. */
-export async function listCredentialSites(): Promise<string[]> {
-  const store = await readStore(storePath());
+ *  the sites the user IS logged into, so the AI can ask "which one?" instead of guessing — and by
+ *  `logout` to show the list before removing anything. `explicitPath` honours `--config` the same way
+ *  `resolveCredential` does. */
+export async function listCredentialSites(explicitPath?: string): Promise<string[]> {
+  const store = await readStore(explicitPath ?? storePath());
   return store ? Object.keys(store.sites) : [];
+}
+
+/**
+ * Forget one site's credentials — the local half of "disconnect". Matched the same way
+ * `resolveCredential` matches (normalized URL, then domain key) so `logout example.com` removes the
+ * entry stored as `https://example.com`, and nothing else. Returns the removed site's URL, or null when
+ * this machine had no credentials for it.
+ *
+ * The Application Password itself stays valid inside WordPress — the CLI cannot revoke a key it does
+ * not own. `logout` hands the customer the wp-admin link for that instead of pretending otherwise.
+ */
+export async function removeCredential(siteUrl: string, path: string = storePath()): Promise<string | null> {
+  const store = await readStore(path);
+  if (!store) return null;
+  const urls = Object.keys(store.sites);
+  const byNorm = new Map(urls.map(u => [normUrl(u), u]));
+  const pick = byNorm.get(normUrl(siteUrl)) ?? urls.find(u => siteKey(u) === siteKey(siteUrl));
+  if (!pick) return null;
+  delete store.sites[pick];
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, JSON.stringify(store, null, 2), { encoding: 'utf8', mode: 0o600 });
+  await chmod(path, 0o600).catch(() => undefined);
+  return pick;
 }
 
 /** Write/merge a site's credentials into the credential store in effect. */

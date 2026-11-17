@@ -10,7 +10,7 @@
  * they were turned on for and can no longer be dropped by logging into a different one.
  */
 
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { siteKey, siteConfigPath } from '@puffergo/silo-core';
@@ -37,6 +37,18 @@ export async function writeSiteConfig(dir: string, siteUrl: string, cfg: SiteCon
   const p = join(dir, siteConfigPath(siteKey(siteUrl)));
   await mkdir(dirname(p), { recursive: true });
   await writeFile(p, JSON.stringify(cfg, null, 2), 'utf8');
+}
+
+/**
+ * Drop this site's switches — `logout` calls this because `edit-live` was granted for the authorization
+ * that just ended, and must not survive into the next one. Only `config.json` goes: `workspace.json`
+ * and the pages work files next to it are the customer's own content, and stay untouched.
+ */
+export async function clearSiteConfig(dir: string, siteUrl: string): Promise<boolean> {
+  const p = join(dir, siteConfigPath(siteKey(siteUrl)));
+  if (!existsSync(p)) return false;
+  await rm(p, { force: true });
+  return true;
 }
 
 export class NoSiteError extends Error {
