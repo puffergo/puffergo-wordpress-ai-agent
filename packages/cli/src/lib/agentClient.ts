@@ -221,6 +221,25 @@ export class AgentClient {
     return `${this.cfg.siteUrl.replace(/\/+$/, '')}/wp-json/wp/v2`;
   }
 
+  private get puffergoBase(): string {
+    return `${this.cfg.siteUrl.replace(/\/+$/, '')}/wp-json/puffergo/v1`;
+  }
+
+  /** 创建一次服务端 AI 建站编排（插件代理会注入可信画像/主题上下文）。 */
+  createBuild(body: Record<string, unknown>): Promise<{ success: boolean; buildId?: string; totalSections?: number; message?: string }> {
+    return this.call('POST', '/builds', body, this.puffergoBase);
+  }
+
+  /** 拉取 build 进度与结果。 */
+  getBuild(id: string): Promise<Record<string, any>> {
+    return this.call('GET', `/builds/${encodeURIComponent(id)}`, undefined, this.puffergoBase);
+  }
+
+  /** 重试失败页。 */
+  retryBuild(id: string): Promise<Record<string, any>> {
+    return this.call('POST', `/builds/${encodeURIComponent(id)}/retry`, {}, this.puffergoBase);
+  }
+
   /** POST /wp/v2/media — outside the puffergo/v1 namespace, so bypasses `base`. */
   async uploadMedia(bytes: Uint8Array, filename: string, mimeType: string): Promise<{ id: number; url: string }> {
     const url = `${this.cfg.siteUrl.replace(/\/+$/, '')}/wp-json/wp/v2/media`;

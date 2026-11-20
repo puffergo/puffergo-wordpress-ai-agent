@@ -1,5 +1,7 @@
 # 实战验证记录（2026-11-17）
 
+> **status（2026-11-18 校正）**：本文的 Hostinger 接口链路（`onboardings` / `websites` / `billing` / DNS）实测可用，是**当前核心链路**——Hostinger MCP（本地 stdio 包 + 国内镜像）跑通，买主机、开站、装 WordPress 走它（SKILL 阶段 1/2），站点侧走 CLI。只有 MCP 跑不通才降级 hPanel 网页兜底。接口参数照下面的查，**但 Worker 反代 / 改 Host 头那套是跨账号归属的兜底、不在业务范围内，别照做**。产品口径以 SKILL.md 为准。
+
 这份记录来自一整天的端到端实测，目的是让「聊天 + 浏览器简单授权 → AI 全自动建站上线」这个形态可复现。所有接口名、参数、报错都是实跑验证过的，不是推测。给 AI 用：照着做能少踩坑。
 
 ## 已经跑通的两条链路
@@ -128,7 +130,7 @@
 1. 登录 / 注册 Cloudflare、Hostinger 账号
 2. 在两个账号里各绑一次付款方式（都在网页，AI 进不去）
 3. 说出他要的域名（或让 AI 出候选后挑一个）
-4. 说「买」
+4. 说「可以」（确认域名 / 主机报价）
 5. 付款验证（银行验证码 / 支付宝授权过期重确认）
 6. WordPress 后台点一次「批准」
 
@@ -158,7 +160,8 @@ AI 全自动的部分：查域名可用性与价格、注册域名、转入域�
 
 - 非前台 tab 的 CDP 点击**静默失效**：先 `tab_focus` 置前，再点。
 - Monaco 编辑器里 `dom_cua_type` 会因自动缩进把代码打乱；要贴代码用 API 直接部署，别在 Monaco 里敲。
-- OAuth 同意页常有两步（选 scope → Continue → Authorize），别点一次就以为完了。
+- OAuth 同意页常有两步（选 scope → Continue → Authorize），别点一次就以为完了。Cloudflare 那页的 scope 必须手动切到 `Full access`（默认 `Minimal` 没有 `dns.write`），切完再 Continue——这两个动作都是客户的。
+- 授权完别急着写记录：先看 `~/.mcp-auth/mcp-remote-v1/*_tokens.json` 的 `scope` 里有没有 `dns.write`。没有就是没切 Full access，直接让他重授权，比写完吃 403 再排查省一轮。
 - 超长 `login_challenge` URL 白屏：刷新一次通常就好了。
 
 ## 产品形态结论（为什么做成这样）

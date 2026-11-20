@@ -9,42 +9,106 @@ description: >-
   网站打不开 / 买主机 / 买域名 / 部署 / deploy my site / connect my domain /
   point my domain to my site / my domain is not working / 403 Forbidden。
   这台电脑上没有站点、或者站点还没上线时用它；已经有站只想改内容，用 puffergo-wordpress-content。
-  Hostinger 与 Cloudflare 的操作走 MCP 工具，WordPress 侧走脚本自带的 puffergo 命令。
+  主机与开站装 WordPress 优先由 AI 调 Hostinger MCP 自动完成（客户只点确认/付款），跑不通时才让客户在 hPanel 网页兜底；DNS 走 Cloudflare，站点侧走脚本自带的 puffergo 命令。
 ---
 
 # 建站与上线
 
 你负责把客户从「我想做个网站」带到「网站能打开、PufferGo 插件已装好、有人能替他改内容」。他手上可能什么都没有，也可能域名主机都齐了——先看再动。内容写得好不好不是这一步的事，写完页面是 content 技能的事。
 
-**目标用户是不懂技术的人。** 整条链路里他们只做 7 件事，剩下的全是你的活：
+**目标用户是不懂技术的人。** 整条链路里他们只做 8 件事，剩下的全是你的活：
 
 | 客户只做 | 什么时候 | 为什么你替不了 |
 |---|---|---|
-| 登录 / 注册（Hostinger、Cloudflare） | 第一次连接服务时，浏览器里点一下授权 | 账号密码只有他有 |
+| 登录 Hostinger 账号 + 点一次「Allow」 | 首次连主机时，浏览器弹出授权页 | 账号只有他有；那一下是他授权自己的主机账号，我不能替他点 |
+| 在 Cloudflare 授权页点一次「Continue」（上面先把权限切到 Full access） | 首次用 Cloudflare MCP 配解析时 | 同上：他授权的是自己整个 Cloudflare 账号，所以这两下必须他亲手做 |
 | 输入他要的域名 | 阶段 0 你问的时候 | — |
-| **买主机、扫码付款** | 阶段 1 | 账单国家、新付款方式、扫码只有结账页能做 |
-| 说一句「买」（域名） | 你报完价之后，付款前 | 花钱必须他点头 |
-| 在银行 App / hPanel 确认付款 | 订单卡在 `awaiting_payment`，或支付宝授权过期时 | 验证码和支付密码在你手上没有 |
-| **在后台点 Connect now 连 PufferGo 账号** | 阶段 4，插件装好后 | 要他的 puffergo.com 账号 |
+| **在结账页支付宝扫码付款买主机**（账单国家选 Hong Kong） | 阶段 1 | 账单国家、支付宝扫码只有结账页能做；**不用绑卡** |
+| 说一句「可以」（域名 / 主机报价） | 你报完价之后，付款前 | 花钱必须他点头 |
+| 在后台点 Connect now 连 PufferGo 账号 | 阶段 4，插件装好后 | 要他的 puffergo.com 账号 |
 | 在 WordPress 后台点一次「批准」 | 你调 `puffergo login` 授权应用密码时 | 应用密码只能站主本人批准 |
 
-**域名那边最容易漏绑卡。** 新的 Cloudflare 账号第一次买域名必须先在 dashboard 绑付款方式、填联系人地址，接口改不了。阶段 0 查完账号就顺手看一眼有没有付款方式，没有就先给链接让他绑，绑卡期间你去准备域名候选，两边并行。
+**买主机、开站点、装 WordPress 现在都是你的活**（走 Hostinger MCP），客户全程不用碰 hPanel。
 
-客户不懂 DNS、不懂 vhost、不懂 API。任何一步都不要把他们带到后台去填表、写代码、配记录——那是你的工作。真需要他们动浏览器，只给一个链接 + 一句「点这里，允许一下」。
+**后台密码由你生成，当场写成文件放在客户电脑上。** 建站接口 `wordpress.admin.password` 是必填项、由调用方提供，装完之后没有任何接口能把密码取回来——所以**没写下来就等于丢了**。固定用法：建站前跑一次
+
+```
+puffergo site password --domain <域名> --email <管理员邮箱>
+```
+
+它生成一个合规的强密码、写好一张登录卡（桌面 `<域名>-登录信息.txt`，权限 600），并把 `credentials.user / .password / .email` 原样打出来给你提交建站接口。**文件和接口用的是同一份密码，不会出现「文件里是旧的、站上是新的」。**
+
+三条口径：文件只给客户，**别把 JSON 或密码念进聊天**；客户问「密码发你吗」回「不用，已经存成文件放你桌面了」；客户能收信的邮箱要写进文件（忘记密码时靠它重置）。
+
+**域名这一环不要让客户绑卡。** 分两种情况，都不需要付款方式：
+
+- **客户已经有域名**（阿里云、腾讯云、GoDaddy 买的都算）：只把 NS 改到 Cloudflare。**免费，不用绑任何支付方式**，Cloudflare 加站点、拿 NS 地址、改解析全都不要钱。
+- **客户还没有域名**：在 Hostinger 买（支付宝），或在他已有的国内注册商买（支付宝）。买完再把 NS 指到 Cloudflare。
+
+**只有「在 Cloudflare 注册新域名」才必须绑卡**——Cloudflare Registrar 只收信用卡/借记卡、PayPal、Apple Pay、银联，**没有支付宝**。所以这条路默认不走，除非客户自己已经有卡并且主动要求。
+
+别为了走 Cloudflare 注册去劝客户办卡：域名在哪注册都能改 NS，NS 一改，后面的解析和 SSL 我们照样全自动做。
+
+客户不懂 DNS、不懂 vhost、不懂 API。任何一步都不要把他们带到后台去填表、写代码、配记录——那是你的工作。
+
+**真需要他们动浏览器，只有这四件事**：结账页扫码付款、首次连主机时点一次「Allow」、首次配解析时在 Cloudflare 页把权限切到 Full access 再点「Continue」、WordPress 后台点「批准」和连 PufferGo。**这几件事一律由客户本人点，我不代点。**每件事只给一个链接 + 一句明确的话 + 一张示意图（`images/` 下都有，见下方授权段），别让他猜。
+
+**买主机、开站、装 WordPress 默认你来做**（Hostinger MCP）。只有 MCP 确实跑不通、又不能用别的办法绕过时，才把 hPanel 网页步骤作为兜底给他——那是最后一条路，不是默认路。
+
+## 命令
+
+`node <本技能目录>/scripts/puffergo.mjs <命令>`，下文简写为 `puffergo`。本技能目录就是这份 SKILL.md 所在目录；不确定时先跑一次 `find ~/.workbuddy -name puffergo.mjs -path "*puffergo-wordpress-deploy*" | head -1` 拿到绝对路径。结果是 stdout 上的 JSON。客户说脚本行为不对时，先跑 `puffergo version`，把 `build` 念给他听——技能是整包下载的，光说「重装过了」说明不了他手上是哪一版。
 
 ## 开工前：把能力备齐
 
 按顺序确认，缺哪个就先补哪个，**别等走到一半才发现没工具**：
 
-1. **Hostinger MCP**（开站 / 装 WP / DNS / 装插件）：首次调用会打开浏览器走 OAuth，客户点「允许」即可。主机付款不走它，见阶段 1。
-2. **Cloudflare MCP**（DNS / SSL）：域名 NS 在 Cloudflare 时需要。
-3. **puffergo 脚本**：本技能自带的 `scripts/puffergo.mjs`，WordPress 侧全走它。
+1. **Cloudflare MCP**（DNS / SSL）：域名 NS 在 Cloudflare 时需要。它是标准 OAuth，能正常弹授权。
+2. **Hostinger MCP**（买主机 / 开站 / 装 WP）：核心链路靠它，和 Cloudflare 一样是 **Code Mode**（`search` 找操作名 → `execute` 传 `operation` + `params`）。有两条通道，**按顺序试**：
+   - **主通道**：WorkBuddy 官方 MCP 连接（`type:http` + `https://mcp.hostinger.com`），走 WorkBuddy 内置 OAuth，凭据落 `~/.mcp-auth/`。首次用到主机时浏览器弹授权，客户点「Allow」。
+   - **兜底通道**：技能自带的 `scripts/hostinger.mjs`。**只有当主通道连不上（卡片显示连接失败 / 工具调用报 unauthorized）才用**，不要一上来就用它。它调的还是 Hostinger 官方包（国内镜像拉取，凭据落 `~/.config/hostinger-mcp/`），客户体验完全一样（也是弹浏览器点 Allow），只是绕开了 WorkBuddy 那个连不上的连接层。详见下方「主机连接兜底」段。
+3. **puffergo 脚本**：本技能自带的 `scripts/puffergo.mjs`，站点侧全走它。
 
-**两个 MCP 都是 Code Mode**：对外只暴露 `search` / `execute`（Cloudflare 另有 `docs` / `whoami`，Hostinger 另有 `multi-execute`），没有「添加 DNS 记录」这种现成工具。正确姿势是先 `search` 找操作名，再 `execute` 传 `operation` + `params` 调。看到工具列表只有三四个不要以为没连上。
+**Cloudflare MCP 是 Code Mode**：对外只暴露 `search` / `execute` / `docs` / `whoami`，没有「添加 DNS 记录」这种现成工具。正确姿势是先 `search` 找操作名，再 `execute` 传 `operation` + `params` 调。看到工具列表只有三四个不要以为没连上。
 
-如果客户环境里这两个 MCP 还没连：**一次性**告诉他「我需要连接 Hostinger 和 Cloudflare，等下浏览器会各弹一次授权，点允许就行」，然后引导他连。不要让他自己去搜连接器名字、也不要让他填 JSON。客户连好之前不要开始建站。
+如果客户环境里 Cloudflare MCP 还没连：**一次性**告诉他「我需要连接 Cloudflare 才能帮你配域名解析，等下浏览器会弹一次授权，点允许就行」，然后引导他连。不要让他自己去搜连接器名字、也不要让他填 JSON。
 
-**授权页上的按钮你自己点，别甩给客户**——客户不懂 Continue / Authorize 这些词，还容易点到出错的回调页。需要客户本人的只有：登录账号密码、付款确认、WordPress 后台批准；其余授权动作 AI 代劳。token 过期也不用重新授权，下次调用会自动刷新。完整的 OAuth 流程、代点步骤、`Invalid Request` 报错根因，见 `references/oauth-and-authorization.md`——连接卡住时先读它。
+Hostinger 不用事先引导——第一次要用到主机（阶段 1 查套餐 / 阶段 2 开站）时，走主通道，浏览器会弹一次授权页，客户点「Allow」即可。
+
+### 主机连接兜底（主通道连不上时）
+
+WorkBuddy 的官方 MCP 连接卡片在部分环境会连不上 Hostinger（表现：输入框上方卡片显示「连接失败」，或工具调用报 `unauthorized` / `无可续凭据`，浏览器始终不弹授权页）。这是 WorkBuddy 客户端的问题，不是客户操作错了。**遇到这种情况不要反复让客户点重试、更不要说"连接器不兼容"这类技术词**，直接切兜底通道：
+
+1. **先判**：`node <技能目录>/scripts/hostinger.mjs --check` —— 输出 `READY` 说明本机已有凭据，直接用；`NEED_LOGIN` 说明首次，要授权。
+2. **首次授权**：`node <技能目录>/scripts/hostinger.mjs --login` —— 脚本会输出一行 `AUTH_URL ...`，官方包一般会自己把浏览器打开。**不管弹没弹，都把这条链接发给客户当备用**（复制粘贴进地址栏即可），同时发 `images/hostinger-allow-annotated.png`，话术：「浏览器应该已经弹出授权页了，认一眼账号是不是你自己的，然后点 Allow。」客户点完看到「凭据已落盘」就成了。**点 Allow 是客户的动作，不要拿浏览器工具替他点**（后面「授权」段解释了为什么）。
+3. **调工具**：`node <技能目录>/scripts/hostinger.mjs --search "xxx"` 找操作名，再 `node <技能目录>/scripts/hostinger.mjs <operation> '<params-json>'` 调用。参数结构从 `--search` 返回的 `inputSchema` 里读，别猜。
+4. **话术**：切兜底时客户那边不用解释技术细节，只说「正在准备主机工具，马上就好，等下浏览器会弹一次授权，你点一下 Allow」。**MCP / 连接器 / 脚本 / 桥接这些词一个都不要说**。
+
+**脚本说明**：`<技能目录>` 指 `skills/puffergo-wordpress-deploy/scripts`（专家包里是 `skills/puffergo-wordpress-deploy/scripts/`）。脚本用 `npx` 从腾讯云镜像拉 Hostinger 官方包，首次十几秒、之后走本机缓存；`--check` 只读不下载。凭据过期官方包会自动刷新，不用重登。
+
+### 授权页的按钮：一律客户本人点，AI 不代点
+
+**Hostinger 的 `Allow`、Cloudflare 的 `Continue`（连同它上面那次「切 Full access」）、WordPress 的 `Approve`，这几下都是客户在授权他自己的账号，AI 不代点。** 技术上点得动（浏览器工具能点 DOM），但**不能点**：AI 代点等于自己给自己发钥匙，"客户随时能撤销"这套设计就塌了；客户事后说"我没授权过"时也没有任何痕迹可查。
+
+AI 的活是把页面送到他眼前、说清点哪个、等他点完——**不代点，也不催**。
+
+**体验要做到和 WordPress 应用密码那一步完全一样**，四件套缺一不可：
+
+1. **浏览器自动打开**（主路径就在那个窗口里，他的注意力在那儿）
+2. **一句加粗的人话**，说清"看到这个页面是正常的"＋"点哪个按钮"
+3. **一张示意图**，红色编号标出要点的位置
+4. **聊天里留一条链接当备用**（没弹出 / 被关掉 / 想换浏览器），可以点，也可以复制粘贴到地址栏
+
+| 哪一步 | 示意图 | 客户做什么 |
+|---|---|---|
+| Hostinger 授权 | `images/hostinger-allow-annotated.png` | 认一眼账号是不是自己的 → 点 **Allow** |
+| Cloudflare 授权 | `images/cloudflare-authorize-annotated.png` | 权限切到最右的 **Full access**（默认 Minimal 写不了解析）→ 点 **Continue** |
+| WordPress 登录页 | `images/wp-login-annotated.png` | 用桌面登录卡登录，**勾 Remember Me** |
+| WordPress 批准 | `images/wp-authorize.png` | 点 **Approve / 批准** |
+
+**不要只说「你去授权一下」。** 客户不知道授权长什么样，看到陌生页面只会以为出错，然后回来问"这是不是坏了"。
+
+需要客户本人的只有四类：Hostinger 账号登录与付款、Cloudflare 账号授权、WordPress 后台批准、结账页扫码。token 过期一般会自动刷新，不用客户重登。完整 OAuth 流程与 `Invalid Request` 报错根因见 `references/oauth-and-authorization.md`——连接卡住时先读它。
 
 每个 MCP 的端点、授权方式、以及「哪个阶段用哪个工具」的对照，见 `references/mcp-capabilities.md`——开工前读一遍，照着调，别猜工具名。
 
@@ -52,50 +116,144 @@ description: >-
 
 | 环节 | 谁做 | 说明 |
 |---|---|---|
-| 买域名 | Cloudflare Registrar | **不在 Hostinger 买**，Hostinger 域名贵且和主机账号绑死 |
-| 买主机 | 客户本人在 Hostinger 结账页 | 账单国家、新付款方式只有页面能填；你给带推荐码的定价页链接 + 四句话 |
-| 开站点 + 装 WordPress | Hostinger MCP | **一次调用同时做**（`onboardings`），不要分两步 |
-| DNS + SSL | Cloudflare MCP | 域名 NS 不在 Cloudflare 的，先问客户要不要迁 |
-| 装 PufferGo 插件 | Hostinger MCP（WordPress 组） | 装完用一键登录链接，不要向客户要密码 |
+| 买域名 | 客户自己选：Hostinger / 阿里云 / 腾讯云，都支持支付宝 | **不要推 Cloudflare 注册**，它没有支付宝；域名在哪注册都能改 NS |
+| 买主机 | AI 用 Hostinger MCP 查套餐/下单，**客户本人在结账页扫码付款** | 账单国家（Hong Kong）、支付宝扫码只有页面能做；MCP 负责查价选套餐、发起下单，付款这步交给客户 |
+| 开站点 + 装 WordPress | **AI 用 Hostinger MCP 自动做** | 先 `puffergo site password` 生成密码、写进客户桌面的登录卡，再把这份凭证提交给 `onboardings` 建站装 WP（`wordpress.admin` 必填）；MCP 跑不通才降级到 hPanel 网页兜底 |
+| DNS + SSL | Cloudflare MCP | 域名 NS 不在 Cloudflare 的，先问客户要不要迁；NS 在 Hostinger 的，指挥客户在 hPanel 加记录 |
+| 装 PufferGo 插件 + 站点初始化 | `puffergo site setup install` | 装插件、装并启用 GeneratePress、改站点地址、生成设计令牌；**同时导入样板数据**（首页、菜单、3 产品 2 方案 2 案例 + 若干文章），装完清一次主机缓存。站上已有客户内容时才加 `--no-sample-data` |
+| 装 SEO / 邮件插件 | 同上（自动排队）/ `puffergo plugins` | Rank Math + FluentSMTP 由 install 丢后台装；别的插件走 `puffergo plugins`，白名单在服务端 |
 | 写页面 / 产品 | `puffergo` 脚本 | 本技能只负责到「站能打开 + 插件已激活」 |
 
 **客户第一次开口、还说不清要干什么时，先给他 `GETTING-STARTED.md`。** 那份文档第一段就是一句可以直接复制给你发过来的开场话，后面每一步都写了对话长什么样、他要怎么答。他照抄着说，比你现编问题清单有效得多。你自己也照着那条线走，别漏站、别跳步。
 
 ## 铁律
 
-1. **花钱之前先报价**。域名和主机付款前，把「买什么、多少钱、几年」说清楚，**等客户说「买」**才动手。域名注册不可退款。报价后必须补一句「价格随汇率和活动变动，具体以官网结账页为准」——catalog 和定价页的数字是当天实价，不是承诺价，别让客户以为这个月都是这个钱。
-2. **域名只在 Cloudflare 买**。Hostinger 的域名贵，且跨账号会带来一堆归属校验问题。
-3. **不碰客户已有的站点**。客户说「老的还在用」，那就只在新站点/新域名上操作；要改老站解析，先问。
-4. **写之前先读**。每个写操作前先查现状（是否已存在、是否已装、是否已绑），保证重跑不会重复建。
-5. **失败要说人话**。把接口原始报错翻译成「发生了什么 + 你现在可以选哪两条路」，不要只说「失败了请重试」——客户不知道怎么重试。
+1. **花钱之前先报价**。域名和主机付款前，把「开什么、多少钱、几年」说清楚，**等客户确认**（他说「可以」「好」「就这个」都算）才动手。域名注册不可退款。报价后必须补一句「价格随汇率和活动变动，具体以官网结账页为准」——catalog 和定价页的数字是当天实价，不是承诺价，别让客户以为这个月都是这个钱。
+2. **开口之前先问自己「这条我能不能做」**。能自己做（DNS 在 Cloudflare、有管理员权限、有 API）就直接做，**不要先问客户要不要他来做**；只有做不了、或会产生账号级不可逆副作用（新建 OAuth 应用、改存量解析、删数据、改根域指向），才先说一句再动。**用户临时说「我自己来 / 我来点」只对当次动作生效**，不改变这条默认姿态，下次该做的还是你做。
+3. **域名在哪注册都行，解析统一放 Cloudflare。** 优先用客户已有的域名；没有就买（Hostinger、阿里云、腾讯云都支持支付宝），买完把 NS 改到 Cloudflare。**不要为了建站让客户去 Cloudflare 注册域名**——它只收信用卡/借记卡、PayPal、Apple Pay、银联，**没有支付宝**，客户为这个去办卡不值。
+4. **不碰客户已有的站点**。客户说「老的还在用」，那就只在新站点/新域名上操作；要改老站解析，先问。
+5. **写之前先读**。每个写操作前先查现状（是否已存在、是否已装、是否已绑），保证重跑不会重复建。
+6. **失败要说人话**。把接口原始报错翻译成「发生了什么 + 你现在可以选哪两条路」，不要只说「失败了请重试」——客户不知道怎么重试。
+7. **每一步都要让客户知道进度**。动手前说「我在做什么、大概多久」，做完说「现在是什么状态」，收尾只给一个下一步动作。**超过 10 秒的操作必须提前说**（开站、装 WordPress、等解析），没提前说的等待会被当成卡死。播报只讲状态，不解释原理——他要问才讲。
+
+**越界红线（通用，不受客户临时要求影响）：**
+
+- **用户说「我自己来」只管这一次**。他可以自己点某一步，但不要把「我要自己点」升级成「以后都别替我做」写进规则——产品默认就是替他做完，能自动就自动。
+- **会产生账号级/不可逆副作用的操作，先一句话说明再动手**：新建 OAuth 应用、改存量 DNS 记录、删数据、改根域指向。说一句「我要在 X 上新建一条应用授权，不改你现有东西」，然后继续，**不是停下来等批准**——除非这一步本身要花钱或要客户本人凭证。
+- **不要接管客户正在使用的界面**。他打开的标签页、正在编辑的文件、正在看的后台，一律不抢；需要浏览器就自己新开一个并告知。这一条没有例外，客户说「你来点」也不去动他手上那个窗口。
 
 ## 阶段 0：先读，不改
 
 **客户的第一句话几乎都是模糊的**——「我想做个网站」「帮我搞个官网」，没范围、没下一步，而且他不会主动补充。**不要甩问题清单反问他**（他答不上来），开场就按这三步走：
 
-1. 先接住：「我先看看你手上有什么，再告诉你下一步。」然后跑下面三个只读查询。
-2. 把结果翻译成一句人话：「你有 Hostinger 账号和一台主机，域名还没买。」
-3. **只给一个下一步动作**：「现在只差一个域名，我帮你想几个，你挑一个我去报价。」
+1. 先接住：「我先看看你手上有什么，再告诉你下一步。」然后跑下面的只读查询：域名 NS（`dig`）、目标域名能不能打开（`curl`）。Hostinger 账号等客户授权后可以查（`hosting_websites_list`），但开场还没授权，先不查——问客户一句即可。
+2. **按固定格式播报现状**，四行，不要写成一段话：
 
-一次只给一个动作。不要一次列出五个步骤让他自己排期——他不会排，只会卡住。
+```
+📋 你现在的状态
+域名　　尚未提供（发我域名，我查它在哪）
+主机　　等你确认（买没买、在哪买的）
+网站　　还没有 WordPress 站
+下一步　把域名发我就行；还没有我帮你挑。
+```
 
-先跑这三个只读查询，把现状念给客户听，再决定走哪条路：
+   域名拿到了就写实情（「example.com 的解析在 Cloudflare」），没拿到就写「尚未提供」；主机按客户说的写（「已经有 Hostinger 主机」或「还没买」）——**不要写「查询失败」「接口报错」**，客户听不懂，也不需要为我们的工具状态负责。**每项单独超时 8 秒**，超时按「未确认」处理，不要让人对着空白等。
+3. **只问两件事，一次问完**，用下面这段原话，不要改写成一大段：
 
-- 域名：注册商是谁、NS 指向哪里（Cloudflare 还是别家）
-- Hostinger：有哪些 order、哪些 website、哪个套餐还能建站
-- 目标域名：是否已经被某个站点占用
+   > 回我两句就行：**你的域名是什么**——有就直接发过来（阿里云、腾讯云、GoDaddy 买的都行），还没有就说「没有」；**客户主要在哪些国家**，说前三个就够，主机放哪个机房看这个。
+   >
+   > 有不懂的尽管问我。
 
-输出一张三行的表：域名 / 主机 / 站点现状，然后问一句「按这个继续吗」。客户没意见就往下走。
+   邮箱不用开场问——那是建站那一步才要用到的一个字段，到时候顺口问一句「后台通知发哪个邮箱」就行。客户说没有，就让他给个能长期收信的地址；别拿平台账号邮箱顶替，也别自己编一个。
+
+   如果他答「没有域名」，再问一句卖什么、给几个候选；他主动说了产品就听着，不用追问。
+
+**开场不要做的事**（这几条最容易被忽略）：
+
+- **不要问「你卖什么」当开场**。他不是来提需求的，是来建站的。产品信息等写页面时再问。
+- **不要主动给域名候选清单**，除非他说「没有」或者「帮我起个名字」。
+- **不要讲「整条路一共 8 步」、不要发文档链接、不要给范例回话**。客户没问就不说。他问「总共几步」「有没有教程」才回答。
+- 不要一次列出五个步骤让他自己排期——他不会排，只会卡住。
+
+**客户如果问「输入框上面那个链接是干嘛的」**（输入框上方的「域名（Cloudflare）」）：一句话说清——「那是给我配域名解析用的，等下要用我会喊你连，点一下开个网页登录一次。」**不要主动催他连**，用到时再说。
+
+**「主机（Hostinger）」这一栏**：第一次用到主机时点一次「Allow」授权即可——授权页标题是 **Connect your account**，写着 `hostinger-mcp is requesting access to your account`，下面「SIGNED IN AS」是他自己的账号邮箱。**把 `images/hostinger-allow-annotated.png` 发过去**，说「认一眼账号是不是你自己的，然后点 Allow」。不要提前催他连，用到时工具自己弹。
+
+先跑这两个只读查询，把现状念给客户听，再决定走哪条路：
+
+- 域名：注册商是谁、NS 指向哪里（Cloudflare 还是别家）—— `dig +short NS <domain>`
+- 目标域名：现在能不能打开、打开的是什么（老站 / 403 / 空）—— `curl -sIL <domain>`
+
+主机有没有、在哪个平台，**开场只问客户一句**（还没授权 MCP，查不了；授权后阶段 1 用 `hosting_websites_list` 核实）。上面那张四行表就是最终输出，**不要再另起一张表**。念完问一句「按这个继续吗」，客户没意见就往下走。
 
 **这些查询全部是只读的。** 阶段 0 不许出现任何写操作。
 
 **边界检查（重要）**：如果目标域名或它的主域绑定在**另一个 Hostinger 账号**名下（典型报错：`422 Hosting:9999 This domain isn't owned by this Hostinger account`），**停止自动处理**。这不在本技能的范围内，不要试图用 CNAME、Worker 反代、改 Host 头之类的办法绕过——那些是给懂技术的人兜底用的，客户接不住。告诉客户：「这个域名绑在另一个账号上，当前账号没法直接用它建站。你可以换个域名，或者把域名挪到当前账号，需要的话跟 AI 助手继续聊，让它帮你处理。」然后停在这里等客户决定。
 
+**身份核对：连上 Cloudflare 后第一件事是认人，不是提权。** 拿到账号邮箱跟客户给的域名对一下，**不一致就停**：告诉客户「你现在连的是 A 账号，但这个域名在 B 账号上，我这边够不着」，让他换账号连接，不要继续试。
+
+`insufficient_scope` **不等于「权限给小了」**。实测它同时出现在「账号不对」和「授权范围不足」两种场景，先按身份核对查账号，再考虑重新授权；**同一个错误重试最多 1 次**，第二次还错就停手，按下面的故障表给人话，别让客户反复点授权。
+
+## 阶段 0.5：先把域名归属查清（不查就建站，一定 403）
+
+客户发来域名后，**先只做只读判断，别急着开站**。三种情况，三条路：
+
+| 查到什么 | 意味着 | 怎么做 |
+|---|---|---|
+| NS 已经是 Cloudflare 的（`*.ns.cloudflare.com`） | DNS 我们能自己写 | 往下走；建站后回阶段 3 写 A 记录 |
+| NS 在别家（阿里云、腾讯云、GoDaddy、Hostinger 自己的 NS） | **DNS 我们写不了** | 先问他要不要挪到 Cloudflare；不挪就给他记录值，他自己在注册商后台加 |
+| 域名还没注册 | — | 走挑域名 / 买域名，买完再回来 |
+
+**必须真查，不能凭印象，也不能听客户说。** 一条命令就够：
+
+- `dig +short NS <domain>`（或 `nslookup -type=ns`）——看 NS 指向谁。`*.ns.cloudflare.com` 就是 Cloudflare，其他（阿里云、腾讯云、GoDaddy、Hostinger 的 `ns*.hostinger.com`）都是别家。
+
+**「在 Cloudflare 账号里」和「NS 已经生效」是两件事**，要分开查。客户说「我的域名就在 Cloudflare」，也照样 dig 一遍。Cloudflare 账号里有没有这个 zone，连上 CF 后搜一次确认；没连就先按 dig 结果走。
+
+**NS 之外还要查 A 记录指向哪台机器**（`dig +short <domain>`）：
+
+- 指向一个**正在跑的老站**——那是客户现有的网站，**动之前必须问**：「这个域名现在打开是有内容的，是你在用的老站吗？」改错了就是把人家生意停了。
+- 指向一个**没内容的 403 / 空页面**——说明域名悬在那里，可以直接接管，但要先跟客户确认那个域名确实是他的。
+- 什么都解析不出来——干净的，随便用。
+
+### NS 不在 Cloudflare，怎么引导
+
+一句话，不讲原理：
+
+> 你这个域名的解析现在在别的地方，我没法直接改。要不要把它挪到 Cloudflare？免费，挪完以后解析我全自动做，你不用管。挪的当下邮箱可能会断十几分钟——你要是有企业邮箱在用，先告诉我。
+
+- 他同意：让他去注册商后台把 NS 换成 Cloudflare 给的这两条（**这一步只能他自己点**，我们碰不到他的注册商账号）。换完等生效，再回来。
+- 他不同意：给他记录值，让他在注册商后台自己加：
+
+  | 类型 | 主机记录 | 值 |
+  |---|---|---|
+  | A | `@` | 主机 IP（阶段 2 建站后拿到） |
+  | CNAME | `www` | 站点域名 |
+
+  加完让他回一句，我们验。
+
+**不要为了「先跑起来」硬把域名绑到一个解析指不过来的站点上**——那就是这次 403 的成因。
+
 ## 阶段 1：主机
 
-客户已经有可用套餐就跳过，直接拿 `order_id`。
+**先查，再决定买不买。** 客户授权 Hostinger 后，第一件事用 MCP `execute` 传 `operation: "hosting_websites_list"` 查他账号下已有的站点/主机套餐（含 `order_id`、`username`、到期情况）。有在有效期内的套餐就直接拿来用，进阶段 2，不买。**别问客户「你买过主机吗」**——他能查到，就自己查，别把成本转嫁给客户。
 
-**新客户首购，让他自己在网页买，不要走接口下单。** 账单国家（决定加不加税）和新付款方式只有结账页能填。给他这个链接，一打开就是带优惠价的定价页：
+**查不到才是没买。** 只有 `hosting_websites_list` 确实没有可用套餐，才走下面的报价流程。第一次调用会自动下载工具 + 弹授权页（客户点一次 Allow），下载前播报一句「正在准备主机工具，马上就好」。
+
+**确定要买，才看下面两段。** 机房按阶段 0 问到的那三个市场选。 Hostinger 共享主机实际可选的地区：欧洲（荷兰、英国、德国、法国、立陶宛）、亚洲（新加坡、印度、印尼、马来西亚）、北美（美国）、南美（巴西）。
+
+| 客户主要市场 | 选这个机房 |
+|---|---|
+| 美国、加拿大、墨西哥 | 美国 |
+| 英德法荷、北欧、东欧、中东 | 荷兰 / 英国 / 德国 |
+| 新马泰越、印尼、菲律宾 | 新加坡 |
+| 印度、孟加拉、巴基斯坦 | 印度 |
+| 巴西、智利、阿根廷 | 巴西 |
+| 澳洲、新西兰、日韩 | 新加坡（没有本地机房，靠 CDN 补） |
+
+两句话记住：**没有就近机房就选最近的，剩下的交给 CDN**；**Agency 套餐没有亚洲机房**，客户主要在亚洲就别选它。可选值以结账页（或接口返回）为准，**不要自己编机房代码**。
+
+**付款这一步必须在结账页，让客户本人扫。** 账单国家（决定加不加税）和支付宝扫码只有结账页能做，MCP 查得到套餐、但替不了付款；所以 AI 负责查价、选套餐、发起流程，最后扫码那一下交给客户。**不用绑卡**——Hostinger 的 AliPay+ 是一次扫码，付完就结束，没有后续授权。给他这个链接，一打开就是带优惠价的定价页：
 
 ```
 https://www.hostinger.com/pricing?REFERRALCODE=puffergo
@@ -119,93 +277,308 @@ https://www.hostinger.com/pricing?REFERRALCODE=puffergo
 3. **Country 选 Hong Kong**——香港没有增值税，价格就是最终价；选中国大陆会再加税
 4. 付款方式选 **AliPay+**，扫码
 
+**链接直接发在对话里**，它是一个能点的地址，客户点开就是定价页。他说点不开、或者你担心他没点对，替他打开：
+
+- macOS：`open "<链接>"`
+- Windows：`rundll32 url.dll,FileProtocolHandler "<链接>"`（**不要用 `start`**：链接里的 `&` / `?` 会被 cmd.exe 当成命令分隔符，浏览器只收到半截地址，优惠就丢了）
+
+**顺手提醒一句**：用平时登录 Hostinger 的那个浏览器打开，中途别换。优惠是链接写进浏览器的，换了浏览器就丢了。
+
 **优惠是链接带进来的，不是结账页填码。** 网址上加 `?coupon=` 实测无效（带与不带价格完全一样），结账页那个 `Have a coupon code?` 也不是主路径——客户从链接进、看到绿色 `Referral code applied` 就够了，别再教他手填码。
 
-付完先 `billing_subscriptions_list` 确认订阅进来了（刚付完就有，含套餐名和周期），再 `hosting_orders_list` 拿 `order_id`。订单要等开通后才出现在 hosting 列表里，刚付款查不到是正常的，别当成没买成功、更不要让他再付一次。
+**付完让客户回一句「买好了」**，然后进阶段 2。AI 这时用 MCP `hosting_websites_list` 或订单接口核实一下套餐有没有开通、拿到 `order_id`——**验证过再往下走**，不要只凭客户一句话。**订单要等开通才出现，刚付款查不到是正常的**，等一两分钟再查一次，别当成没买成功、更不要让他再付一次。
 
-**只有客户已有账号、已绑卡、并且明确说「你帮我买」时才走接口：**
+**付款这步替不了，就直接说。** 客户说「你帮我付」也回网页：「付款得你来扫一下码，我把链接和步骤给你，一分钟的事。」查套餐、开站、装 WordPress 都是你来做，只有扫码这一下必须他本人。
 
-1. `billing_catalog_list`（`category: HOSTING`）拿**真实 `item_id` 和价格**。`item_id` 长得像 `hostingercom-hosting-premium-usd-1y`，**必须从返回里原样取**，不要自己拼（`hosting_premium_12m` 这种是错的，下单会失败）。同一条目有月付/1年/2年/4年多个 `prices`，用 `first_period_price` 报价、`price` 说明续费。
-2. `billing_payment-methods_list` 确认有可用付款方式。`payment_method` 是 `alipay_cn` 就说明绑的是支付宝。
-3. **报价给客户，等明确同意**
-4. `POST /api/billing/v1/orders`
-   ```json
-   { "items": [{ "item_id": "<catalog 里的 item_id>", "quantity": 1 }], "coupons": ["PUFFERGO"] }
-   ```
-   `coupons` 字段是接口支持的，但**它和链接带来的推荐价是否同一档没验证过**——走接口下单前，用 `billing_catalog_list` 的价格跟客户确认，别承诺 $2.23。不传 `payment_method_id` 就用默认付款方式。**税费按账号里已有的账单国家算，接口改不了**——要免税得让他先去 hPanel 改账单地址。
-5. 订单可能立刻 `completed`，也可能返回 202 表示付款在异步处理。`awaiting_payment` / `payment_initiated` 都说明卡在银行验证（信用卡 3DS 常见），**这时候要让客户去 hPanel 或银行 App 确认，不要重复下单**。
-6. `GET /api/hosting/v1/orders` 拿到 `order_id`。
+## 阶段 2：开站点 + 装 WordPress（AI 用 MCP 自动做）
 
-下单接口只负责下单，**不负责开通**。开通在下一步。
+**这是你来做，客户不用在 hPanel 点。** 主机付款开通后，用 Hostinger MCP 一次把站开好、WordPress 装好。这是核心链路；只有它跑不通才走下面的**网页兜底**。
 
-**付款方式 AI 加不了。** `billing_payment-methods_*` 只能查、只能删、只能设默认；官方明确「要加新的付款方式请去 hPanel」（`https://hpanel.hostinger.com/billing/payment-methods`）。客户没绑卡时不要「下单失败再重试」，直接把 hPanel 链接给他，说一句「在这里绑一下支付宝，绑完告诉我」。支付宝授权会过期（实测 `expires_at` 只给约 12 小时），到期同样让他回 hPanel 重新授权。
+**先确认四件**，缺一件先解决：
 
-## 阶段 2：开站点 + 装 WordPress（一次调用）
+1. 主机已付款开通，MCP `hosting_websites_list` 能看到套餐、拿到 `order_id`
+2. 域名归属查清（阶段 0.5）——用哪个域名建站（正式域名 / 免费临时域名）
+3. 域名没被别的站点占着——`hosting_websites_list` 看一眼有没有同名站点，有就先解绑或换域名
+4. **后台密码已经生成并落盘**（下面第一步），`wordpress.admin` 是必填项，缺了这次建站直接失败
+
+### 主路径：MCP 一次建站装 WP
+
+**动手前先播报**：「主机好了，我现在开站、装 WordPress，大概一两分钟，装好告诉你。」超过 10 秒的操作必须提前说。
+
+用 Code Mode（`search` 找操作名 → `execute` 调）：
 
 ```
-POST /api/hosting/v1/orders/{order_id}/onboardings
-{
-  "type": "wordpress",
-  "domain": "example.com",
-  "wordpress": { "email": "...", "login": "...", "password": "...", "language": "zh_CN" }
-}
+# 标准路径：一次建站 + 装 WP
+# 第一步：生成后台密码 + 把登录卡写到客户桌面（一份密码两处用）
+puffergo site password --domain <域名> --email <管理员邮箱>
+
+# 第二步：建站装 WP。wordpress.admin 是必填，值就是上一步返回的 credentials
+execute({ operation: "hosting_api_request", params: {
+  method: "POST",
+  path: "/api/hosting/v1/orders/{order_id}/onboardings",
+  body: {
+    type: "wordpress",
+    domain: "<域名>",
+    wordpress: {
+      admin: { user: "<credentials.user>", password: "<credentials.password>", email: "<credentials.email>" },
+      language: "en_US"
+    }
+  }
+}})
 ```
 
-几个必须记住的约束：
+- `onboardings` 是**一次建站装 WP**的标准路径，实测可用。domain 不带 `www.`、最多一级子域。
+- **密码是你给的，不是主机商给的。** 建站前先跑 `puffergo site password --domain <域名> --email <管理员邮箱>`，把返回的 `credentials` 原样填进建站参数（`wordpress.admin.user / .password / .email`），登录卡同时落在客户桌面。**装完之后没有任何接口能把密码查回来**，漏掉这一步客户就永远进不去自己的站。
+- 管理员邮箱用阶段 0 顺口问到的那个能长期收信的地址，别自己编。
+- **域名解析还没指过来怎么办**：`onboardings` 用正式域名建站需要解析到位。解析没到位时，先用 `POST /api/hosting/v1/domains/free-subdomains`（空 body）拿一个合法的免费临时子域建站，页面内容照常写，最后在阶段 3 绑正式域名。**不要自己编临时域名**（会报 `not reserved`），也不要拿一个解析指不过来的正式域名硬装（结果就是 403 + 无限等待）。
+- 装 WP 是异步的：建站后轮询 `GET /api/hosting/v1/accounts/{username}/wordpress/installations`，约 20 秒后见 `is_valid: true` 才算装好。一两分钟内 404/403 是正常的，别当成失败。
 
-- `domain` **不能以 `www.` 开头**，**最多一级子域**（`shop.example.com` 可以，`a.b.example.com` 不行）
-- 不传 `domain` 会用一个临时的免费子域（`xxx.hostingersite.com`），可以先用它把站跑起来，最后再挂正式域名
-- 站是异步开的：轮询 `GET /api/hosting/v1/onboardings?domain=` ，**等到 `status: completed` 才算好**。`running` 期间调站点相关接口会返回 404/409，不是出错
-- 管理员密码由你生成并写进调用里，所以**后面所有 WordPress 操作你都不需要再向客户要密码**
+**装好后自己验**：`curl` 一次确认 200、是 WordPress 页面（不是主机默认页、不是 403），再往下走。告诉客户「站建好了，WordPress 装上了，登录信息我存成文件放你桌面了，文件名是 `<域名>-登录信息.txt`」——**别说「发你邮箱了」**（密码压根不走邮件），也别说「你去查收主机商的邮件」。
 
-这一步做完，`https://<domain>` 或免费子域就应该能打开 WordPress 了。先自己访问一次确认，再往下走。
+### 网页兜底：MCP 跑不通才用
 
-**实测差异**：`onboardings` 是官方的标准路径，但如果 `domain` 归属触发校验错误，改用已验证可行的分步路径——`POST /api/hosting/v1/domains/free-subdomains`（空 body，拿系统分配的合法免费子域，**不能自己编域名**，会报 `not reserved`）→ `POST /api/hosting/v1/websites` 建站 → `POST /api/hosting/v1/accounts/{username}/wordpress/installations` 装 WP（顶层 `/wordpress/installations` 只支持 GET，POST 必须带 `accounts/{username}`）。分步是异步的，轮询到 `is_valid:true` 才算装好。完整参数与踩坑见 `references/validation-notes.md`。注意：若域名/主域绑在**另一个 Hostinger 账号**，这属于范围外，按阶段 0 边界只提醒，不要用这套路径去绕。
+**只有核心链路确实跑不通**（授权失败且重试无效、接口持续报错、或域名归属超出范围）才把下面这段给客户，让他在 hPanel 网页自己做。不要一上来就用兜底——那是把成本转嫁给客户。
 
-## 阶段 3：DNS 与 SSL
+> 我这边的自动开站暂时没成功，你在网页点四下就行，我一句句带你：
+>
+> 1. 打开 hPanel（hpanel.hostinger.com），用你买主机时的账号登录
+> 2. 顶部菜单点 **Websites** → 点 **Add Website**（或「+ 添加网站」）→ 选 **WordPress**
+> 3. 域名那里：域名解析已经指过来了就选你的域名；还没指过来就选**临时域名**（免费，先能用，以后换）
+> 4. 会让你填：站点标题、管理员邮箱（能长期收信的）、用户名（别用 admin）、**密码（你自己设，不用告诉我）**
+> 5. 点 **Install / Finish**，等一两分钟，装好会有 **Visit Website** 和 **WP Admin** 两个按钮
 
-前提：域名的 NS 已经在 Cloudflare。**不在的话不要自作主张迁**——迁 NS 会短暂影响客户的邮箱和现有站点，必须客户明确同意。
+- **这条兜底路线里密码是客户自己设的，你确实不知道**（只有自动建站那条路密码才经过你）。他问「密码发给你吗」，回「不用，你自己记好；等下我用授权的方式改站，你在我发的那页点一下就行，跟登录密码无关」。
+- **管理员邮箱只是找回密码用的**，能收信就行，别拿平台账号邮箱乱填也别自己编。
+- **客户嫌麻烦、说"我不会点"**：直接给他免费代装链接 `https://puffergo.com/wp/free-wordpress-setup?from=ai`（前 100 位 0 元），别硬推流程。
+
+## 阶段 3：绑域名（DNS 与 SSL）——验到 200 才算完
+
+**403 / 打不开不是「再等两分钟」。** Hostinger 上绑了域名还打不开，九成是 A 记录还指着别处，或者域名没在站点上验证通过。**最多轮两次、每次 60 秒**，还不行就去查记录，**不要把「等生效」当结论**——客户看你一直等，只会觉得坏了。
+
+**先排掉「新站还在装」。** 刚建站的两分钟内，403 和 404 都是正常的——WordPress 还在写文件。这个阶段**记录本来就是对的，动 DNS 只会把对的改坏**（上一轮就是把一条正常的 A 记录删掉改成 CNAME）。判据：站是两分钟内建的，且 `dig` 出来的 IP 已经指向这台机器 → **等，别改**。
+
+按这个顺序判定，查到哪一步停在哪一步：
+
+1. `dig +short <domain>` 拿到当前 IP
+2. 跟**这个站点所在那台机器**的 IP 比（Hostinger 有多个机房、每个机房 IP 不同）——**「指向 Hostinger 的某个 IP」不算对上**，指错机器一样 403。对不上 → **改记录**
+3. 对上了还 403 → 先用 MCP `hosting_websites_list` 看这个域名有没有绑到站点、绑到了哪个；没绑或绑到旧站，先用接口重绑；**接口重绑不行才让客户在 hPanel → Websites 手动重绑**（把步骤给他，别让他猜）
+4. 记录对、绑定也对 → 才轮到缓存：清 Cloudflare 缓存再试一次
+
+前提：域名的 NS 已经在 Cloudflare。**不在的话不要自作主张迁**——迁 NS 会短暂影响客户的邮箱和现有站点，必须客户明确同意（见阶段 0.5）。
+
+**Cloudflare MCP 还没连的话，先让客户授权，别自己点。** 浏览器会弹出 **Authorize application** 页面（标题下面写着 Grant access to Cloudflare API）：
+
+1. 把 `images/cloudflare-authorize-annotated.png` 发过去，说「浏览器应该弹出一个 Cloudflare 的授权页，认一眼是不是你自己的账号，**权限切到最右边的 Full access**，然后点 **Continue**」
+2. **必须切 `Full access`，不是保持默认。** 默认那档 `Minimal` 不含 `dns.write`，下一步写 A 记录就 403；页面上那句 "you can narrow scopes further later" 是**往下减**的意思，别指望它事后自动补权限。切权限这一下也是客户点，**不代点**（和点 Continue 同理）
+3. 顺手说一句实话，别让他心里打鼓：「这一页给的是你这个 Cloudflare 账号的完整权限，Cloudflare 只提供这么三档，加解析绕不过去；我只用它加解析记录和设 SSL，你随时能撤」
+4. 页面里那条 `http://127.0.0.1:…/callback` 是**正常的**，那是本机接收授权结果用的，页面上那句 "Local redirect" 的警告不用管
+5. 没弹出或者被关掉，把链接发给他，让他复制进地址栏——**授权页那一页永远由客户点，AI 不代点**
+6. 点完验一眼：`~/.mcp-auth/mcp-remote-v1/*_tokens.json` 的 `scope` 字段里要有 `dns.write`（只读这个字段，别打印 token）。没有就是没切 Full access，让他重授权，**不要先硬试写记录再看 403**
 
 用 Cloudflare MCP（Code Mode：`search` 找 API → `execute` 调）：
 
-- 写 `A`（或 `CNAME`）记录指向主机 IP / 主机给的免费子域
-- SSL/TLS 模式按主机情况设为 `flexible` 或 `full`
+- 写 `A`（或 `CNAME`）记录指向主机 IP / 主机给的免费子域，**`proxied: true`（橙云），这一项没有例外**
+- SSL/TLS 模式设 `full`（主机自己带 Let's Encrypt 证书；橙云下用 `flexible` 会无限重定向）
 - 打开 HTTPS 强制跳转
+- 写完回读一遍记录，确认那一行前面是**橙色云朵**，不是灰云
+
+**必须是橙云，灰云等于没接 Cloudflare。** 灰云（DNS only）只是把域名指到 Hostinger 的海外 IP，流量直连，中国大陆打开经常十几秒甚至打不开；橙云让 Cloudflare 挡在前面做缓存和线路优化，同一台机器国内访问明显快。**客户说「网站很慢」的时候，第一件事就是查这条记录有没有被点成灰云。**
+
+**切橙云之前先确认主机自己的 HTTPS 是通的**（直连 IP 或临时灰云时 https 能打开）。主机证书还没签下来就切橙云，Cloudflare 回源拿不到有效证书，页面会报 **526 Invalid SSL certificate**——这时别去关 SSL，回主机后台点一次 SSL 签发，签好再验。
 
 **两条不能破的规矩：**
 
 1. **不要动已有的邮件记录**（MX / SPF / DKIM / 验证用 TXT）。加记录时用「追加」语义，不要用「覆盖」——覆盖会把同名的 SPF 和验证记录一起删掉。
 2. **改之前记一份快照**。Cloudflare 侧先把改动前的记录读出来存在会话里，方便倒回去。
 
-如果域名 NS 不在 Cloudflare，走 Hostinger 的 DNS（`dns/v1/zones/{domain}`）：`overwrite: true` 会删除同名同类型的全部记录，**加记录时必须显式传 `false`**。
+如果域名 NS 不在 Cloudflare，让客户在 hPanel 里加记录（hPanel → Hosting → 对应套餐 → DNS / DNS Zone Editor）：加一条 A 记录 `@` 指向主机 IP，一条 CNAME `www` 指向主域名。**加的时候是「新增」，不要选「覆盖」**——覆盖会删掉同名的邮件记录。**DNS 这步只能客户点**（他的 Hostinger 账号），你把 IP 和记录值给他、让他照着填，加完回一句，你再验。
 
 ## 阶段 4：装 PufferGo 插件
 
-站已经能打开、WordPress 已经装好之后：
+**先查装没装，再决定装不装。** 跑 `puffergo site setup`（纯只读，不改任何东西），看 `problems` 和 `needsInstall`：
 
-1. 用 Hostinger MCP 的 WordPress 工具装插件（或一键登录链接进后台手动装）
-2. 装完激活
-3. **让客户在后台连一次 PufferGo 账号。** 后台左侧点 **PufferGo**（`admin.php?page=puffergo`）→ 右侧深色卡片点 **Connect now (30s)** → 首次会跳 puffergo.com 登录/注册（几十秒）→ 回来点 **授权并连接** → 自动跳回后台显示已连接。
+- 插件已经在、`coreReady: true` 且 `theme.state` 是 `puffergo` → **跳过安装**，直接跳到下面第 5 条让客户连 PufferGo 账号
+- 缺插件、装了没激活、或 `theme.state` 是 `default`（站还在 WordPress 默认主题上）→ 都要跑一次 install
+- WordPress 本身太旧 → 脚本装不了，照 `needs_manual_install` 的 `message` 转告客户手动升级
+
+不查就装，结果是重复安装、或者把已激活的插件再走一遍，客户看到的是一次回退。
+
+站已经能打开、WordPress 已经装好之后，**按顺序做**：
+
+1. **`puffergo login <站点地址>`** —— 不用先让客户登后台。这条命令会**自己在他电脑上打开浏览器**，把 WordPress 授权页送到他眼前。返回值里的 `script` 是写好的人话，**原样发给客户，不要缩成「点一下批准」**——他多半看到的是**登录页**，不是批准页。
+
+   那份 `script` 已经把三件事说清了：① 看到登录页是正常的，账号密码在桌面 `<域名>-登录信息.txt` 里，**勾上 Remember Me** 再 Log In；② 登录后会看到「PufferGo AI 想要访问你的账户」，点 **Approve / 批准**；③ 浏览器没弹出来、被关掉了、或想换浏览器，**回聊天点 `authorizeUrl` 链接**，也可以复制整条链接粘贴到地址栏。
+
+   **发 `script` 时把登录页示意图一起发出去**：`<技能目录>/images/wp-login-annotated.png`（客户看到那四个红色编号，就知道填哪儿、勾哪儿）。客户如果在中文后台，图下注明「文字是中文的，位置一样」。图只是示意，**别让他以为必须长得一模一样**。
+
+   **主路径是已经打开的那个浏览器窗口，聊天里的链接是备用**——别反过来只发链接让他自己找。更不要把 `authorizeUrl` 用你自己的内置浏览器打开：回调落在客户本机，必须是他自己的浏览器。
+
+   **不要让他去 hPanel 找「免密进后台」那个入口。** 密码本来就攥在他自己电脑上，绕道 hPanel 只会让他多迷一次路——这一步是那十五轮空转的起点。
+
+   **监听进程会活过这条命令本身。** `login` 不用 `spawn(detached)`——那只是新进程组，AI 工具的沙箱回收的是整棵进程树，子进程照样一起死。它走的是 shell 双 fork（`( nohup … & )`），监听进程被 launchd / init 收养，**不在工具的进程树里**。所以客户不用赶时间：看到页面、慢慢登录、过几分钟再点批准，都能收到。返回值 `listener.alive: true` 就是这条链路的实测凭据，`pid` 是那个常驻进程。（Windows 没有 reparent，`detached` 本身就是新进程组、父命令退出后子进程通常照样活着——那边更常见的杀手是宿主用 Job Object 圈住子进程；Node 没有脱离 Job Object 的手段，遇到就走接管和兜底，别想着再"脱离"一次。）
+
+   **只有 `listener.alive: false`**（宿主回收进程树、Job Object、或系统禁止派生常驻进程）才需要接管：立刻跑 `puffergo login status`，它自己占住端口等约一分钟，返回 `waiting` 就再跑一次，在它跑起来之前别让客户点。
+
+2. **`login status` 是去问「收到没有」，不是掐着点守株待兔。** 常驻监听在收，`status` 只负责把结果取回来——正常跑一两次就够。返回 `waiting` 说明客户还没点到（可能还在登录页），过一会儿再问；**不要催，也不要让客户反复点**。
+
+   - `approved`：拿到了，直接跳到第 4 步做站点初始化。
+   - `waiting` + `takeOver: true`：这只会在没人在听的时候出现（环境回收了监听、或端口被占）。跑一次 `status` 重新接管即可。
+   - `callback_unreliable`：已经连续两次占住端口都没等到回传——**这个环境的浏览器回传确实收不到**。别再让客户点第三次，改走第 3 步。
+   - `grant_failed`：WordPress 确实批准了，但本机存不下凭据（磁盘满 / 权限）。**先修存储、再重登**；让客户再点一次批准没有任何用。报错里写 `Broker request outcome unknown` 的，是宿主的 fs 代理在拦（不是权限、不是磁盘）：CLI 会在启动时自己剥掉那个 preload，所以重跑一次 `puffergo login` 就好，别去翻磁盘权限。
+   - 客户问「我点了怎么没反应」：**先跑 `puffergo login doctor` 再开口**，看 `diagnosis` 是什么就说什么，别编技术原因。
+
+   `doctor` 一条命令报清：端口有没有人在听、状态文件属于哪个站（被 `--help` 之类污染时这里一眼看出来）、窗口还剩多久、凭据存没存、已经空等了几次。特别地——**状态说 `approved` 但 `credentialSaved: false` 就是「页面显示 ✅ 其实没存下来」的假成功，必须重登**。
+
+3. **回调真收不到时，按这个顺序兜底**（命令返回 `callback_unreliable`，或 `doctor` 说 `callback-unreachable`）：
+
+   **a. 地址栏里那一条 URL 就是密码。** 客户点完批准，浏览器会跳到 `http://127.0.0.1:…/?site_url=…&user_login=…&password=…`。**就算页面显示「无法连接」、顶部还飘着几条红色空提示条，地址栏里那串 URL 仍然在，密码就在里面**——那不是授权失败，是没人接住。让他把**整条 URL** 复制进一个文本文件，然后：
+
+   ```
+   puffergo login from-url --site <站点> --file <那个文件的路径>
+   ```
+
+   **你只传路径，绝不把 URL 或密码贴进命令、也绝不读那个文件**——密码不进你的上下文。客户人已经在那一页上，不用去找别的入口，这是最省事的一条。
+
+   **b. 那串 URL 拿不到了**（关了浏览器、清了历史），才让他自己去 wp-admin → 用户 → 个人资料 → **应用程序密码** 生成一条，把密码写进文本文件，然后：
+
+   ```
+   puffergo login app-password --site <站点> --file <客户写密码的文件路径> --user <后台用户名>
+   ```
+
+   两条路径 CLI 都会拿它做一次真实 REST 校验、存进本机凭据，然后让客户删掉那个文件。**平时不要主动提这两条**，它们步骤更多；只在回调确实收不到时用。
+
+4. **装 PufferGo 插件 + 做站点初始化。** 客户点完批准、CLI 拿到应用密码后，直接：
+
+   ```
+   puffergo site setup install --customer-said "<客户原话>" --site <站点>
+   ```
+
+   这一条命令做三件事，**不要拆成三次**：
+
+   - 从 wordpress.org 装并激活 PufferGo（**不需要 Hostinger 连接器**）
+   - 接着调插件自带的 `POST /puffergo/v1/setup`：装 **GeneratePress 并启用**、把 `siteurl`/`home` 改成对外地址、设计令牌没生成就现在生成
+   - 把 **Rank Math + FluentSMTP 丢到后台装**（分离进程，命令几秒就返回，不等它们）
+
+   **主题这一步以前没人做，是真实事故来源**：站上一直是 WordPress 默认主题，AI 建的页面全部没样式，而 `site setup` 还报 `ready: true`。现在 `site setup` 会读前台实际用的主题，默认主题直接判 `coreReady: false`。
+
+   **样板数据默认就导，不要额外加开关。** 这一条会一口气塞进 3 个产品、2 个方案、**2 篇案例**（LogiTech GmbH、AutoParts Mexico）、若干客户证言和博客，并把**首页指向演示首页、导航换成演示结构**——客户建完站第一眼看到的就是一个像样的站，而不是「Hello world」博客流。代价是这些都是假内容：**交付前必须换成客户自己的，或者整批删掉**（后台 → PufferGo → Dashboard →「Sample Data & Showroom」→「Delete Sample Data」，首页会跟着还原）。跑完必须跟客户说一句「现在站上是演示内容，等下换成你自己的」。
+
+   只有一种情况跳过：**站上已经有客户自己的内容**（老站改版、二次进场），这时加 `--no-sample-data`，否则会凭空多出别人的案例。
+
+   输出怎么读：
+   - `coreReady: true` → 插件、主题、站点地址就位。**下一步只有一个：站点画像**（见阶段 5），不要跳过去问产品、页面、设计
+   - `ready: true` → 连 SEO 插件也齐了
+   - `siteInit.sampleData` → 默认就有。带 `counts` 是本次真导了（哪几类各几条）；`reused: true` 是站上本来就有样板、这次没重复建；加了 `--no-sample-data` 时这个字段整个不见，`next` 会明说「站是空的、这是故意的」
+   - `background.state: "running"` → 那两个插件还在后台装，**别等、别让客户去装、也别重复跑 install**；直接进阶段 5 做画像，写页面 SEO 字段前再跑一次 `puffergo site setup` 确认落地
+   - `siteInit.ran: false` + `skipped: "custom"` → 这个站用的是客户自己的主题，**故意没换**（换掉会毁掉他的设计）。只有客户明确说要换成我们的主题，才加 `--activate-theme`
+   - `needs_manual_install` → 账号没有 `install_plugins` 权限，按提示让客户在后台插件页手动装
+
+   **装完必须清一次主机缓存**，否则客户打开站看到的还是旧主题（实测：页面缓存 `max-age=604800`，清了才立刻生效）。Hostinger 走 `hosting_cache_clear`（参数 `domain`，填不带 www 的域名）；别的主机没有对应的 MCP 操作就跳过，别为此去找客户要面板。几秒钟的事，不做等于前面白干。
+5. **让客户在后台连一次 PufferGo 账号。** 后台左侧点 **PufferGo**（`admin.php?page=puffergo`）→ 右侧深色卡片点 **Connect now (30s)** → 首次会跳 puffergo.com 登录/注册（几十秒）→ 回来点 **授权并连接** → 自动跳回后台显示已连接。
    - **全程两次点击，不抄密钥。** `puffergo.com/dashboard/connect` 拿到 `source/domain/callback` 后自己建 Key（`POST /api/api-keys`，名字 `WordPress - <域名>`，一 Key 一域），再 302 回 `callback?api_key=…&status=success&connect_source=puffer_dashboard`，插件前端调 `puffergo_verify_key` 直接落库。所以别教客户「去 dashboard 复制 API Key」，那是多余的一步。
    - 未登录时先跳 `/dashboard/login?redirect=…`，连接意图存在 sessionStorage 里，登录回来参数不丢——**这一点决定了「先登录」不会打断流程**，别让客户先手动打开 puffergo.com 注册再回来。
    - 这步解锁的是**插件里的 AI 功能**（AI 建站、生成内容、SEO）。不连也能用 CLI 改站，但客户自己在后台点 AI 按钮时是灰的。
    - 报 `Can't open the PufferGo authorization page` 是 VPN / 代理把 puffergo.com 绕到海外：让他关掉 VPN 点一次，连上后再开回来。
-   - **跟下面 `puffergo login` 不是一回事**：那个是 WordPress 应用密码授权（给 CLI 改站权限），这个是 PufferGo 账号（给插件内 AI）。两步都只有「点一次」，别描述成注册 + 填 key + 授权三段。
-4. `puffergo login <站点地址>` —— 会走浏览器授权，客户点一次「批准」
-5. `puffergo login status` 等结果；点了就立刻返回，**不要反复问客户「点了吗」**
+   - **跟 `puffergo login` 不是一回事**：那个是 WordPress 应用密码授权（给 CLI 改站权限，第 2 步已做），这个是 PufferGo 账号（给插件内 AI）。两步都只有「点一次」，别描述成注册 + 填 key + 授权三段。
 6. `puffergo site setup` —— 这一步返回站点的能力和后台链接，用它确认插件真的活了
+7. **补其它插件。** Rank Math 和 FluentSMTP 在第 4 步已经进了后台队列——先跑 `puffergo site setup` 看 `background.state`（`running` 就再等一会儿，`done` 就不用管）和 `mailPlugin.state`，**别重复装**。要补别的插件时，站上已经有 PufferGo，目录接口可用：
 
-**管理员密码你已经知道了**（阶段 2 是你传的），所以 `login` 走的是已有的凭据，不需要再向客户要任何密码。
+   ```
+   puffergo plugins list --site <站点>          # 只读：哪些已装、哪些没装、各自干嘛
+   puffergo plugins install fluent-smtp --customer-said "<客户原话>" --site <站点>
+   ```
 
-## 阶段 5：交接
+   - **白名单在服务端，不在技能里。** 能装的由 PufferGo 插件的目录接口给（Rank Math、FluentSMTP、WooCommerce、Redis、GTranslate），以后加插件不用更新技能。命令只接受目录里的 slug，别自己编 slug。
+   - **行业站默认装 FluentSMTP**，第 4 步的后台队列已经带了它，正常不用再问。只有客户明确说过「先别装邮件」，或者 `mailPlugin.state` 还是 `missing` 时才单独补一句。
+   - **询盘悄悄丢的风险要讲明白**：客户填的询盘表单走 WordPress 的 `wp_mail()`，主机自带的 PHP mail 十有八九被当垃圾邮件或直接拒收——客户根本不知道询盘丢了。
+   - `site setup` 的 `mailPlugin.state` 就是这件事的现状（`active`／`installed` 未启用／`missing`／`unknown` 查不到）。开场播报时如实说。
+   - **装好 ≠ 发得出。** FluentSMTP 不配 SMTP 账号时仍走 PHP mail，等于没装。配置这一步交给客户自己动手，见第 8 步。
+
+8. **发信账号让客户自己在后台配，我们不代配。** 装完只做一件事：把「在哪儿配、填什么、怎么算通」讲清楚，然后他自己点。
+
+   - 路径：`wp-admin → FluentSMTP → Add New Connection`（第一次进去会让你选服务商，选「Other SMTP」直接填）。
+   - 要填的四样：服务器地址、端口、邮箱地址、**授权码**（腾讯企业邮、阿里云企业邮、网易企业邮都叫「客户端专用密码」，在邮箱后台生成，不是登录密码）。
+   - 服务器地址和端口问邮箱服务商；两个最常见的：腾讯企业邮 `smtp.exmail.qq.com:465`、阿里云企业邮 `smtp.qiye.aliyun.com:465`（都是 SSL）。拿不准就让客户截图邮箱后台的「客户端设置」页给他自己看。
+   - **界面里点「Send Test Email」，他自己收到才算通。** 收不到就把错误原文发我们看：`535` / `Invalid login` 是授权码不对或没开 SMTP 服务；超时是端口和加密不匹配；`Sender address rejected` 是发件地址和登录账号不一致。
+   - 这一段不写进「验收清单」当阻断项——邮件没配好不影响站能打开、页面能写。提醒一次，客户说「先不管」就跳过，别反复追。
+
+**两把钥匙，别混在一起讲。**
+
+- **后台登录密码是客户的**：你生成、写进客户桌面的登录卡（`puffergo site password`）、建站时提交给接口。你知道它，是因为不提交就建不了站；但**不要在聊天里念出来，也不要让客户发回给你**——文件在他自己电脑上就够了。
+- **应用密码是给 CLI 的**：`puffergo login` 换来的，存在本机凭据里，AI 看不到明文，客户可在后台单独撤销。**只有这一把需要客户亲手点「批准」**，因为它只能由站主本人核准。
+
+他问起「要不要把后台密码给你」，回「不用，已经存成文件放你桌面了，你自己留着；我改站靠你在后台点一次批准，跟登录密码无关」。
+
+## 阶段 5：站点画像——初始化完的第一件事
+
+**`site setup` 一报 `coreReady: true`，下一句就该是「现在花五分钟把站点画像填一下」，不是「你想先做哪个页面」。** 上来就问产品、问案例、问喜欢什么风格，是把客户往坑里带：这些答案 AI 本来可以从画像里读，问一遍等于让他白说一次，而且下一轮还得再问。
+
+先说清两件事，再开始问（客户听不懂「画像」这个词，说「你的生意档案」也行）：
+
+1. **为什么值得填**：AI 写的每一个页面、产品、文章都从这里取信息。画像空着，它只能写「品质保证、价格合理、交货及时」这种谁都能套的话，客户一看就知道不是写给他的。
+2. **为什么和 GEO 有关**：现在客户越来越多直接问 AI（而不是搜 Google）「谁能做 LED 高棚灯」。AI 回答问题时会引用写清了品牌、行业、客户群、认证和实力数字的站点。画像就是这些事实的唯一来源——填得准，站才可能被 AI 引用。
+
+**做法：一条命令拿问题，一次性问完，一次写入。**
+
+```bash
+puffergo profile ask        # 只读：把还空着的字段折成几组人话问题
+```
+
+`ask` 会给你三样东西：`filledNow`（已经填了的，带现值摘要）、`ask`（要问的组，每组带 `why` 和 `canSkip`）、`next`（问法）。照它做：
+
+- **一条消息问完所有组，不要一问一答、不要分几轮。** 客户答一段话往往同时覆盖好几项，分轮问会让同一件事问三遍。
+- **`filledNow` 里的不要再问。** 想说就顺口确认一句「公司名和主推产品我记着，是 X 和 Y，对吧」，别当成新问题。
+- **`canSkip: true` 的组（实力数字、客户评价）要明说是「有就给我，没有就跳过，不影响开工」。** 编数字比不写更糟——以后客户自己看到会翻脸。
+- **客户答不上来的，标「以后再补」，不要追着问第二遍。** `completeness` 不是门槛，别拿百分比卡他。
+- **客户这一轮说的，优先于画像里的旧值。** 画像只是默认，他改口了就按新的写。
+
+收齐后写成 JSON，跑 `check` 再 `set`：
+
+```bash
+puffergo profile check profile.json     # 只校验不写，会报哪些字段会被截断/丢弃
+puffergo profile set profile.json       # 默认合并：没提的块保持原样
+```
+
+写到 `identity` / `business` / `audience` / `advantage` / `trustData` / `testimonials` / `contact` / `seo` / `special_instructions` 这几个块下，字段名照 `puffergo profile ask` 返回的 `path`，别自己造名字。写完再跑一次 `puffergo profile get`，把 `completeness.filled/total` 和还空着的项念给客户听——**只念影响生意的那些**（品牌名、行业、产品、客户群、优势支柱），`testimonials`、`special_instructions`、`contact.channels`、`trustData.*` 大多数站本来就没有。
+
+**客户想在 AI 建站页里填也可以**：建站页的 Step1 就是这张表，填完会存回同一份画像，`profile get` 之后能读到。两条路别同时走——要么你在这儿问完，要么让他去页面里填，不要两边各问一半。
+
+画像齐了，才进阶段 6 交接，然后交给 content / products 技能写页面。
+
+## 阶段 6：交接
 
 收尾必须自己验，不能听客户说「好像好了」：
 
-- 首页返回 200，且是 WordPress 页面（不是主机默认页、不是 403）
+- 首页返回 200，且是 WordPress 页面（不是主机默认页、不是 403），**且 `site setup` 的 `theme.state` 是 `puffergo`、`coreReady` 为 `true`**（还在默认主题上就必须先补初始化，否则后面写的页面全没样式）
 - `puffergo site setup` 能拿到站点信息
+- `puffergo plugins list` 里 Rank Math 是 `activated`（若是后台队列装的，`site setup` 的 `background.state` 应为 `done`）
 - `puffergo pages find` 能列出页面
 
-三条都过，告诉客户「站建好了，接下来要写什么页面/产品」，然后**交给 content 或 products 技能**。不要把写内容的事揽在这一步。
+四条都过，告诉客户「站建好了，接下来要写什么页面/产品」，然后**交给 content 或 products 技能**。不要把写内容的事揽在这一步。
+
+**再把这张上手卡一次交给客户**——只用真实值填（域名、站点标题）。**卡里不写密码**：密码已经在桌面那个 `<域名>-登录信息.txt` 里了，两样东西分开更安全，只要指过去就行。这是客户拿到手的唯一一份「我怎么进、怎么改、怎么断」的说明，技术词一个都不要出现：
+
+```
+你的网站已经能打开了：https://<域名>
+
+① 进后台改内容：你桌面上有个文件叫「<域名>-登录信息.txt」，
+   双击打开，里面有后台地址、用户名和密码。用浏览器打开那个地址
+   （结尾是 /wp-admin），把用户名和密码填进去就能进。
+   第一次登录后，建议改成你自己好记的密码，改完把那个文件也更新一下。
+
+② 忘记密码：在登录页点「忘记密码」，重置邮件会发到你建站时填的管理员邮箱。
+
+③ 想让 AI 帮你改站：后台 → 用户 → 个人资料 → 应用程序密码，
+   里面那条就是给 AI 用的钥匙。不想让它改了，删掉那一条就行，
+   你自己登录完全不受影响。
+
+④ 网站的通知和询盘提醒会发到管理员邮箱，记得去收。
+   表单发信还要在 FluentSMTP 里配一次邮箱账号（见第 8 步）。
+```
+
+第 3 条是这张卡里最值钱的一句——**客户第一次知道自己有个开关能随时收回 AI 的权限**。不要省掉。① 里那句「文件在你桌面上」也是关键：他不用记住任何东西、也不用把密码发给你。
+
+**邮件这块交代一句就走，不当验收项**：`mailPlugin.state` 是 `active` 只说明插件在跑；发信账号要客户自己在 `wp-admin → FluentSMTP` 里配（第 8 步），我们不代配、也不代测。交接时说清「插件装好了，账号你自己填一下，填完里面有 Send Test Email」；他没填就别对外宣称「询盘不会丢了」。
 
 客户问「我不会用」「这个页面是干什么的」「怎么才能不让它动我的站」时，两份现成文档给他看，**按住处分流，别自己另编一套说法**：
 
@@ -238,22 +611,50 @@ puffergo api POST /wp-json/wp/v2/posts --site <站点> --yes true --body '{"titl
 
 ## 报错 → 人话
 
+**通用判障顺序，三类错都一样**：先认人（`whoami` 账号邮箱对不对）→ 再查对象（域名 / 订单 / 站点是不是这个账号下的）→ 最后才查权限和参数。**不要反过来。** 现象还没定位就先提权、先重试、先建议客户「删掉连接加回来」，只会把成本转嫁给客户。
+
+**同类失败重试上限 1 次。** 第二次还错就停手，把「现在卡在哪 / 查到什么 / 你可以选哪两条路」说清楚，别让客户反复点授权。
+
 | 原始报错 | 真实含义 | 告诉客户什么 |
 |---|---|---|
+| `insufficient_scope` / `permission denied`（Cloudflare） | **先怀疑连错账号**，其次才是授权范围小 | 先 `whoami` 拿账号邮箱跟客户的目标资产比对；对不上就换账号连接，不要一上来让客户重新授权 |
+| 首次调 Hostinger 工具慢（十几秒） | 官方包首次从国内镜像下载，不是卡死 | 动手前播报「正在准备主机工具，马上就好」；下完这次不再提 |
+| 输入框「主机（Hostinger）」卡片显示连接失败，浏览器不弹授权页 | WorkBuddy 官方 MCP 连接层的问题（不是客户操作错、不是协议不兼容） | **直接切脚本兜底**：按上文「主机连接兜底」用 `scripts/hostinger.mjs --check / --login`。别让客户反复点卡片重试，也别说技术词 |
+| Hostinger 授权页点了 Allow 还是连不上 | 授权失败 / 凭据没落盘 | 重试上限 1 次；还不行切脚本兜底（`hostinger.mjs --login`），仍失败才走阶段 2 网页兜底 |
+| Hostinger MCP 接口持续报错、开站装 WP 走不通 | 核心链路确实跑不通 | 先切脚本兜底试；脚本也不行，再按阶段 2「网页兜底」把 hPanel 步骤给客户，说明「我这边自动没成功，你在网页点几下，我带你」 |
+| 客户在 hPanel 兜底装 WordPress 时找不到 `WP Admin` | 装完还没跳转，或站点还在装 | 等一两分钟，刷新 hPanel → Websites → 站点 Dashboard；急着用就直接访问 `域名/wp-admin`，用他自己设的密码登 |
+| 网页兜底建站时没看到临时域名选项 | 界面改版或套餐不同 | 让他把那一页截图发来，你指给他看；实在找不到就先用自己的正式域名建（前提解析已指过来），别猜着点 |
+| 主域 `403`，但 `www` 正常 | 根域 A 记录指向了别处的旧机器 | 查 `dig +short <domain>` 的 IP，跟本站点 IP 比；是旧机器就改 A 记录，不要等生效 |
 | `403 Forbidden` + 响应头有 `platform: hostinger` | DNS 已经到主机了，但主机上没有这个域名的站点配置 | 域名还没绑到站点上，不是你 DNS 配错了 |
 | `This domain isn't owned by this Hostinger account` | 域名/父域在另一个 Hostinger 账号下，**超出本技能范围** | 停止自动处理，按阶段 0 的边界话术让客户换域名或挪域名，再找 AI 继续聊 |
 | `already hosted` / 域名已被占用 | 域名已经绑在同一个账号的另一个站点 | 去 hPanel 解绑，或者换域名 |
-| 订单 `awaiting_payment` | 银行/卡在验证 | 去银行 App 或 hPanel 确认这笔付款，别重复下单 |
-| `onboardings` 一直是 `running` / 报 404、409 | 站还在开 | 正常，等就行；超过一小时还是 running 才算失败 |
 | 站点能打开但跳到免费子域 | WordPress 的 `siteurl` 还是旧的 | 改站点地址，或按请求动态设 `WP_HOME`/`WP_SITEURL` |
 | 授权页报 `Invalid Request` / `This authorization was not started in this browser` | 打开成了回调地址，或会话在别的浏览器发起 | AI 重新发起 OAuth，从 `/authorize` 地址开始；不是客户点错，别让他重试 |
-| Cloudflare 授权后写 DNS 返回 403 | 授权时选了 Minimal 模板，没有 `dns.write` | 重新授权选 Full access；见 `oauth-and-authorization.md` |
-| MCP 工具列表只有三四个 | Code Mode 正常形态，不是没连上 | 先 `search` 找操作名再 `execute`，别以为没能力 |
-| `execute` 报 `Unknown operation "xxx"` | 操作名是自己编的 | 用 `search` 返回的真实操作名（如 `hosting_websites_list`） |
-| 授权页白屏 / 超长 `login_challenge` | 页面没渲染出来，不是失败 | 刷新一次；Hostinger 若开着代理触发风控，让客户临时关代理 |
+| Cloudflare 授权后写 DNS 返回 403 | 授权时没把权限切到 `Full access`（默认 Minimal 没有 `dns.write`） | 让客户重新授权、切 Full access；别硬试第二遍。见 `oauth-and-authorization.md` |
+| Cloudflare 的 MCP 工具列表只有三四个 | Code Mode 正常形态，不是没连上 | 先 `search` 找操作名再 `execute`，别以为没能力 |
+| 授权页白屏 / 超长 `login_challenge` | 页面没渲染出来，不是失败 | 刷新一次；客户本机若开着代理触发风控，让他临时关掉再点 |
 | `api` 返回 `no_site` | **凭据还在**，只是没指定站点或站点名打错 | 把返回里的已登录清单给客户挑，加 `--site`；**不要让他重新登录** |
 | `api` 返回 `not_logged_in` | 这台机器确实没有任何凭据 | 才需要 `puffergo login` |
 | `api` 返回 `network_error` 且提示 Node 太旧 | 机器 Node < 18，没有全局 `fetch` | 升级 Node 到 18+，不是站点或凭据的问题 |
+
+## 站建好之后：交给谁
+
+站能打开、插件装好、`site setup` 能拿到站点信息，建站这一段就结束了。**不要在这里顺手写页面**——那是另一套规则。
+
+收尾只有两句话：
+
+1. 「站建好了，能打开了。接下来想先做哪一页？」
+2. 把 `GETTING-STARTED.md` 给他——里面有他日常要用的操作和卡住时的说法。
+
+接下来按他要的东西分流：
+
+| 他要做的 | 去哪 |
+|---|---|
+| 首页 / 产品页 / 关于我们这类页面、博客文章、案例 | `puffergo-wordpress-content` 技能 |
+| 上产品、改产品、建产品分类 | `puffergo-wordpress-products` 技能 |
+| 只是想把站上某段文字改一下、改标题或网址 | 也是 content 技能，`pages seo` 直接改 |
+
+他自己没想好要做什么时，给一个默认建议：「先做首页，客户进来第一眼看的就是它。」不要列一堆页面让他挑。
 
 ## 不要做的事
 
@@ -261,7 +662,11 @@ puffergo api POST /wp-json/wp/v2/posts --site <站点> --yes true --body '{"titl
 - 不要在 Hostinger 买域名。
 - 不要用覆盖语义写 DNS 记录。
 - 不要把「接口返回 200」当成「操作成功」——建站、装 WP 都是异步的，要看状态。
-- 不要在客户没说过「买」的时候下单。
+- 不要在客户没确认过的时候开单。
 - 不要为了域名归属问题去写 Worker、改 Host 头、配反代——那是范围外的兜底，只提醒，不实施。
 - 不要绕过 `puffergo api` 去读 `~/.puffergo/credentials.json`、也不要自己拼 Basic 头——密码出了 CLI 就进了对话和日志，这条边界一旦破掉就收不回来。
 - 不要把 `no_site` 当成「凭据丢了」，那会让客户白重登一遍。
+- **不要绕「后台点批准」这一步。** 不许用主机接口改后台密码（没这个操作）、不许写 PHP/定时任务/临时插件去重置密码或改用户、不许装插件伪造授权。三条都试过、全都失败，七次尝试每次 90 秒超时，客户全程只看到一片空白。应用密码只能站主本人核准，这是 WordPress 的规则。卡住时唯一正确的动作是**把页面给他、说清点哪个按钮、等他说点了**。
+- **不要为了绕开一个「点一下」的步骤去装插件或改代码。** 那会把一个可逆的小问题变成不可逆的站故障。
+- **不要在画像做完之前问产品、案例、页面清单、设计风格。** 这些 AI 都能从画像里读，先问一遍就是让客户重复劳动，而且下一轮还得再问。初始化一完成，第一句话就是画像。
+- **不要拿画像的完成度百分比卡客户。** `completeness.filled/total` 里一半字段多数站本来就没有；只把「影响生意的那几项」说清楚，客户不填也能开工。

@@ -7,7 +7,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { mkdtemp, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { cmdProfileGet, cmdProfileCheck, cmdProfileSet, PROFILE_USAGE } from '../lib/profileCmd';
+import { cmdProfileGet, cmdProfileAsk, cmdProfileCheck, cmdProfileSet, PROFILE_USAGE } from '../lib/profileCmd';
 import { writeActiveDomain } from '../adapters/fileStore';
 
 const SITE = 'http://profile.test';
@@ -96,6 +96,98 @@ describe('profile get', () => {
       'get-site-profile': new Fail(404, { code: 'rest_ability_not_found', message: 'not found' }),
     });
     expect(await cmdProfileGet(ctx(dir))).toMatchObject({ ok: false, code: 'update_plugin', fix: 'user' });
+  });
+});
+
+describe('profile ask', () => {
+  it('turns an empty profile into grouped questions a human can answer in one pass', async () => {
+    const dir = await workdir();
+    stubSite({
+      'get-product-schema': SCHEMA,
+      'get-site-profile': { profile: {}, limits: {}, completeness: { filled: 0, total: 28, percent: 0, missing: [] } },
+    });
+    const out = (await cmdProfileAsk(ctx(dir))) as unknown as {
+      ask: Array<{ id: string; canSkip: boolean; fields: Array<{ path: string; question: string }> }>;
+      askCount: number;
+      filledNow: unknown[];
+      next: string;
+    };
+    const ids = out.ask.map(g => g.id);
+    expect(ids).toEqual(['identity', 'audience', 'advantage', 'trustData', 'testimonials', 'contact', 'seo']);
+    const identity = out.ask.find(g => g.id === 'identity')!;
+    expect(identity.canSkip).toBe(false);
+    expect(identity.fields.map(f => f.path)).toContain('identity.brand_name');
+    expect(identity.fields.every(f => f.question.length > 4)).toBe(true); // 问的是人话，不是字段名
+    expect(out.filledNow).toEqual([]);
+    expect(out.askCount).toBe(28); // 与插件的 COMPLETENESS_FIELDS 一一对应，问漏一项就会掉下来
+    expect(out.next).toContain('ONE message');
+  });
+
+  it('never asks again what the customer already answered', async () => {
+    const dir = await workdir();
+    stubSite({
+      'get-product-schema': SCHEMA,
+      'get-site-profile': {
+        profile: {
+          identity: { brand_name: 'Axion', slogan: '', founded: '', story: '' },
+          business: { industry: 'LED lighting', products: ['high bay'] },
+        },
+        limits: {},
+        completeness: { filled: 4, total: 28, percent: 14, missing: [] },
+      },
+    });
+    const out = (await cmdProfileAsk(ctx(dir))) as unknown as {
+      ask: Array<{ id: string; fields: Array<{ path: string }> }>;
+      filledNow: Array<{ path: string; value: string }>;
+    };
+    const askedPaths = out.ask.flatMap(g => g.fields.map(f => f.path));
+    expect(askedPaths).not.toContain('identity.brand_name');
+    expect(askedPaths).not.toContain('business.industry');
+    expect(askedPaths).not.toContain('business.products');
+    expect(askedPaths).toContain('identity.slogan');
+    expect(out.filledNow).toEqual([
+      { path: 'identity.brand_name', value: 'Axion' },
+      { path: 'business.industry', value: 'LED lighting' },
+      { path: 'business.products', value: '1 条' },
+    ]);
+  });
+
+  it('a complete profile has nothing to ask — and says so instead of inventing questions', async () => {
+    const dir = await workdir();
+    const full = {
+      identity: { brand_name: 'Axion', slogan: 'S', founded: '2012', story: 'Started in a mould shop.' },
+      business: { industry: 'LED lighting', products: ['high bay'] },
+      audience: { role: 'Facility manager', priorities: 'Lead time', regions: 'Germany' },
+      advantage: { pillars: ['Own factory'], certifications: ['CE'], pain_points: ['Counterfeit'] },
+      trustData: {
+        employees: 120,
+        factoryAreaSqm: 8000,
+        annualCapacity: '500k pcs',
+        productionLines: 6,
+        passRate: '99.3%',
+        servedCountries: 32,
+        servedClients: '400+',
+        avgResponseHours: 8,
+        representativeClients: 'EU warehouse chain',
+      },
+      testimonials: [{ quote: 'Halved our bill', name: 'Hans' }],
+      contact: {
+        email: 'sales@axion.test',
+        phone: '+86 574 8888 6666',
+        address: 'Ningbo, China',
+        channels: [{ type: 'whatsapp', value: '+86 138' }],
+      },
+      seo: { keywords: ['led high bay'] },
+      special_instructions: 'Never say cheapest.',
+    };
+    stubSite({
+      'get-product-schema': SCHEMA,
+      'get-site-profile': { profile: full, limits: {}, completeness: { filled: 28, total: 28, percent: 100, missing: [] } },
+    });
+    const out = (await cmdProfileAsk(ctx(dir))) as unknown as { ask: unknown[]; askCount: number; next: string };
+    expect(out.ask).toEqual([]);
+    expect(out.askCount).toBe(0);
+    expect(out.next).toContain('Nothing to ask');
   });
 });
 

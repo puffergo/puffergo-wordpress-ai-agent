@@ -35,6 +35,8 @@ description: >-
 
 买域名、买主机、把站建起来、上架产品，跟这个站有没有内容台账无关，**这些不要跑 `silo status`**。
 
+**每做一步都要说清进度**：动手前说「我在做什么、大概多久」，做完说「现在是什么状态」，收尾只给一个下一步动作。超过 10 秒的操作（写长文、批量建页、等发布）必须提前说，否则客户会当成卡死。播报只讲状态，不解释原理。
+
 ## 判断车道（只用于写内容、改内容）
 
 客户要写内容或改内容时，跑 `puffergo silo status`，按结果走：
@@ -56,7 +58,7 @@ description: >-
 
 ## 命令
 
-`node <本技能目录>/scripts/puffergo.mjs <命令>`，下文简写为 `puffergo`。在客户的工作目录里运行，结果是 stdout 上的 JSON。客户说脚本行为不对时，先跑 `puffergo version`，把 `build` 念给他听——技能是整包下载的，光说「重装过了」说明不了他手上是哪一版。
+`node <本技能目录>/scripts/puffergo.mjs <命令>`，下文简写为 `puffergo`。本技能目录就是这份 SKILL.md 所在目录；不确定时先跑一次 `find ~/.workbuddy -name puffergo.mjs -path "*puffergo-wordpress-content*" | head -1` 拿到绝对路径。在客户的工作目录里运行，结果是 stdout 上的 JSON。客户说脚本行为不对时，先跑 `puffergo version`，把 `build` 念给他听——技能是整包下载的，光说「重装过了」说明不了他手上是哪一版。
 
 ## 建站与采购：给链接，不代跑
 
@@ -73,10 +75,10 @@ description: >-
 | 从零建整站（AI 生成页面） | `wpAdmin.links.aiSiteBuilder` |
 | 清空/重置站点画像 | `wpAdmin.links.siteProfile` |
 | 填 API key、看额度 | `wpAdmin.links.settings` |
-| 买主机 | `https://www.hostinger.com/refer?REFERRALCODE=puffergo` |
-| 买域名 | `https://www.cloudflare.com/domains/` |
+| 买主机 | `https://www.hostinger.com/pricing?REFERRALCODE=puffergo` |
+| 买域名 | 有卡：`https://www.cloudflare.com/domains/`；没卡：客户自己的阿里云 / 腾讯云（支付宝） |
 
-买域名和主机那两条不来自脚本，照抄上面的地址。客户本来就在用 Cloudflare 的（他自己有账号），给 `https://dash.cloudflare.com/`，让他登录后进 Domain Registration。
+买域名和主机那两条不来自脚本，照抄上面的地址。**Cloudflare 买域名只收卡/PayPal/银联，没有支付宝**，所以先看客户有没有卡；没有就用阿里云、腾讯云或 Hostinger 买，支付宝扫码。域名在哪注册都行，最后把 NS 改到 Cloudflare 就能接过来，这一步免费。
 
 客户要改画像用 `profile set`（见「站点画像」），不用给链接；只有清空这一步脚本没有命令，才给上面那条。
 
@@ -182,12 +184,15 @@ Node 是你的运行环境，你自己搞定，不要拿它去问客户：跑一
 
 ## 授权
 
-回调服务就在客户自己的电脑上，客户一点批准脚本立刻就知道，**所以不要问客户「点好了吗」**：
+回调服务就在客户自己的电脑上，客户一点批准脚本立刻就知道，**所以不要问客户「点好了吗」**。`login` 的监听进程用 shell 双 fork 启动（父进程是 launchd），**活得过命令本身**，客户什么时候点都收得到：
 
 1. `puffergo login <网站地址>` 会打开浏览器并立刻返回。告诉客户：已经打开 WordPress 授权页，请点「批准」（先登录网站后台）。**把返回里的 `authorizeUrl` 原样发给客户**：浏览器没自动打开、或者打开的地方不能粘贴密码，他自己点这个链接就够了。**这个链接只能客户自己的浏览器打开**——授权结果要回到这台电脑上，你用内置浏览器打开它，客户永远授权不上。
-2. 马上运行 `puffergo login status`，它会一直等到客户点完为止。
-3. 回来是 `approved`：先回一句「我看到你批准了，正在核对权限」，再运行 `pages types`，然后告诉客户网站是哪个、可以开始了。回来是 `waiting`（等太久了）：告诉客户你还在等那个页面，再运行一次 `login status`。回来是 `denied`：把 `message` 转告客户，重新 `login`。
-4. 回来是 `waiting` 且带 `tookOver`：本机接听的进程之前被打断过，客户那一次点击（如果他点了）丢了。只要跟他说「回到还开着的那个页面，再点一次批准」——**就是再点一下，不要让他复制网址、不要让他改文件、也不用重新 `login`**；然后你再跑一次 `login status`。
+   `listener.alive: true` 表示监听真在跑，客户慢慢来就行；只有 `false`（宿主回收进程树、Job Object 或禁止常驻进程的环境）才需要下面那条 `status` 先接管端口，等它跑起来再说「可以点了」。
+2. `puffergo login status` 是去问「收到没有」，正常跑一两次就够——常驻监听在收，不用掐点循环。返回 `waiting` 说明客户还没点到，过一会儿再问，**不要催他、不要让他反复点**。
+3. 回来是 `approved`：先回一句「我看到你批准了，正在核对权限」，再运行 `pages types`，然后告诉客户网站是哪个、可以开始了。回来是 `waiting`：告诉客户你还在等那个页面，过一会儿再运行一次 `login status`。回来是 `denied`：把 `message` 转告客户，重新 `login`。回来是 `grant_failed`：批准了但本机存不下（磁盘/权限），修完再重登，**别让客户再点一次**；报错带 `Broker request outcome unknown` 的是宿主 fs 代理在拦，重跑一次 `login` 就好。
+4. 回来是 `waiting` 且带 `tookOver`：说明那一刻端口上没人在听，跑一次 `login status` 重新接管。**连续两次都是 `tookOver` 会直接返回 `callback_unreliable`——那就别再让客户点了**，改走第 5 条。
+5. **回调收不到时，先看地址栏。** 客户点完批准，浏览器会跳到 `http://127.0.0.1:…/?…&password=…`——就算页面显示「无法连接」、顶部飘着几条红色空提示条，**那串 URL 仍然在地址栏里，密码就在里面，那不是授权失败**。让他把整条 URL 复制进一个文本文件，然后 `puffergo login from-url --site <站点> --file <文件路径>`（你只传路径，密码不进你的上下文）。这串 URL 已经拿不到了，才让他去 wp-admin → 用户 → 个人资料 → 应用程序密码 生成一条，用 `login app-password --file` 那条路。
+6. **状态说不清就跑 `puffergo login doctor`**：端口有没有人在听、状态属于哪个站、窗口还剩多久、凭据存没存、空等了几次，一条命令全有。状态 `approved` 但 `credentialSaved: false` 就是假成功，必须重登。
 
 ## 断开
 
@@ -211,6 +216,7 @@ Node 是你的运行环境，你自己搞定，不要拿它去问客户：跑一
 | 命令 | 作用 |
 |---|---|
 | `puffergo profile get` | 读出整份画像，带 `completeness`（填了多少、还缺哪些）和 `limits`（产品最多 3 个、关键词最多 30 个之类的硬限制） |
+| `puffergo profile ask` | 只读。把还空着的字段折成几组人话问题（带 `why` / `canSkip`），外加已填字段的摘要。客户要一次性补画像时用它，别再自己拼问题清单 |
 | `puffergo profile check <file.json>` | 干跑：这份文件存进去会变成什么样，哪些会被截断或改掉。不写入 |
 | `puffergo profile set <file.json> [--replace]` | 写入。**默认合并**：文件里没提的块和字段保持原样；`--replace` 才整份覆盖 |
 
@@ -273,7 +279,8 @@ Node 是你的运行环境，你自己搞定，不要拿它去问客户：跑一
 | 命令 | 作用 |
 |---|---|
 | `puffergo login <网站地址>` | 在浏览器里授权，只需一次 |
-| `puffergo login status` | 等客户在浏览器上点批准，点了就立刻返回，不用问客户 |
+| `puffergo login status` | 占住回调端口等客户点批准（约 1 分钟）；返回 `waiting` 就再跑一次，别停 |
+| `puffergo login doctor` | 自检：端口有没有人在听、状态属于哪个站、凭据存没存。授权卡住先跑它 |
 | `puffergo logout [网站地址]` | 断开这台电脑和这个网站的连接。不带站点只列清单，啥也不删 |
 | `puffergo pages types` | 网站能建哪些内容类型（页面、文章、案例…） |
 | `puffergo pages find [--type 类型] [--status publish] [--search 词] [--url 链接]` | 找网站上已有的页面、文章，拿到 id 和链接 |

@@ -43,8 +43,9 @@ export interface AuthorizeServerOptions {
    *  keep serving that URL from a new process — see `puffergo login status`. If the port is taken, the
    *  server falls back to a free one, which no earlier URL points at. */
   port?: number;
-  /** HTML body text for the result page (success / failure) — callers phrase the "go back to X" line. */
-  resultPage?: (ok: boolean) => string;
+  /** HTML body text for the result page (success / failure) — callers phrase the "go back to X" line.
+   *  `problem` is set when the grant could not be saved (see `onGrant`); render it, don't hide it. */
+  resultPage?: (ok: boolean, problem?: string) => string;
   /** Fires when the wait ends because `timeoutMs` elapsed, as opposed to a callback arriving incomplete
    *  (WordPress appends `success=false` when the approval is declined). Callers that must tell a timeout
    *  apart from a declined approval — the CLI taking a dead listener's port back — need this, because
@@ -54,15 +55,24 @@ export interface AuthorizeServerOptions {
    *  was already gone) returns at once instead of holding the process to its timeout. The caller knows why
    *  it aborted, so this needs no separate outcome. */
   signal?: AbortSignal;
+  /**
+   * Persist the grant BEFORE the browser is told it worked.
+   *
+   * The result page is the only thing the customer ever sees, so it must never say "已授权" for a grant
+   * that never reached disk — a killed process between `res.end()` and the caller's write is exactly how
+   * "the page said ✅ but no credential exists" happens. Returning a string here renders that string as a
+   * FAILURE page instead, and the promise resolves `null` just like a declined approval.
+   */
+  onGrant?: (creds: AuthorizedAppPasswordCredentials) => Promise<string | null> | string | null;
 }
 
-const DEFAULT_RESULT_PAGE = (ok: boolean): string =>
+const DEFAULT_RESULT_PAGE = (ok: boolean, problem?: string): string =>
   `<!doctype html><html><head><meta charset="utf-8"><title>PufferGo</title>
 <style>html{font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#1f2430;
 display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f6f7fb}
 div{text-align:center}</style></head><body><div>${
     ok ? '✅ 已授权。' : '❌ 未获取到应用密码。'
-  }<br><small style="color:#888">这个页面可以关闭了。</small></div></body></html>`;
+  }${problem ? `<br><small style="color:#c0392b">${problem}</small>` : ''}<br><small style="color:#888">这个页面可以关闭了。</small></div></body></html>`;
 
 /**
  * Starts the one-shot server on 127.0.0.1 — on `opts.port` when given, else on a random free one — and
@@ -86,6 +96,7 @@ export function runAuthorizeServer(
     resultPage = DEFAULT_RESULT_PAGE,
     onTimeout,
     signal,
+    onGrant,
   } = opts;
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -115,9 +126,22 @@ export function runAuthorizeServer(
           return;
         }
         const creds = parseAuthorizeReturn(url.searchParams);
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        res.end(resultPage(!!creds));
-        finish(creds);
+        // Persist first, answer second. The page is what the customer trusts, so it may only claim
+        // success once the credential is actually on disk.
+        void (async () => {
+          let problem: string | null = null;
+          if (creds && onGrant) {
+            try {
+              problem = await onGrant(creds);
+            } catch (e) {
+              problem = e instanceof Error ? e.message : String(e);
+            }
+          }
+          if (settled) return;
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end(resultPage(!!creds && !problem, problem ?? undefined));
+          finish(problem ? null : creds);
+        })();
       });
       active = server;
 

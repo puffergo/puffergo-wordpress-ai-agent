@@ -39,9 +39,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/nodes/identity.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/nodes/identity.js
 var require_identity = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/nodes/identity.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/nodes/identity.js"(exports) {
     "use strict";
     var ALIAS = Symbol.for("yaml.alias");
     var DOC = Symbol.for("yaml.document");
@@ -96,9 +96,9 @@ var require_identity = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/visit.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/visit.js
 var require_visit = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/visit.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/visit.js"(exports) {
     "use strict";
     var identity = require_identity();
     var BREAK = Symbol("break visit");
@@ -254,9 +254,9 @@ var require_visit = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/doc/directives.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/doc/directives.js
 var require_directives = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/doc/directives.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/doc/directives.js"(exports) {
     "use strict";
     var identity = require_identity();
     var visit = require_visit();
@@ -425,9 +425,9 @@ var require_directives = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/doc/anchors.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/doc/anchors.js
 var require_anchors = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/doc/anchors.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/doc/anchors.js"(exports) {
     "use strict";
     var identity = require_identity();
     var visit = require_visit();
@@ -495,9 +495,9 @@ var require_anchors = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/doc/applyReviver.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/doc/applyReviver.js
 var require_applyReviver = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/doc/applyReviver.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/doc/applyReviver.js"(exports) {
     "use strict";
     function applyReviver(reviver, obj, key, val) {
       if (val && typeof val === "object") {
@@ -545,9 +545,9 @@ var require_applyReviver = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/nodes/toJS.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/nodes/toJS.js
 var require_toJS = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/nodes/toJS.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/nodes/toJS.js"(exports) {
     "use strict";
     var identity = require_identity();
     function toJS(value, arg, ctx) {
@@ -575,9 +575,9 @@ var require_toJS = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/nodes/Node.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/nodes/Node.js
 var require_Node = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/nodes/Node.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/nodes/Node.js"(exports) {
     "use strict";
     var applyReviver = require_applyReviver();
     var identity = require_identity();
@@ -616,9 +616,9 @@ var require_Node = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/nodes/Alias.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/nodes/Alias.js
 var require_Alias = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/nodes/Alias.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/nodes/Alias.js"(exports) {
     "use strict";
     var anchors = require_anchors();
     var visit = require_visit();
@@ -640,8 +640,6 @@ var require_Alias = __commonJS({
        * instance of the `source` anchor before this node.
        */
       resolve(doc, ctx) {
-        if (ctx?.maxAliasCount === 0)
-          throw new ReferenceError("Alias resolution is disabled");
         let nodes;
         if (ctx?.aliasResolveCache) {
           nodes = ctx.aliasResolveCache;
@@ -663,38 +661,36 @@ var require_Alias = __commonJS({
           if (node.anchor === this.source)
             found = node;
         }
-        if (found && ctx) {
-          const { anchors: anchors2, doc: doc2, maxAliasCount } = ctx;
-          let data = anchors2.get(found);
-          if (!data) {
-            toJS.toJS(found, null, ctx);
-            data = anchors2.get(found);
-          }
-          if (data?.res === void 0) {
-            const msg = "This should not happen: Alias anchor was not resolved?";
-            throw new ReferenceError(msg);
-          }
-          if (maxAliasCount >= 0) {
-            data.count += 1;
-            if (data.aliasCount === 0)
-              data.aliasCount = getAliasCount(doc2, found, anchors2);
-            if (data.count * data.aliasCount > maxAliasCount) {
-              const msg = "Excessive alias count indicates a resource exhaustion attack";
-              throw new ReferenceError(msg);
-            }
-          }
-        }
         return found;
       }
       toJSON(_arg, ctx) {
         if (!ctx)
           return { source: this.source };
-        const source = this.resolve(ctx.doc, ctx);
+        const { anchors: anchors2, doc, maxAliasCount } = ctx;
+        const source = this.resolve(doc, ctx);
         if (!source) {
           const msg = `Unresolved alias (the anchor must be set before the alias): ${this.source}`;
           throw new ReferenceError(msg);
         }
-        return ctx.anchors.get(source).res;
+        let data = anchors2.get(source);
+        if (!data) {
+          toJS.toJS(source, null, ctx);
+          data = anchors2.get(source);
+        }
+        if (!data || data.res === void 0) {
+          const msg = "This should not happen: Alias anchor was not resolved?";
+          throw new ReferenceError(msg);
+        }
+        if (maxAliasCount >= 0) {
+          data.count += 1;
+          if (data.aliasCount === 0)
+            data.aliasCount = getAliasCount(doc, source, anchors2);
+          if (data.count * data.aliasCount > maxAliasCount) {
+            const msg = "Excessive alias count indicates a resource exhaustion attack";
+            throw new ReferenceError(msg);
+          }
+        }
+        return data.res;
       }
       toString(ctx, _onComment, _onChompKeep) {
         const src = `*${this.source}`;
@@ -734,9 +730,9 @@ var require_Alias = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/nodes/Scalar.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/nodes/Scalar.js
 var require_Scalar = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/nodes/Scalar.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/nodes/Scalar.js"(exports) {
     "use strict";
     var identity = require_identity();
     var Node = require_Node();
@@ -764,9 +760,9 @@ var require_Scalar = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/doc/createNode.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/doc/createNode.js
 var require_createNode = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/doc/createNode.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/doc/createNode.js"(exports) {
     "use strict";
     var Alias = require_Alias();
     var identity = require_identity();
@@ -839,9 +835,9 @@ var require_createNode = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/nodes/Collection.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/nodes/Collection.js
 var require_Collection = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/nodes/Collection.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/nodes/Collection.js"(exports) {
     "use strict";
     var createNode2 = require_createNode();
     var identity = require_identity();
@@ -982,9 +978,9 @@ var require_Collection = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/stringify/stringifyComment.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/stringify/stringifyComment.js
 var require_stringifyComment = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/stringify/stringifyComment.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/stringify/stringifyComment.js"(exports) {
     "use strict";
     var stringifyComment = (str) => str.replace(/^(?!$)(?: $)?/gm, "#");
     function indentComment(comment, indent) {
@@ -999,9 +995,9 @@ var require_stringifyComment = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/stringify/foldFlowLines.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/stringify/foldFlowLines.js
 var require_foldFlowLines = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/stringify/foldFlowLines.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/stringify/foldFlowLines.js"(exports) {
     "use strict";
     var FOLD_FLOW = "flow";
     var FOLD_BLOCK = "block";
@@ -1135,9 +1131,9 @@ ${indent}${text.slice(fold + 1, end2)}`;
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/stringify/stringifyString.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/stringify/stringifyString.js
 var require_stringifyString = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/stringify/stringifyString.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/stringify/stringifyString.js"(exports) {
     "use strict";
     var Scalar = require_Scalar();
     var foldFlowLines = require_foldFlowLines();
@@ -1418,9 +1414,9 @@ ${indent}`);
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/stringify/stringify.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/stringify/stringify.js
 var require_stringify = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/stringify/stringify.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/stringify/stringify.js"(exports) {
     "use strict";
     var anchors = require_anchors();
     var identity = require_identity();
@@ -1443,7 +1439,6 @@ var require_stringify = __commonJS({
         nullStr: "null",
         simpleKeys: false,
         singleQuote: null,
-        trailingComma: false,
         trueStr: "true",
         verifyAliasOrder: true
       }, doc.schema.toStringOptions, options2);
@@ -1542,9 +1537,9 @@ ${ctx.indent}${str}`;
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/stringify/stringifyPair.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/stringify/stringifyPair.js
 var require_stringifyPair = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/stringify/stringifyPair.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/stringify/stringifyPair.js"(exports) {
     "use strict";
     var identity = require_identity();
     var Scalar = require_Scalar();
@@ -1632,7 +1627,7 @@ ${indent}:`;
 ${stringifyComment.indentComment(cs, ctx.indent)}`;
         }
         if (valueStr === "" && !ctx.inFlow) {
-          if (ws === "\n" && valueComment)
+          if (ws === "\n")
             ws = "\n\n";
         } else {
           ws += `
@@ -1675,9 +1670,9 @@ ${ctx.indent}`;
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/log.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/log.js
 var require_log = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/log.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/log.js"(exports) {
     "use strict";
     var node_process = __require("process");
     function debug(logLevel, ...messages) {
@@ -1697,9 +1692,9 @@ var require_log = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/yaml-1.1/merge.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/yaml-1.1/merge.js
 var require_merge = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/yaml-1.1/merge.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/yaml-1.1/merge.js"(exports) {
     "use strict";
     var identity = require_identity();
     var Scalar = require_Scalar();
@@ -1716,18 +1711,18 @@ var require_merge = __commonJS({
     };
     var isMergeKey = (ctx, key) => (merge.identify(key) || identity.isScalar(key) && (!key.type || key.type === Scalar.Scalar.PLAIN) && merge.identify(key.value)) && ctx?.doc.schema.tags.some((tag2) => tag2.tag === merge.tag && tag2.default);
     function addMergeToJSMap(ctx, map, value) {
-      const source = resolveAliasValue(ctx, value);
-      if (identity.isSeq(source))
-        for (const it of source.items)
+      value = ctx && identity.isAlias(value) ? value.resolve(ctx.doc) : value;
+      if (identity.isSeq(value))
+        for (const it of value.items)
           mergeValue(ctx, map, it);
-      else if (Array.isArray(source))
-        for (const it of source)
+      else if (Array.isArray(value))
+        for (const it of value)
           mergeValue(ctx, map, it);
       else
-        mergeValue(ctx, map, source);
+        mergeValue(ctx, map, value);
     }
     function mergeValue(ctx, map, value) {
-      const source = resolveAliasValue(ctx, value);
+      const source = ctx && identity.isAlias(value) ? value.resolve(ctx.doc) : value;
       if (!identity.isMap(source))
         throw new Error("Merge sources must be maps or map aliases");
       const srcMap = source.toJSON(null, ctx, Map);
@@ -1748,18 +1743,15 @@ var require_merge = __commonJS({
       }
       return map;
     }
-    function resolveAliasValue(ctx, value) {
-      return ctx && identity.isAlias(value) ? value.resolve(ctx.doc, ctx) : value;
-    }
     exports.addMergeToJSMap = addMergeToJSMap;
     exports.isMergeKey = isMergeKey;
     exports.merge = merge;
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/nodes/addPairToJSMap.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/nodes/addPairToJSMap.js
 var require_addPairToJSMap = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/nodes/addPairToJSMap.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/nodes/addPairToJSMap.js"(exports) {
     "use strict";
     var log2 = require_log();
     var merge = require_merge();
@@ -1821,9 +1813,9 @@ var require_addPairToJSMap = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/nodes/Pair.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/nodes/Pair.js
 var require_Pair = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/nodes/Pair.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/nodes/Pair.js"(exports) {
     "use strict";
     var createNode2 = require_createNode();
     var stringifyPair = require_stringifyPair();
@@ -1861,9 +1853,9 @@ var require_Pair = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/stringify/stringifyCollection.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/stringify/stringifyCollection.js
 var require_stringifyCollection = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/stringify/stringifyCollection.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/stringify/stringifyCollection.js"(exports) {
     "use strict";
     var identity = require_identity();
     var stringify = require_stringify();
@@ -1964,19 +1956,12 @@ ${indent}${line}` : "\n";
         if (comment)
           reqNewline = true;
         let str = stringify.stringify(item, itemCtx, () => comment = null);
-        reqNewline || (reqNewline = lines.length > linesAtValue || str.includes("\n"));
-        if (i < items.length - 1) {
+        if (i < items.length - 1)
           str += ",";
-        } else if (ctx.options.trailingComma) {
-          if (ctx.options.lineWidth > 0) {
-            reqNewline || (reqNewline = lines.reduce((sum, line) => sum + line.length + 2, 2) + (str.length + 2) > ctx.options.lineWidth);
-          }
-          if (reqNewline) {
-            str += ",";
-          }
-        }
         if (comment)
           str += stringifyComment.lineComment(str, itemIndent, commentString(comment));
+        if (!reqNewline && (lines.length > linesAtValue || str.includes("\n")))
+          reqNewline = true;
         lines.push(str);
         linesAtValue = lines.length;
       }
@@ -2012,9 +1997,9 @@ ${indent}${end}`;
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/nodes/YAMLMap.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/nodes/YAMLMap.js
 var require_YAMLMap = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/nodes/YAMLMap.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/nodes/YAMLMap.js"(exports) {
     "use strict";
     var stringifyCollection = require_stringifyCollection();
     var addPairToJSMap = require_addPairToJSMap();
@@ -2156,9 +2141,9 @@ var require_YAMLMap = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/common/map.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/common/map.js
 var require_map = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/common/map.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/common/map.js"(exports) {
     "use strict";
     var identity = require_identity();
     var YAMLMap = require_YAMLMap();
@@ -2178,9 +2163,9 @@ var require_map = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/nodes/YAMLSeq.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/nodes/YAMLSeq.js
 var require_YAMLSeq = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/nodes/YAMLSeq.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/nodes/YAMLSeq.js"(exports) {
     "use strict";
     var createNode2 = require_createNode();
     var stringifyCollection = require_stringifyCollection();
@@ -2294,9 +2279,9 @@ var require_YAMLSeq = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/common/seq.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/common/seq.js
 var require_seq = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/common/seq.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/common/seq.js"(exports) {
     "use strict";
     var identity = require_identity();
     var YAMLSeq = require_YAMLSeq();
@@ -2316,9 +2301,9 @@ var require_seq = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/common/string.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/common/string.js
 var require_string = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/common/string.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/common/string.js"(exports) {
     "use strict";
     var stringifyString = require_stringifyString();
     var string = {
@@ -2335,9 +2320,9 @@ var require_string = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/common/null.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/common/null.js
 var require_null = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/common/null.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/common/null.js"(exports) {
     "use strict";
     var Scalar = require_Scalar();
     var nullTag = {
@@ -2353,9 +2338,9 @@ var require_null = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/core/bool.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/core/bool.js
 var require_bool = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/core/bool.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/core/bool.js"(exports) {
     "use strict";
     var Scalar = require_Scalar();
     var boolTag = {
@@ -2377,9 +2362,9 @@ var require_bool = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/stringify/stringifyNumber.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/stringify/stringifyNumber.js
 var require_stringifyNumber = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/stringify/stringifyNumber.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/stringify/stringifyNumber.js"(exports) {
     "use strict";
     function stringifyNumber({ format, minFractionDigits, tag: tag2, value }) {
       if (typeof value === "bigint")
@@ -2387,8 +2372,8 @@ var require_stringifyNumber = __commonJS({
       const num = typeof value === "number" ? value : Number(value);
       if (!isFinite(num))
         return isNaN(num) ? ".nan" : num < 0 ? "-.inf" : ".inf";
-      let n = Object.is(value, -0) ? "-0" : JSON.stringify(value);
-      if (!format && minFractionDigits && (!tag2 || tag2 === "tag:yaml.org,2002:float") && /^-?\d/.test(n) && !n.includes("e")) {
+      let n = JSON.stringify(value);
+      if (!format && minFractionDigits && (!tag2 || tag2 === "tag:yaml.org,2002:float") && /^\d/.test(n)) {
         let i = n.indexOf(".");
         if (i < 0) {
           i = n.length;
@@ -2404,9 +2389,9 @@ var require_stringifyNumber = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/core/float.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/core/float.js
 var require_float = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/core/float.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/core/float.js"(exports) {
     "use strict";
     var Scalar = require_Scalar();
     var stringifyNumber = require_stringifyNumber();
@@ -2450,9 +2435,9 @@ var require_float = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/core/int.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/core/int.js
 var require_int = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/core/int.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/core/int.js"(exports) {
     "use strict";
     var stringifyNumber = require_stringifyNumber();
     var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
@@ -2495,9 +2480,9 @@ var require_int = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/core/schema.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/core/schema.js
 var require_schema = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/core/schema.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/core/schema.js"(exports) {
     "use strict";
     var map = require_map();
     var _null = require_null();
@@ -2523,9 +2508,9 @@ var require_schema = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/json/schema.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/json/schema.js
 var require_schema2 = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/json/schema.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/json/schema.js"(exports) {
     "use strict";
     var Scalar = require_Scalar();
     var map = require_map();
@@ -2590,9 +2575,9 @@ var require_schema2 = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/yaml-1.1/binary.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/yaml-1.1/binary.js
 var require_binary = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/yaml-1.1/binary.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/yaml-1.1/binary.js"(exports) {
     "use strict";
     var node_buffer = __require("buffer");
     var Scalar = require_Scalar();
@@ -2656,9 +2641,9 @@ var require_binary = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/yaml-1.1/pairs.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/yaml-1.1/pairs.js
 var require_pairs = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/yaml-1.1/pairs.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/yaml-1.1/pairs.js"(exports) {
     "use strict";
     var identity = require_identity();
     var Pair = require_Pair();
@@ -2734,9 +2719,9 @@ ${cn.comment}` : item.comment;
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/yaml-1.1/omap.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/yaml-1.1/omap.js
 var require_omap = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/yaml-1.1/omap.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/yaml-1.1/omap.js"(exports) {
     "use strict";
     var identity = require_identity();
     var toJS = require_toJS();
@@ -2812,9 +2797,9 @@ var require_omap = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/yaml-1.1/bool.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/yaml-1.1/bool.js
 var require_bool2 = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/yaml-1.1/bool.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/yaml-1.1/bool.js"(exports) {
     "use strict";
     var Scalar = require_Scalar();
     function boolStringify({ value, source }, ctx) {
@@ -2844,9 +2829,9 @@ var require_bool2 = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/yaml-1.1/float.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/yaml-1.1/float.js
 var require_float2 = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/yaml-1.1/float.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/yaml-1.1/float.js"(exports) {
     "use strict";
     var Scalar = require_Scalar();
     var stringifyNumber = require_stringifyNumber();
@@ -2893,9 +2878,9 @@ var require_float2 = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/yaml-1.1/int.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/yaml-1.1/int.js
 var require_int2 = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/yaml-1.1/int.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/yaml-1.1/int.js"(exports) {
     "use strict";
     var stringifyNumber = require_stringifyNumber();
     var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
@@ -2972,9 +2957,9 @@ var require_int2 = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/yaml-1.1/set.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/yaml-1.1/set.js
 var require_set = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/yaml-1.1/set.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/yaml-1.1/set.js"(exports) {
     "use strict";
     var identity = require_identity();
     var Pair = require_Pair();
@@ -3061,9 +3046,9 @@ var require_set = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/yaml-1.1/timestamp.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/yaml-1.1/timestamp.js
 var require_timestamp = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/yaml-1.1/timestamp.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/yaml-1.1/timestamp.js"(exports) {
     "use strict";
     var stringifyNumber = require_stringifyNumber();
     function parseSexagesimal(str, asBigInt) {
@@ -3149,9 +3134,9 @@ var require_timestamp = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/yaml-1.1/schema.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/yaml-1.1/schema.js
 var require_schema3 = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/yaml-1.1/schema.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/yaml-1.1/schema.js"(exports) {
     "use strict";
     var map = require_map();
     var _null = require_null();
@@ -3193,9 +3178,9 @@ var require_schema3 = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/tags.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/tags.js
 var require_tags = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/tags.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/tags.js"(exports) {
     "use strict";
     var map = require_map();
     var _null = require_null();
@@ -3287,9 +3272,9 @@ var require_tags = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/Schema.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/Schema.js
 var require_Schema = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/schema/Schema.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/schema/Schema.js"(exports) {
     "use strict";
     var identity = require_identity();
     var map = require_map();
@@ -3319,9 +3304,9 @@ var require_Schema = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/stringify/stringifyDocument.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/stringify/stringifyDocument.js
 var require_stringifyDocument = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/stringify/stringifyDocument.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/stringify/stringifyDocument.js"(exports) {
     "use strict";
     var identity = require_identity();
     var stringify = require_stringify();
@@ -3399,9 +3384,9 @@ var require_stringifyDocument = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/doc/Document.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/doc/Document.js
 var require_Document = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/doc/Document.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/doc/Document.js"(exports) {
     "use strict";
     var Alias = require_Alias();
     var Collection = require_Collection();
@@ -3708,9 +3693,9 @@ var require_Document = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/errors.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/errors.js
 var require_errors = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/errors.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/errors.js"(exports) {
     "use strict";
     var YAMLError = class extends Error {
       constructor(name, pos, code, message) {
@@ -3755,7 +3740,7 @@ var require_errors = __commonJS({
       if (/[^ ]/.test(lineStr)) {
         let count = 1;
         const end = error.linePos[1];
-        if (end?.line === line && end.col > col) {
+        if (end && end.line === line && end.col > col) {
           count = Math.max(1, Math.min(end.col - col, 80 - ci));
         }
         const pointer = " ".repeat(ci) + "^".repeat(count);
@@ -3773,9 +3758,9 @@ ${pointer}
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/resolve-props.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/resolve-props.js
 var require_resolve_props = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/resolve-props.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/resolve-props.js"(exports) {
     "use strict";
     function resolveProps(tokens, { flow, indicator, next, offset, onError, parentIndent, startOnNewline }) {
       let spaceBefore = false;
@@ -3907,9 +3892,9 @@ var require_resolve_props = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/util-contains-newline.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/util-contains-newline.js
 var require_util_contains_newline = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/util-contains-newline.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/util-contains-newline.js"(exports) {
     "use strict";
     function containsNewline(key) {
       if (!key)
@@ -3949,9 +3934,9 @@ var require_util_contains_newline = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/util-flow-indent-check.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/util-flow-indent-check.js
 var require_util_flow_indent_check = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/util-flow-indent-check.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/util-flow-indent-check.js"(exports) {
     "use strict";
     var utilContainsNewline = require_util_contains_newline();
     function flowIndentCheck(indent, fc, onError) {
@@ -3967,9 +3952,9 @@ var require_util_flow_indent_check = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/util-map-includes.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/util-map-includes.js
 var require_util_map_includes = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/util-map-includes.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/util-map-includes.js"(exports) {
     "use strict";
     var identity = require_identity();
     function mapIncludes(ctx, items, search) {
@@ -3983,9 +3968,9 @@ var require_util_map_includes = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/resolve-block-map.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/resolve-block-map.js
 var require_resolve_block_map = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/resolve-block-map.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/resolve-block-map.js"(exports) {
     "use strict";
     var Pair = require_Pair();
     var YAMLMap = require_YAMLMap();
@@ -4091,9 +4076,9 @@ var require_resolve_block_map = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/resolve-block-seq.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/resolve-block-seq.js
 var require_resolve_block_seq = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/resolve-block-seq.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/resolve-block-seq.js"(exports) {
     "use strict";
     var YAMLSeq = require_YAMLSeq();
     var resolveProps = require_resolve_props();
@@ -4118,7 +4103,7 @@ var require_resolve_block_seq = __commonJS({
         });
         if (!props.found) {
           if (props.anchor || props.tag || value) {
-            if (value?.type === "block-seq")
+            if (value && value.type === "block-seq")
               onError(props.end, "BAD_INDENT", "All sequence items must start at the same column");
             else
               onError(offset, "MISSING_CHAR", "Sequence item without - indicator");
@@ -4142,9 +4127,9 @@ var require_resolve_block_seq = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/resolve-end.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/resolve-end.js
 var require_resolve_end = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/resolve-end.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/resolve-end.js"(exports) {
     "use strict";
     function resolveEnd(end, offset, reqSpace, onError) {
       let comment = "";
@@ -4185,9 +4170,9 @@ var require_resolve_end = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/resolve-flow-collection.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/resolve-flow-collection.js
 var require_resolve_flow_collection = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/resolve-flow-collection.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/resolve-flow-collection.js"(exports) {
     "use strict";
     var identity = require_identity();
     var Pair = require_Pair();
@@ -4315,7 +4300,7 @@ var require_resolve_flow_collection = __commonJS({
                 onError(valueProps.found, "KEY_OVER_1024_CHARS", "The : indicator must be at most 1024 chars after the start of an implicit flow sequence key");
             }
           } else if (value) {
-            if ("source" in value && value.source?.[0] === ":")
+            if ("source" in value && value.source && value.source[0] === ":")
               onError(value, "MISSING_CHAR", `Missing space after : in ${fcName}`);
             else
               onError(valueProps.start, "MISSING_CHAR", `Missing , or : between ${fcName} items`);
@@ -4352,7 +4337,7 @@ var require_resolve_flow_collection = __commonJS({
       const expectedEnd = isMap ? "}" : "]";
       const [ce, ...ee] = fc.end;
       let cePos = offset;
-      if (ce?.source === expectedEnd)
+      if (ce && ce.source === expectedEnd)
         cePos = ce.offset + ce.source.length;
       else {
         const name = fcName[0].toUpperCase() + fcName.substring(1);
@@ -4379,9 +4364,9 @@ var require_resolve_flow_collection = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/compose-collection.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/compose-collection.js
 var require_compose_collection = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/compose-collection.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/compose-collection.js"(exports) {
     "use strict";
     var identity = require_identity();
     var Scalar = require_Scalar();
@@ -4419,7 +4404,7 @@ var require_compose_collection = __commonJS({
       let tag2 = ctx.schema.tags.find((t) => t.tag === tagName && t.collection === expType);
       if (!tag2) {
         const kt = ctx.schema.knownTags[tagName];
-        if (kt?.collection === expType) {
+        if (kt && kt.collection === expType) {
           ctx.schema.tags.push(Object.assign({}, kt, { default: false }));
           tag2 = kt;
         } else {
@@ -4444,9 +4429,9 @@ var require_compose_collection = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/resolve-block-scalar.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/resolve-block-scalar.js
 var require_resolve_block_scalar = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/resolve-block-scalar.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/resolve-block-scalar.js"(exports) {
     "use strict";
     var Scalar = require_Scalar();
     function resolveBlockScalar(ctx, scalar, onError) {
@@ -4627,9 +4612,9 @@ var require_resolve_block_scalar = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/resolve-flow-scalar.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/resolve-flow-scalar.js
 var require_resolve_flow_scalar = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/resolve-flow-scalar.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/resolve-flow-scalar.js"(exports) {
     "use strict";
     var Scalar = require_Scalar();
     var resolveEnd = require_resolve_end();
@@ -4696,38 +4681,37 @@ var require_resolve_flow_scalar = __commonJS({
       }
       if (badChar)
         onError(0, "BAD_SCALAR_START", `Plain value cannot start with ${badChar}`);
-      return unfoldLines(source);
+      return foldLines(source);
     }
     function singleQuotedValue(source, onError) {
       if (source[source.length - 1] !== "'" || source.length === 1)
         onError(source.length, "MISSING_CHAR", "Missing closing 'quote");
-      return unfoldLines(source.slice(1, -1)).replace(/''/g, "'");
+      return foldLines(source.slice(1, -1)).replace(/''/g, "'");
     }
-    function unfoldLines(source) {
-      const line = /(.*?)\r?\n/sy;
-      let match = line.exec(source);
+    function foldLines(source) {
+      let first, line;
+      try {
+        first = new RegExp("(.*?)(?<![ 	])[ 	]*\r?\n", "sy");
+        line = new RegExp("[ 	]*(.*?)(?:(?<![ 	])[ 	]*)?\r?\n", "sy");
+      } catch {
+        first = /(.*?)[ \t]*\r?\n/sy;
+        line = /[ \t]*(.*?)[ \t]*\r?\n/sy;
+      }
+      let match = first.exec(source);
       if (!match)
         return source;
-      let trimEnd, trimBoth;
-      try {
-        trimEnd = new RegExp("(?<![ 	])[ 	]+$");
-        trimBoth = new RegExp("^[ 	]+|(?<![ 	])[ 	]+$", "g");
-      } catch {
-        trimEnd = /[ \t]+$/;
-        trimBoth = /^[ \t]+|[ \t]+$/g;
-      }
-      let res = match[1].replace(trimEnd, "");
+      let res = match[1];
       let sep = " ";
-      let pos = line.lastIndex;
+      let pos = first.lastIndex;
+      line.lastIndex = pos;
       while (match = line.exec(source)) {
-        const lm = match[1].replace(trimBoth, "");
-        if (lm === "") {
+        if (match[1] === "") {
           if (sep === "\n")
             res += sep;
           else
             sep = "\n";
         } else {
-          res += sep + lm;
+          res += sep + match[1];
           sep = " ";
         }
         pos = line.lastIndex;
@@ -4761,7 +4745,7 @@ var require_resolve_flow_scalar = __commonJS({
             while (next === " " || next === "	")
               next = source[++i + 1];
           } else if (next === "x" || next === "u" || next === "U") {
-            const length = next === "x" ? 2 : next === "u" ? 4 : 8;
+            const length = { x: 2, u: 4, U: 8 }[next];
             res += parseCharCode(source, i + 1, length, onError);
             i += length;
           } else {
@@ -4836,21 +4820,20 @@ var require_resolve_flow_scalar = __commonJS({
       const cc = source.substr(offset, length);
       const ok = cc.length === length && /^[0-9a-fA-F]+$/.test(cc);
       const code = ok ? parseInt(cc, 16) : NaN;
-      try {
-        return String.fromCodePoint(code);
-      } catch {
+      if (isNaN(code)) {
         const raw = source.substr(offset - 2, length + 2);
         onError(offset - 2, "BAD_DQ_ESCAPE", `Invalid escape sequence ${raw}`);
         return raw;
       }
+      return String.fromCodePoint(code);
     }
     exports.resolveFlowScalar = resolveFlowScalar;
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/compose-scalar.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/compose-scalar.js
 var require_compose_scalar = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/compose-scalar.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/compose-scalar.js"(exports) {
     "use strict";
     var identity = require_identity();
     var Scalar = require_Scalar();
@@ -4929,9 +4912,9 @@ var require_compose_scalar = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/util-empty-scalar-position.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/util-empty-scalar-position.js
 var require_util_empty_scalar_position = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/util-empty-scalar-position.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/util-empty-scalar-position.js"(exports) {
     "use strict";
     function emptyScalarPosition(offset, before, pos) {
       if (before) {
@@ -4959,9 +4942,9 @@ var require_util_empty_scalar_position = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/compose-node.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/compose-node.js
 var require_compose_node = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/compose-node.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/compose-node.js"(exports) {
     "use strict";
     var Alias = require_Alias();
     var identity = require_identity();
@@ -4992,22 +4975,17 @@ var require_compose_node = __commonJS({
         case "block-map":
         case "block-seq":
         case "flow-collection":
-          try {
-            node = composeCollection.composeCollection(CN, ctx, token, props, onError);
-            if (anchor)
-              node.anchor = anchor.source.substring(1);
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            onError(token, "RESOURCE_EXHAUSTION", message);
-          }
+          node = composeCollection.composeCollection(CN, ctx, token, props, onError);
+          if (anchor)
+            node.anchor = anchor.source.substring(1);
           break;
         default: {
           const message = token.type === "error" ? token.message : `Unsupported token (type: ${token.type})`;
           onError(token, "UNEXPECTED_TOKEN", message);
+          node = composeEmptyNode(ctx, token.offset, void 0, null, props, onError);
           isSrcToken = false;
         }
       }
-      node ?? (node = composeEmptyNode(ctx, token.offset, void 0, null, props, onError));
       if (anchor && node.anchor === "")
         onError(anchor, "BAD_ALIAS", "Anchor cannot be an empty string");
       if (atKey && ctx.options.stringKeys && (!identity.isScalar(node) || typeof node.value !== "string" || node.tag && node.tag !== "tag:yaml.org,2002:str")) {
@@ -5065,9 +5043,9 @@ var require_compose_node = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/compose-doc.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/compose-doc.js
 var require_compose_doc = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/compose-doc.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/compose-doc.js"(exports) {
     "use strict";
     var Document = require_Document();
     var composeNode = require_compose_node();
@@ -5108,9 +5086,9 @@ var require_compose_doc = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/composer.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/composer.js
 var require_composer = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/compose/composer.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/compose/composer.js"(exports) {
     "use strict";
     var node_process = __require("process");
     var directives = require_directives();
@@ -5192,10 +5170,8 @@ ${cb}` : comment;
           }
         }
         if (afterDoc) {
-          for (let i = 0; i < this.errors.length; ++i)
-            doc.errors.push(this.errors[i]);
-          for (let i = 0; i < this.warnings.length; ++i)
-            doc.warnings.push(this.warnings[i]);
+          Array.prototype.push.apply(doc.errors, this.errors);
+          Array.prototype.push.apply(doc.warnings, this.warnings);
         } else {
           doc.errors = this.errors;
           doc.warnings = this.warnings;
@@ -5316,9 +5292,9 @@ ${end.comment}` : end.comment;
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/parse/cst-scalar.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/parse/cst-scalar.js
 var require_cst_scalar = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/parse/cst-scalar.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/parse/cst-scalar.js"(exports) {
     "use strict";
     var resolveBlockScalar = require_resolve_block_scalar();
     var resolveFlowScalar = require_resolve_flow_scalar();
@@ -5501,9 +5477,9 @@ var require_cst_scalar = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/parse/cst-stringify.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/parse/cst-stringify.js
 var require_cst_stringify = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/parse/cst-stringify.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/parse/cst-stringify.js"(exports) {
     "use strict";
     var stringify = (cst) => "type" in cst ? stringifyToken(cst) : stringifyItem(cst);
     function stringifyToken(token) {
@@ -5562,9 +5538,9 @@ var require_cst_stringify = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/parse/cst-visit.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/parse/cst-visit.js
 var require_cst_visit = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/parse/cst-visit.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/parse/cst-visit.js"(exports) {
     "use strict";
     var BREAK = Symbol("break visit");
     var SKIP = Symbol("skip children");
@@ -5624,9 +5600,9 @@ var require_cst_visit = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/parse/cst.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/parse/cst.js
 var require_cst = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/parse/cst.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/parse/cst.js"(exports) {
     "use strict";
     var cstScalar = require_cst_scalar();
     var cstStringify = require_cst_stringify();
@@ -5726,9 +5702,9 @@ var require_cst = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/parse/lexer.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/parse/lexer.js
 var require_lexer = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/parse/lexer.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/parse/lexer.js"(exports) {
     "use strict";
     var cst = require_cst();
     function isEmpty(ch) {
@@ -5928,7 +5904,7 @@ var require_lexer = __commonJS({
           const n = (yield* this.pushCount(1)) + (yield* this.pushSpaces(true));
           this.indentNext = this.indentValue + 1;
           this.indentValue += n;
-          return "block-start";
+          return yield* this.parseBlockStart();
         }
         return "doc";
       }
@@ -6227,38 +6203,28 @@ var require_lexer = __commonJS({
         return 0;
       }
       *pushIndicators() {
-        let n = 0;
-        loop: while (true) {
-          switch (this.charAt(0)) {
-            case "!":
-              n += yield* this.pushTag();
-              n += yield* this.pushSpaces(true);
-              continue loop;
-            case "&":
-              n += yield* this.pushUntil(isNotAnchorChar);
-              n += yield* this.pushSpaces(true);
-              continue loop;
-            case "-":
-            // this is an error
-            case "?":
-            // this is an error outside flow collections
-            case ":": {
-              const inFlow = this.flowLevel > 0;
-              const ch1 = this.charAt(1);
-              if (isEmpty(ch1) || inFlow && flowIndicatorChars.has(ch1)) {
-                if (!inFlow)
-                  this.indentNext = this.indentValue + 1;
-                else if (this.flowKey)
-                  this.flowKey = false;
-                n += yield* this.pushCount(1);
-                n += yield* this.pushSpaces(true);
-                continue loop;
-              }
+        switch (this.charAt(0)) {
+          case "!":
+            return (yield* this.pushTag()) + (yield* this.pushSpaces(true)) + (yield* this.pushIndicators());
+          case "&":
+            return (yield* this.pushUntil(isNotAnchorChar)) + (yield* this.pushSpaces(true)) + (yield* this.pushIndicators());
+          case "-":
+          // this is an error
+          case "?":
+          // this is an error outside flow collections
+          case ":": {
+            const inFlow = this.flowLevel > 0;
+            const ch1 = this.charAt(1);
+            if (isEmpty(ch1) || inFlow && flowIndicatorChars.has(ch1)) {
+              if (!inFlow)
+                this.indentNext = this.indentValue + 1;
+              else if (this.flowKey)
+                this.flowKey = false;
+              return (yield* this.pushCount(1)) + (yield* this.pushSpaces(true)) + (yield* this.pushIndicators());
             }
           }
-          break loop;
         }
-        return n;
+        return 0;
       }
       *pushTag() {
         if (this.charAt(1) === "<") {
@@ -6315,9 +6281,9 @@ var require_lexer = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/parse/line-counter.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/parse/line-counter.js
 var require_line_counter = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/parse/line-counter.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/parse/line-counter.js"(exports) {
     "use strict";
     var LineCounter = class {
       constructor() {
@@ -6346,9 +6312,9 @@ var require_line_counter = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/parse/parser.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/parse/parser.js
 var require_parser = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/parse/parser.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/parse/parser.js"(exports) {
     "use strict";
     var node_process = __require("process");
     var cst = require_cst();
@@ -6417,13 +6383,6 @@ var require_parser = __commonJS({
       }
       return prev.splice(i, prev.length);
     }
-    function arrayPushArray(target, source) {
-      if (source.length < 1e5)
-        Array.prototype.push.apply(target, source);
-      else
-        for (let i = 0; i < source.length; ++i)
-          target.push(source[i]);
-    }
     function fixFlowSeqItems(fc) {
       if (fc.start.type === "flow-seq-start") {
         for (const it of fc.items) {
@@ -6433,11 +6392,11 @@ var require_parser = __commonJS({
             delete it.key;
             if (isFlowToken(it.value)) {
               if (it.value.end)
-                arrayPushArray(it.value.end, it.sep);
+                Array.prototype.push.apply(it.value.end, it.sep);
               else
                 it.value.end = it.sep;
             } else
-              arrayPushArray(it.start, it.sep);
+              Array.prototype.push.apply(it.start, it.sep);
             delete it.sep;
           }
         }
@@ -6543,7 +6502,7 @@ var require_parser = __commonJS({
       }
       *step() {
         const top = this.peek(1);
-        if (this.type === "doc-end" && top?.type !== "doc-end") {
+        if (this.type === "doc-end" && (!top || top.type !== "doc-end")) {
           while (this.stack.length > 0)
             yield* this.pop();
           this.stack.push({
@@ -6792,7 +6751,7 @@ var require_parser = __commonJS({
                 const prev = map.items[map.items.length - 2];
                 const end = prev?.value?.end;
                 if (Array.isArray(end)) {
-                  arrayPushArray(end, it.start);
+                  Array.prototype.push.apply(end, it.start);
                   end.push(this.sourceToken);
                   map.items.pop();
                   return;
@@ -6980,7 +6939,7 @@ var require_parser = __commonJS({
                 const prev = seq.items[seq.items.length - 2];
                 const end = prev?.value?.end;
                 if (Array.isArray(end)) {
-                  arrayPushArray(end, it.start);
+                  Array.prototype.push.apply(end, it.start);
                   end.push(this.sourceToken);
                   seq.items.pop();
                   return;
@@ -7021,7 +6980,7 @@ var require_parser = __commonJS({
           do {
             yield* this.pop();
             top = this.peek(1);
-          } while (top?.type === "flow-collection");
+          } while (top && top.type === "flow-collection");
         } else if (fc.end.length === 0) {
           switch (this.type) {
             case "comma":
@@ -7220,9 +7179,9 @@ var require_parser = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/public-api.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/public-api.js
 var require_public_api = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/public-api.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/public-api.js"(exports) {
     "use strict";
     var composer = require_composer();
     var Document = require_Document();
@@ -7317,9 +7276,9 @@ var require_public_api = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/index.js
+// ../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/index.js
 var require_dist = __commonJS({
-  "../../node_modules/.pnpm/yaml@2.9.1/node_modules/yaml/dist/index.js"(exports) {
+  "../../node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/index.js"(exports) {
     "use strict";
     var composer = require_composer();
     var Document = require_Document();
@@ -7369,7 +7328,7 @@ var require_dist = __commonJS({
   }
 });
 
-// src/authorize/wp-authorize-protocol.ts
+// ../shared/lib/puffergo/wp-authorize-protocol.ts
 function buildAuthorizeUrl(siteUrl, successUrl, appName = "PufferGo") {
   const base = siteUrl.trim().replace(/\/+$/, "");
   return `${base}/wp-admin/authorize-application.php?app_name=${encodeURIComponent(appName)}&success_url=${encodeURIComponent(successUrl)}`;
@@ -7381,12 +7340,12 @@ function parseAuthorizeReturn(params) {
   return { username: params.get("user_login") ?? "", appPassword };
 }
 var init_wp_authorize_protocol = __esm({
-  "src/authorize/wp-authorize-protocol.ts"() {
+  "../shared/lib/puffergo/wp-authorize-protocol.ts"() {
     "use strict";
   }
 });
 
-// src/authorize/authorize-server.ts
+// ../shared/lib/puffergo/authorize-server.ts
 var authorize_server_exports = {};
 __export(authorize_server_exports, {
   portIsUnusable: () => portIsUnusable,
@@ -7407,9 +7366,10 @@ function runAuthorizeServer(siteUrl, onListening, opts = {}) {
     port = 0,
     resultPage = DEFAULT_RESULT_PAGE,
     onTimeout,
-    signal
+    signal,
+    onGrant
   } = opts;
-  return new Promise((resolve12, reject) => {
+  return new Promise((resolve13, reject) => {
     let settled = false;
     let timer;
     let active;
@@ -7418,7 +7378,7 @@ function runAuthorizeServer(siteUrl, onListening, opts = {}) {
       settled = true;
       if (timer) clearTimeout(timer);
       active?.close();
-      resolve12(value);
+      resolve13(value);
     };
     timer = setTimeout(() => {
       onTimeout?.();
@@ -7434,9 +7394,20 @@ function runAuthorizeServer(siteUrl, onListening, opts = {}) {
           return;
         }
         const creds = parseAuthorizeReturn(url.searchParams);
-        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-        res.end(resultPage(!!creds));
-        finish(creds);
+        void (async () => {
+          let problem = null;
+          if (creds && onGrant) {
+            try {
+              problem = await onGrant(creds);
+            } catch (e) {
+              problem = e instanceof Error ? e.message : String(e);
+            }
+          }
+          if (settled) return;
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(resultPage(!!creds && !problem, problem ?? void 0));
+          finish(problem ? null : creds);
+        })();
       });
       active = server;
       server.on("error", (err) => {
@@ -7460,18 +7431,69 @@ function runAuthorizeServer(siteUrl, onListening, opts = {}) {
 }
 var DEFAULT_RESULT_PAGE;
 var init_authorize_server = __esm({
-  "src/authorize/authorize-server.ts"() {
+  "../shared/lib/puffergo/authorize-server.ts"() {
     "use strict";
     init_wp_authorize_protocol();
-    DEFAULT_RESULT_PAGE = (ok) => `<!doctype html><html><head><meta charset="utf-8"><title>PufferGo</title>
+    DEFAULT_RESULT_PAGE = (ok, problem) => `<!doctype html><html><head><meta charset="utf-8"><title>PufferGo</title>
 <style>html{font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#1f2430;
 display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f6f7fb}
-div{text-align:center}</style></head><body><div>${ok ? "\u2705 \u5DF2\u6388\u6743\u3002" : "\u274C \u672A\u83B7\u53D6\u5230\u5E94\u7528\u5BC6\u7801\u3002"}<br><small style="color:#888">\u8FD9\u4E2A\u9875\u9762\u53EF\u4EE5\u5173\u95ED\u4E86\u3002</small></div></body></html>`;
+div{text-align:center}</style></head><body><div>${ok ? "\u2705 \u5DF2\u6388\u6743\u3002" : "\u274C \u672A\u83B7\u53D6\u5230\u5E94\u7528\u5BC6\u7801\u3002"}${problem ? `<br><small style="color:#c0392b">${problem}</small>` : ""}<br><small style="color:#888">\u8FD9\u4E2A\u9875\u9762\u53EF\u4EE5\u5173\u95ED\u4E86\u3002</small></div></body></html>`;
   }
 });
 
 // src/index.ts
-import { readFile as readFile19, writeFile as writeFile13, mkdir as mkdir11 } from "node:fs/promises";
+import { readFile as readFile21, writeFile as writeFile15, mkdir as mkdir13 } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+
+// src/lib/sandboxEnv.ts
+var SANDBOX_HINT = /(language-shim|node-shim|fs-shim|codebuddy|workbuddy|\.workbuddy[/\\]|genie[-_ ]?(trash|shim)|broker)/i;
+var PRELOAD_FLAGS = /* @__PURE__ */ new Set(["--require", "-r", "--import", "--loader", "--experimental-loader"]);
+function stripSandboxPreloads(tokens) {
+  const keep = [];
+  let stripped = false;
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (PRELOAD_FLAGS.has(token)) {
+      const target = tokens[i + 1];
+      if (target !== void 0 && SANDBOX_HINT.test(target)) {
+        i++;
+        stripped = true;
+        continue;
+      }
+      keep.push(token);
+      continue;
+    }
+    const inline2 = /^(--require|--import|--loader|--experimental-loader)=(.+)$/.exec(token);
+    if (inline2 && SANDBOX_HINT.test(inline2[2])) {
+      stripped = true;
+      continue;
+    }
+    keep.push(token);
+  }
+  return { keep, stripped };
+}
+function splitOptions(raw) {
+  return raw.match(/(?:"[^"]*"|'[^']*'|\S)+/g) ?? [];
+}
+function stripSandboxNodeOptions(raw) {
+  if (!raw.trim()) return { value: raw, stripped: false };
+  const { keep, stripped } = stripSandboxPreloads(splitOptions(raw));
+  return { value: keep.join(" "), stripped };
+}
+function sandboxFreeEnv(base = process.env) {
+  const { value, stripped } = stripSandboxNodeOptions(base.NODE_OPTIONS ?? "");
+  if (!stripped) return base;
+  const env = { ...base };
+  if (value) env.NODE_OPTIONS = value;
+  else delete env.NODE_OPTIONS;
+  return env;
+}
+function stripSandboxExecArgv(argv2) {
+  return stripSandboxPreloads(argv2).keep;
+}
+function runningUnderSandboxShim(nodeOptions = process.env.NODE_OPTIONS, execArgv = process.execArgv) {
+  return stripSandboxNodeOptions(nodeOptions ?? "").stripped || stripSandboxPreloads(execArgv).stripped;
+}
 
 // ../silo-core/lib/model/types.ts
 var SILO_WORKSPACE_VERSION = 3;
@@ -8283,20 +8305,15 @@ var READONLY_ABILITIES = /* @__PURE__ */ new Set(["list-post-types", "find-posts
 var WpClient = class {
   constructor(net2, conn) {
     this.net = net2;
+    /** `${taxonomy}:${termId}` → slug, so a ledger of term ids can push the slugs abilities want
+     *  without re-fetching a term per item. Per-client: one client lives for one push/import run. */
+    this.termSlugCache = /* @__PURE__ */ new Map();
     const site2 = conn.siteUrl.replace(/\/$/, "");
     this.base = `${site2}/wp-json`;
     this.abilityBase = `${this.base}/wp-abilities/v1/abilities/puffergo`;
     this.authHeader = `Basic ${btoa(`${conn.username}:${conn.appPassword}`)}`;
     this.typeInfo = new Map((conn.contentTypes ?? []).map((t) => [t.type, t]));
   }
-  base;
-  abilityBase;
-  authHeader;
-  /** type slug → discovered info (rest_base + hierarchical taxonomy rest_base). */
-  typeInfo;
-  /** `${taxonomy}:${termId}` → slug, so a ledger of term ids can push the slugs abilities want
-   *  without re-fetching a term per item. Per-client: one client lives for one push/import run. */
-  termSlugCache = /* @__PURE__ */ new Map();
   /** Resolve the REST base for a post type: discovered info wins; else the WP-core default for
    *  post/page; else the type slug itself (a reasonable guess for a not-yet-discovered CPT). */
   routeFor(postType) {
@@ -8462,11 +8479,11 @@ var WpClient = class {
    * hosts where a plain browser fetch would be blocked by CORS (Obsidian).
    */
   async ensurePluginActive(slug) {
-    const plugins = await this.call({
+    const plugins2 = await this.call({
       method: "GET",
       url: "/wp/v2/plugins?_fields=plugin,textdomain,status"
     });
-    const existing = plugins.find(
+    const existing = plugins2.find(
       (p) => p.textdomain === slug || p.plugin === slug || (p.plugin ?? "").startsWith(`${slug}/`)
     );
     if (existing?.plugin) {
@@ -11612,7 +11629,7 @@ async function importFromWp(client2, ws, postTypes, opts = {}) {
 }
 
 // src/index.ts
-import { dirname as dirname13 } from "node:path";
+import { dirname as dirname14 } from "node:path";
 
 // src/adapters/fileStore.ts
 import { readFile, writeFile, mkdir, readdir, rm } from "node:fs/promises";
@@ -11770,9 +11787,9 @@ async function resolveCredential(siteUrl, explicitPath) {
   if (!store) return null;
   const urls = Object.keys(store.sites);
   const byNorm = new Map(urls.map((u) => [normUrl(u), u]));
-  const pick = siteUrl ? byNorm.get(normUrl(siteUrl)) ?? urls.find((u) => siteKey(u) === siteKey(siteUrl)) : urls.length === 1 ? urls[0] : void 0;
-  if (!pick) return null;
-  return { siteUrl: pick, ...store.sites[pick] };
+  const pick2 = siteUrl ? byNorm.get(normUrl(siteUrl)) ?? urls.find((u) => siteKey(u) === siteKey(siteUrl)) : urls.length === 1 ? urls[0] : void 0;
+  if (!pick2) return null;
+  return { siteUrl: pick2, ...store.sites[pick2] };
 }
 async function listCredentialSites(explicitPath) {
   const store = await readStore(explicitPath ?? storePath());
@@ -11783,13 +11800,13 @@ async function removeCredential(siteUrl, path = storePath()) {
   if (!store) return null;
   const urls = Object.keys(store.sites);
   const byNorm = new Map(urls.map((u) => [normUrl(u), u]));
-  const pick = byNorm.get(normUrl(siteUrl)) ?? urls.find((u) => siteKey(u) === siteKey(siteUrl));
-  if (!pick) return null;
-  delete store.sites[pick];
+  const pick2 = byNorm.get(normUrl(siteUrl)) ?? urls.find((u) => siteKey(u) === siteKey(siteUrl));
+  if (!pick2) return null;
+  delete store.sites[pick2];
   await mkdir2(dirname2(path), { recursive: true });
   await writeFile2(path, JSON.stringify(store, null, 2), { encoding: "utf8", mode: 384 });
   await chmod(path, 384).catch(() => void 0);
-  return pick;
+  return pick2;
 }
 async function upsertCredential(cfg, path = storePath()) {
   const existing = await readStore(path) ?? { sites: {} };
@@ -12408,6 +12425,21 @@ var AgentClient = class {
   }
   get wpBase() {
     return `${this.cfg.siteUrl.replace(/\/+$/, "")}/wp-json/wp/v2`;
+  }
+  get puffergoBase() {
+    return `${this.cfg.siteUrl.replace(/\/+$/, "")}/wp-json/puffergo/v1`;
+  }
+  /** 创建一次服务端 AI 建站编排（插件代理会注入可信画像/主题上下文）。 */
+  createBuild(body) {
+    return this.call("POST", "/builds", body, this.puffergoBase);
+  }
+  /** 拉取 build 进度与结果。 */
+  getBuild(id) {
+    return this.call("GET", `/builds/${encodeURIComponent(id)}`, void 0, this.puffergoBase);
+  }
+  /** 重试失败页。 */
+  retryBuild(id) {
+    return this.call("POST", `/builds/${encodeURIComponent(id)}/retry`, {}, this.puffergoBase);
   }
   /** POST /wp/v2/media — outside the puffergo/v1 namespace, so bypasses `base`. */
   async uploadMedia(bytes, filename, mimeType) {
@@ -13977,7 +14009,7 @@ async function cmdImages(ctx) {
 // src/lib/profileCmd.ts
 import { readFile as readFile14, writeFile as writeFile9 } from "node:fs/promises";
 import { dirname as dirname8, resolve as resolve7 } from "node:path";
-var PROFILE_USAGE = "puffergo profile <get|check <file.json>|set <file.json> [--replace] [--backup <file>]> [--dir <workdir>] [--site <url>]";
+var PROFILE_USAGE = "puffergo profile <get|ask|check <file.json>|set <file.json> [--replace] [--backup <file>]> [--dir <workdir>] [--site <url>]";
 function profileError(e) {
   if (e instanceof AgentHttpError) {
     const code = e.body?.code;
@@ -14096,6 +14128,149 @@ async function cmdProfileSet(ctx) {
 }
 function stripJson(file) {
   return file.replace(/\.json$/i, "");
+}
+var ASK_GROUPS = [
+  {
+    id: "identity",
+    label: "\u4F60\u662F\u8C01",
+    why: "\u516C\u53F8\u540D\u3001\u884C\u4E1A\u3001\u4EA7\u54C1\u662F\u6BCF\u4E00\u9875\u90FD\u4F1A\u7528\u5230\u7684\u5E95\u5C42\u4FE1\u606F\uFF1B\u8FD9\u51E0\u9879\u7A7A\u7740\uFF0C\u5199\u51FA\u6765\u7684\u5C31\u662F\u8C01\u90FD\u80FD\u5957\u7684\u901A\u7528\u8BDD\u3002",
+    canSkip: false,
+    fields: [
+      { path: "identity.brand_name", question: "\u516C\u53F8/\u54C1\u724C\u7684\u6B63\u5F0F\u540D\u79F0\u662F\u4EC0\u4E48\uFF1F", example: "Ningbo Axion Lighting Co., Ltd." },
+      { path: "identity.slogan", question: "\u4E00\u53E5\u8BDD\u8BF4\u6E05\u4F60\u5356\u4EC0\u4E48\u3001\u7ED9\u8C01\u3002", example: "Industrial LED lighting for warehouses and factories" },
+      { path: "identity.founded", question: "\u54EA\u4E00\u5E74\u6210\u7ACB\u7684\uFF1F", example: "2012" },
+      { path: "identity.story", question: "\u516C\u53F8\u662F\u600E\u4E48\u8D77\u6765\u7684\uFF1F\u4E24\u4E09\u53E5\u5C31\u591F\u3002", example: "2012 \u5E74\u4ECE\u6A21\u5177\u8F66\u95F4\u8D77\u5BB6\uFF0C2016 \u5E74\u5F00\u59CB\u505A\u6574\u706F\u51FA\u53E3\u3002" },
+      { path: "business.industry", question: "\u4F60\u6240\u5728\u7684\u884C\u4E1A\u600E\u4E48\u8BF4\uFF1F\u7528\u82F1\u6587\u66F4\u51C6\u3002", example: "Commercial & industrial LED lighting" },
+      { path: "business.products", question: "\u4E3B\u8981\u5356\u54EA\u51E0\u7C7B\u4EA7\u54C1\uFF1F\u6700\u591A\u4E09\u4E2A\u3002", example: "LED high bay / linear light / floodlight" }
+    ]
+  },
+  {
+    id: "audience",
+    label: "\u5356\u7ED9\u8C01",
+    why: "\u540C\u4E00\u4E2A\u4EA7\u54C1\uFF0C\u5199\u7ED9\u4ED3\u5E93\u7ECF\u7406\u548C\u5199\u7ED9\u91C7\u8D2D\uFF0C\u53E5\u5B50\u5B8C\u5168\u4E0D\u4E00\u6837\uFF1B\u5730\u57DF\u8FD8\u51B3\u5B9A\u5199\u4E0D\u5199\u8BA4\u8BC1\u3001\u5199\u4E0D\u5199\u8FD0\u8D39\u3002",
+    canSkip: false,
+    fields: [
+      { path: "audience.role", question: "\u4F60\u7684\u5BA2\u6237\u5728\u516C\u53F8\u91CC\u4E00\u822C\u662F\u4EC0\u4E48\u89D2\u8272\uFF1F", example: "Facility manager, procurement manager" },
+      { path: "audience.priorities", question: "\u4ED6\u4EEC\u6311\u4F9B\u5E94\u5546\u65F6\u6700\u5728\u610F\u4EC0\u4E48\uFF1F", example: "\u4EA4\u671F\u3001\u8BA4\u8BC1\u9F50\u4E0D\u9F50\u3001\u80FD\u4E0D\u80FD\u5C0F\u6279\u91CF\u8BD5\u5355" },
+      { path: "audience.regions", question: "\u4E3B\u8981\u5356\u5230\u54EA\u4E9B\u56FD\u5BB6\u6216\u5730\u533A\uFF1F", example: "\u5FB7\u56FD\u3001\u58A8\u897F\u54E5\u3001\u4E2D\u4E1C" }
+    ]
+  },
+  {
+    id: "advantage",
+    label: "\u51ED\u4EC0\u4E48\u9009\u4F60",
+    why: "\u8FD9\u662F\u9875\u9762\u91CC\u6700\u6709\u8BF4\u670D\u529B\u7684\u90E8\u5206\uFF0C\u4E5F\u662F AI \u6700\u5BB9\u6613\u7F16\u5957\u8BDD\u7684\u5730\u65B9\u2014\u2014\u4F60\u4E0D\u7ED9\uFF0C\u5B83\u53EA\u80FD\u5199\u300C\u54C1\u8D28\u4FDD\u8BC1\u3001\u4EF7\u683C\u5408\u7406\u300D\u3002",
+    canSkip: false,
+    fields: [
+      { path: "advantage.pillars", question: "\u5BA2\u6237\u4E3A\u4EC0\u4E48\u9009\u4F60\u3001\u4E0D\u9009\u9694\u58C1\uFF1F\u5217\u4E24\u4E09\u6761\u3002", example: "\u81EA\u6709\u5DE5\u5382 / \u4E94\u5E74\u8D28\u4FDD / \u4E03\u5929\u6253\u6837" },
+      { path: "advantage.certifications", question: "\u6709\u54EA\u4E9B\u8BA4\u8BC1\u6216\u8D44\u8D28\uFF1F", example: "CE, RoHS, DLC, ISO 9001" },
+      { path: "advantage.pain_points", question: "\u5BA2\u6237\u4E0B\u5355\u524D\u6700\u5E38\u62C5\u5FC3\u4EC0\u4E48\uFF1F", example: "\u6015\u8D27\u4E0D\u5BF9\u677F\u3001\u6015\u8BA4\u8BC1\u8FC7\u4E0D\u4E86\u3001\u6015\u4EA4\u671F\u62D6" }
+    ]
+  },
+  {
+    id: "trustData",
+    label: "\u5B9E\u529B\u6570\u5B57",
+    why: "\u6570\u5B57\u6BD4\u5F62\u5BB9\u8BCD\u53EF\u4FE1\u3002\u6709\u51E0\u9879\u5199\u51E0\u9879\uFF0C\u6CA1\u6709\u5C31\u7A7A\u7740\u2014\u2014\u7F16\u51FA\u6765\u7684\u6570\u5B57\u4E00\u65E6\u88AB\u5BA2\u6237\u770B\u5230\uFF0C\u6BD4\u4E0D\u5199\u66F4\u7CDF\u3002",
+    canSkip: true,
+    fields: [
+      { path: "trustData.employees", question: "\u516C\u53F8\u591A\u5C11\u4EBA\uFF1F", example: "120" },
+      { path: "trustData.factoryAreaSqm", question: "\u5382\u623F\u591A\u5C11\u5E73\u7C73\uFF1F", example: "8000" },
+      { path: "trustData.annualCapacity", question: "\u5E74\u4EA7\u80FD\u5927\u6982\u591A\u5C11\uFF1F", example: "500,000 pcs / year" },
+      { path: "trustData.productionLines", question: "\u51E0\u6761\u4EA7\u7EBF\uFF1F", example: "6" },
+      { path: "trustData.passRate", question: "\u826F\u54C1\u7387\u591A\u5C11\uFF1F", example: "99.3%" },
+      { path: "trustData.servedCountries", question: "\u5356\u8FC7\u591A\u5C11\u4E2A\u56FD\u5BB6\u548C\u5730\u533A\uFF1F", example: "32" },
+      { path: "trustData.servedClients", question: "\u670D\u52A1\u8FC7\u591A\u5C11\u5BA2\u6237\uFF1F", example: "400+" },
+      { path: "trustData.avgResponseHours", question: "\u8BE2\u76D8\u5E73\u5747\u591A\u4E45\u56DE\u590D\uFF1F", example: "8" },
+      { path: "trustData.representativeClients", question: "\u6709\u4EE3\u8868\u6027\u7684\u5927\u5BA2\u6237\u5417\uFF1F\u4E0D\u65B9\u4FBF\u8BF4\u540D\u5B57\u5C31\u5199\u7C7B\u578B\u3002", example: "\u67D0\u6B27\u6D32\u8FDE\u9501\u4ED3\u50A8" }
+    ]
+  },
+  {
+    id: "testimonials",
+    label: "\u5BA2\u6237\u8BC4\u4EF7",
+    why: "\u4E00\u53E5\u771F\u4EBA\u8BF4\u7684\u8BDD\uFF0C\u62B5\u5F97\u4E0A\u4E00\u6BB5\u81EA\u5938\u3002\u73B0\u5728\u6CA1\u6709\u4E5F\u80FD\u5F00\u5DE5\uFF0C\u6709\u4E86\u968F\u65F6\u8865\u3002",
+    canSkip: true,
+    fields: [
+      { path: "testimonials", question: "\u6709\u5BA2\u6237\u613F\u610F\u7ED9\u4F60\u4E00\u53E5\u8BDD\u8BC4\u4EF7\u5417\uFF1F\u4E00\u6761\u4E5F\u884C\uFF0C\u6CE8\u660E\u662F\u8C01\u8BF4\u7684\u3002", example: "Hans Mueller, LogiTech GmbH\uFF1A\u706F\u88C5\u5B8C\u7535\u8D39\u964D\u4E86\u4E00\u534A\u3002" }
+    ]
+  },
+  {
+    id: "contact",
+    label: "\u600E\u4E48\u8054\u7CFB\u4F60",
+    why: "\u9875\u811A\u3001\u8054\u7CFB\u6211\u4EEC\u3001\u8BE2\u76D8\u8868\u5355\u90FD\u4ECE\u8FD9\u91CC\u53D6\uFF1B\u5199\u9519\u4E86\u5BA2\u6237\u5C31\u8054\u7CFB\u4E0D\u4E0A\u4F60\u3002",
+    canSkip: false,
+    fields: [
+      { path: "contact.email", question: "\u5BF9\u5916\u6536\u8BE2\u76D8\u7684\u90AE\u7BB1\u662F\u54EA\u4E2A\uFF1F", example: "sales@yourdomain.com" },
+      { path: "contact.phone", question: "\u5BF9\u5916\u7535\u8BDD\uFF1F\u5E26\u56FD\u5BB6\u533A\u53F7\u3002", example: "+86 574 8888 6666" },
+      { path: "contact.address", question: "\u516C\u53F8\u5730\u5740\u600E\u4E48\u5199\uFF1F", example: "Ningbo, Zhejiang, China" },
+      { path: "contact.channels", question: "\u8FD8\u7528\u54EA\u4E9B\u6C9F\u901A\u65B9\u5F0F\uFF1F\uFF08WhatsApp / \u5FAE\u4FE1 / \u9886\u82F1\u2026\uFF09", example: "WhatsApp +86 138\u2026, LinkedIn /company/\u2026" }
+    ]
+  },
+  {
+    id: "seo",
+    label: "\u641C\u7D22\u4E0E\u5199\u6CD5",
+    why: "\u5173\u952E\u8BCD\u51B3\u5B9A\u9875\u9762\u5F80\u54EA\u4E2A\u65B9\u5411\u5199\uFF1B\u5199\u6CD5\u7684\u7981\u5FCC\uFF08\u4E0D\u80FD\u8BF4\u300C\u6700\u4FBF\u5B9C\u300D\u8FD9\u7C7B\uFF09\u8BF4\u4E86\u6211\u5C31\u4F1A\u7167\u505A\u3002",
+    canSkip: false,
+    fields: [
+      { path: "seo.keywords", question: "\u4F60\u5E0C\u671B\u5BA2\u6237\u641C\u54EA\u4E9B\u8BCD\u627E\u5230\u4F60\uFF1F\u6700\u591A 30 \u4E2A\uFF0C\u60F3\u4E0D\u5168\u5C31\u5199\u4E09\u4E94\u4E2A\u6838\u5FC3\u8BCD\uFF0C\u5176\u4F59\u6211\u6765\u8C03\u7814\u8865\u3002", example: "led high bay, warehouse lighting, industrial led light" },
+      { path: "special_instructions", question: "\u6709\u4EC0\u4E48\u5FC5\u987B\u7167\u505A\u6216\u5FC5\u987B\u907F\u5F00\u7684\u5199\u6CD5\uFF1F", example: "\u4E0D\u5199\u300C\u6700\u4FBF\u5B9C\u300D\uFF1B\u578B\u53F7\u5FC5\u987B\u5E26 AeroPro \u524D\u7F00" }
+    ]
+  }
+];
+function isEmptyValue2(value) {
+  if (value === null || value === void 0) return true;
+  if (typeof value === "string") return value.trim() === "";
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value === "number") return value === 0;
+  return false;
+}
+function valueAt(profile2, path) {
+  let cur = profile2;
+  for (const key of path.split(".")) {
+    if (cur === null || typeof cur !== "object" || Array.isArray(cur)) return void 0;
+    cur = cur[key];
+  }
+  return cur;
+}
+function briefValue(value) {
+  if (Array.isArray(value)) return `${value.length} \u6761`;
+  if (typeof value === "string") {
+    const flat = value.replace(/\s+/g, " ").trim();
+    return flat.length > 140 ? `${flat.slice(0, 140)}\u2026` : flat;
+  }
+  return String(value);
+}
+async function cmdProfileAsk(ctx) {
+  let c;
+  try {
+    c = await client(ctx);
+  } catch (e) {
+    return errorOutput(e);
+  }
+  try {
+    const res = await c.getSiteProfile();
+    const profile2 = res.profile ?? {};
+    const filledNow = [];
+    const ask = ASK_GROUPS.map((group2) => {
+      const fields = group2.fields.filter((f) => {
+        const v = valueAt(profile2, f.path);
+        if (isEmptyValue2(v)) return true;
+        filledNow.push({ path: f.path, value: briefValue(v) });
+        return false;
+      });
+      return { id: group2.id, label: group2.label, why: group2.why, canSkip: group2.canSkip, fields };
+    }).filter((g) => g.fields.length > 0);
+    const askCount = ask.reduce((n, g) => n + g.fields.length, 0);
+    return {
+      ok: true,
+      site: c.siteUrl,
+      completeness: res.completeness,
+      filledNow,
+      ask,
+      askCount,
+      next: askCount ? 'Ask every group above in ONE message \u2014 not one question at a time, and not a second round for the skipped ones. Say up front that this is what the AI writes every page from (and what makes the site quotable by AI answer engines). Mark the canSkip groups as "if you have it" so the customer can leave them blank and still start. One answer covers several fields, so do not re-ask anything listed in filledNow.' : "Nothing to ask: every field that matters is filled. Read the profile with `puffergo profile get` and start writing."
+    };
+  } catch (e) {
+    return profileError(e) ?? errorOutput(e);
+  }
 }
 
 // src/lib/chromeCmd.ts
@@ -14309,9 +14484,21 @@ function stripJson2(file) {
 }
 
 // src/lib/siteSetupCmd.ts
+import { spawn as spawn2 } from "node:child_process";
+import { mkdir as mkdir9, readFile as readFile16, readdir as readdir5, rm as rm3, writeFile as writeFile11 } from "node:fs/promises";
+import { dirname as dirname10, join as join11 } from "node:path";
 var PUFFERGO_SLUG = "puffergo";
 var RANKMATH_SLUG = "seo-by-rank-math";
-var SITE_SETUP_USAGE = 'puffergo site setup [install --customer-said "<customer words>"] [--dir <workdir>] [--site <url>]';
+var FLUENT_SMTP_SLUG = "fluent-smtp";
+var BACKGROUND_SLUGS = [RANKMATH_SLUG, FLUENT_SMTP_SLUG];
+var PUFFERGO_THEME = "generatepress";
+var STOCK_THEME = /^twentytwenty/;
+var jobsDir = () => {
+  const store = process.env.PUFFERGO_CONFIG;
+  return store ? join11(dirname10(store), "jobs") : join11(PUFFERGO_DIR, "jobs");
+};
+var JOB_KEEP_DAYS = 30;
+var SITE_SETUP_USAGE = 'puffergo site setup [install --customer-said "<customer words>" [--url <site url>] [--activate-theme] [--no-sample-data] [--background "<slug,slug|none>"]] [--dir <workdir>] [--site <url>]';
 function readCaps(json) {
   const caps = json?.capabilities;
   if (!caps || typeof caps !== "object") return null;
@@ -14322,30 +14509,50 @@ function readCaps(json) {
     installPlugins: !!caps.install_plugins && !!caps.activate_plugins
   };
 }
+var normalizeUrl = (url) => url.replace(/\/+$/, "");
+function themeState(theme) {
+  if (!theme) return "unknown";
+  if (theme === PUFFERGO_THEME || theme.startsWith(`${PUFFERGO_THEME}-`)) return "puffergo";
+  if (STOCK_THEME.test(theme)) return "default";
+  return "custom";
+}
 async function probe(cfg) {
-  const base = cfg.siteUrl.replace(/\/+$/, "");
+  const base = normalizeUrl(cfg.siteUrl);
   const auth = `Basic ${Buffer.from(`${cfg.username}:${cfg.appPassword}`).toString("base64")}`;
   const get = async (url) => nodeNetwork.request({ method: "GET", url, headers: { Authorization: auth, "Content-Type": "application/json" } });
   const ok = (status) => status >= 200 && status < 300;
-  const [index, me, pluginRes, schemaRes] = await Promise.all([
+  const [index, me, pluginRes, schemaRes, mailRes, designRes, frontRes] = await Promise.all([
     get(`${base}/wp-json/`),
     get(`${base}/wp-json/wp/v2/users/me?context=edit&_fields=id,capabilities`),
     get(`${base}/wp-json/wp/v2/plugins?_fields=plugin,textdomain,status,version`),
-    get(`${base}/wp-json/wp-abilities/v1/abilities/puffergo/get-product-schema/run`)
+    get(`${base}/wp-json/wp-abilities/v1/abilities/puffergo/get-product-schema/run`),
+    // PufferGo's own plugin catalogue — the only place that also knows 邮件插件 的状态。它需要
+    // install_plugins，所以编辑器账号这里拿 403，这不是错误，只是这一项查不到。
+    get(`${base}/wp-json/puffergo/v1/plugin-setup/config`),
+    // 设计令牌：只要求 edit_posts，所以编辑器账号也读得到。
+    get(`${base}/wp-json/puffergo/v1/design-system`),
+    // 前台 HTML 里就写着主题目录名 —— 唯一不需要任何权限的主题探测方式，而且顺带证明站点真能渲染。
+    // 加个查询串，避开页面缓存返回旧主题。
+    get(`${base}/?puffergo-probe=theme`)
   ]);
   const caps = ok(me.status) ? readCaps(me.json) : null;
   let connected = ok(me.status);
   if (!connected) connected = ok((await get(`${base}/wp-json/wp/v2/users/me?_fields=id`)).status);
   const namespaces = index.json?.namespaces ?? [];
-  const plugins = ok(pluginRes.status) && Array.isArray(pluginRes.json) ? pluginRes.json : null;
+  const plugins2 = ok(pluginRes.status) && Array.isArray(pluginRes.json) ? pluginRes.json : null;
   const stateOf = (slug) => {
-    if (!plugins) return "unknown";
-    const row = plugins.find(
+    if (!plugins2) return "unknown";
+    const row = plugins2.find(
       (p) => p.textdomain === slug || p.plugin === slug || (p.plugin ?? "").startsWith(`${slug}/`)
     );
     return row ? row.status === "active" ? "active" : "inactive" : "missing";
   };
   const schemaVersion = ok(schemaRes.status) ? schemaRes.json?.schemaVersion ?? null : null;
+  const mailRow = ok(mailRes.status) ? (mailRes.json?.data?.plugins ?? []).find((p) => p.slug === FLUENT_SMTP_SLUG) : void 0;
+  const mail = !ok(mailRes.status) ? "unknown" : !mailRow ? "missing" : mailRow.install_status === "activated" ? "active" : mailRow.install_status === "installed" ? "inactive" : "missing";
+  const designData = ok(designRes.status) ? designRes.json?.data : void 0;
+  const design = !ok(designRes.status) ? "unknown" : designData && (designData.schemes ?? []).length > 0 && !!designData.activeSchemeId ? "ready" : "missing";
+  const themeMatch = ok(frontRes.status) ? /wp-content\/themes\/([A-Za-z0-9._-]+)/.exec(frontRes.text ?? "") : null;
   return {
     siteUrl: cfg.siteUrl,
     connected,
@@ -14355,7 +14562,10 @@ async function probe(cfg) {
     puffergo: schemaVersion !== null ? "active" : stateOf(PUFFERGO_SLUG),
     schemaVersion,
     seo: namespaces.includes("rankmath/v1") ? "rankmath" : namespaces.includes("yoast/v1") ? "yoast" : stateOf(RANKMATH_SLUG) === "active" ? "rankmath" : stateOf("wordpress-seo") === "active" ? "yoast" : null,
-    canListPlugins: plugins !== null,
+    mail,
+    design,
+    theme: themeMatch ? themeMatch[1] : null,
+    canListPlugins: plugins2 !== null,
     caps
   };
 }
@@ -14365,6 +14575,7 @@ function report(p) {
   if (p.puffergo !== "active") needs.push(PUFFERGO_SLUG);
   if (!p.seo) needs.push(RANKMATH_SLUG);
   const pluginTooOld = p.schemaVersion !== null && (p.schemaVersion < MIN_SCHEMA_VERSION || p.schemaVersion > SUPPORTED_SCHEMA_VERSION);
+  const theme = themeState(p.theme);
   const problems = [];
   if (!p.connected)
     problems.push("The saved Application Password does not authenticate \u2014 run `puffergo login <siteUrl>` again.");
@@ -14379,11 +14590,15 @@ function report(p) {
     problems.push(
       "No SEO plugin is active, so SEO fields (title/description/focus keyword) have nowhere to be written."
     );
+  if (theme === "default")
+    problems.push(
+      `The site still renders WordPress's default theme (${p.theme}), so PufferGo pages come out unstyled \u2014 \`puffergo site setup install\` installs and activates GeneratePress.`
+    );
   if (p.caps && !p.caps.installPlugins && needs.filter((n) => n !== "wordpress-6.9").length)
     problems.push(
       "This account cannot install or activate plugins \u2014 a WordPress administrator has to do it in wp-admin (Plugins \u2192 Add New)."
     );
-  const base = p.siteUrl.replace(/\/+$/, "");
+  const base = normalizeUrl(p.siteUrl);
   const adminPage = (slug) => `${base}/wp-admin/admin.php?page=${slug}`;
   const links = {};
   if (!p.caps || p.caps.editPosts || p.caps.manageOptions) links.aiSiteBuilder = adminPage("puffergo-ai-site-builder");
@@ -14391,6 +14606,8 @@ function report(p) {
     links.siteProfile = adminPage("puffergo-site-profile");
     links.settings = adminPage("puffergo-settings");
   }
+  const coreReady = p.connected && p.abilitiesApi && p.puffergo === "active" && !pluginTooOld && theme !== "default";
+  const ready = coreReady && !!p.seo;
   return {
     site: p.siteUrl,
     connected: p.connected,
@@ -14404,7 +14621,24 @@ function report(p) {
     } : {},
     wordpress: { abilitiesApi: p.abilitiesApi },
     puffergoPlugin: { state: p.puffergo, schemaVersion: p.schemaVersion },
+    theme: {
+      active: p.theme,
+      state: theme,
+      ...theme === "puffergo" ? {} : theme === "default" ? { note: "Stock WordPress theme \u2014 PufferGo styles do not apply until GeneratePress is active." } : theme === "custom" ? {
+        note: "This site runs someone's own theme. It is deliberately left alone \u2014 switching it would replace their design. PufferGo builds pages for GeneratePress; `--activate-theme` forces the switch if the customer wants it."
+      } : { note: "Could not read which theme the site renders (it may not be publicly reachable yet), so nothing was changed." }
+    },
+    designTokens: { state: p.design },
     seoPlugin: { active: p.seo },
+    // 邮件单独一行：客户问得最多的就是「询盘能不能收到」，而这跟 SEO 插件不是一回事。
+    mailPlugin: {
+      state: p.mail,
+      ...p.mail === "active" ? {
+        note: "Installed and active. Whether mail actually gets delivered still depends on the SMTP account configured in wp-admin \u2192 FluentSMTP \u2014 only a test message proves it."
+      } : p.mail === "unknown" ? { note: "Could not be checked (needs an administrator account with plugin permissions)." } : {
+        note: 'No SMTP plugin is active, so inquiry-form mail goes out through the host\'s PHP mail \u2014 frequently filtered as spam or refused outright. Install it with `puffergo plugins install fluent-smtp --customer-said "\u2026"`, then set up the mailbox.'
+      }
+    },
     ...Object.keys(links).length ? {
       wpAdmin: {
         links,
@@ -14417,11 +14651,225 @@ function report(p) {
     } : {},
     needsInstall: needs.filter((n) => n !== "wordpress-6.9"),
     ...problems.length ? { problems } : {},
-    ready: p.connected && p.abilitiesApi && p.puffergo === "active" && !!p.seo && !pluginTooOld
+    coreReady,
+    ready
   };
+}
+var jobPath = (id) => join11(jobsDir(), `${id}.json`);
+var newJobId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+async function writeJob(job) {
+  await mkdir9(jobsDir(), { recursive: true });
+  await writeFile11(jobPath(job.id), JSON.stringify(job, null, 2), "utf8");
+}
+async function latestJob(siteUrl) {
+  const site2 = normalizeUrl(siteUrl);
+  let files;
+  try {
+    files = await readdir5(jobsDir());
+  } catch {
+    return null;
+  }
+  let best = null;
+  for (const f of files) {
+    if (!f.endsWith(".json")) continue;
+    try {
+      const job = JSON.parse(await readFile16(join11(jobsDir(), f), "utf8"));
+      if (job.site !== site2) continue;
+      if (!best || job.startedAt > best.startedAt) best = job;
+    } catch {
+    }
+  }
+  return best;
+}
+async function pruneJobs() {
+  const cutoff = Date.now() - JOB_KEEP_DAYS * 864e5;
+  try {
+    for (const f of await readdir5(jobsDir())) {
+      if (!f.endsWith(".json")) continue;
+      try {
+        const job = JSON.parse(await readFile16(join11(jobsDir(), f), "utf8"));
+        if (Date.parse(job.startedAt) < cutoff) await rm3(join11(jobsDir(), f), { force: true });
+      } catch {
+      }
+    }
+  } catch {
+  }
+}
+function jobView(job) {
+  return {
+    id: job.id,
+    state: job.state,
+    plugins: job.plugins,
+    startedAt: job.startedAt,
+    ...job.finishedAt ? { finishedAt: job.finishedAt } : {},
+    ...job.results ? { results: job.results } : {},
+    ...job.error ? { error: job.error } : {}
+  };
+}
+function withBackground(out, job) {
+  if (!job) return out;
+  const needs = Array.isArray(out.needsInstall) ? out.needsInstall : [];
+  return {
+    ...out,
+    background: jobView(job),
+    ...job.state === "running" ? { needsInstall: needs.filter((n) => !job.plugins.includes(n)) } : {}
+  };
+}
+function backgroundSlugs(ctx) {
+  const raw = ctx.flags.get("background");
+  if (raw === void 0) return BACKGROUND_SLUGS;
+  const list2 = raw.split(",").map((s) => s.trim().toLowerCase()).filter((s) => s && s !== "none" && s !== "false");
+  return list2;
+}
+async function startBackground(ctx, cfg, plugins2) {
+  if (!plugins2.length) return null;
+  const job = {
+    id: newJobId(),
+    site: normalizeUrl(cfg.siteUrl),
+    plugins: plugins2,
+    state: "running",
+    startedAt: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  await writeJob(job);
+  const child = spawn2(
+    process.execPath,
+    [...stripSandboxExecArgv(process.execArgv), process.argv[1], "__bg-install", job.id, job.site, "--dir", ctx.dir],
+    { detached: true, stdio: "ignore", windowsHide: true, env: sandboxFreeEnv() }
+  );
+  child.unref();
+  void pruneJobs();
+  return job;
+}
+async function cmdBgInstall(jobId, siteUrl, dir2) {
+  let job = {
+    id: jobId,
+    site: normalizeUrl(siteUrl),
+    plugins: [],
+    state: "running",
+    startedAt: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  try {
+    job = { ...job, ...JSON.parse(await readFile16(jobPath(jobId), "utf8")) };
+  } catch {
+  }
+  const results = {};
+  try {
+    const { config } = await resolveSite2(dir2, siteUrl);
+    const client2 = new WpClient(nodeNetwork, {
+      siteUrl: config.siteUrl,
+      username: config.username,
+      appPassword: config.appPassword
+    });
+    for (const slug of job.plugins) {
+      try {
+        results[slug] = (await client2.ensurePluginActive(slug)).action;
+      } catch (e) {
+        results[slug] = e instanceof WpHttpError ? `http_${e.status}` : e instanceof Error ? e.message : "error";
+      }
+    }
+  } catch (e) {
+    await writeJob({
+      ...job,
+      state: "failed",
+      results,
+      finishedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      error: e instanceof Error ? e.message : String(e)
+    });
+    return;
+  }
+  const done = Object.values(results).filter((r) => r === "already_active" || r === "activated" || r === "installed").length;
+  await writeJob({
+    ...job,
+    state: done === job.plugins.length ? "done" : done ? "partial" : "failed",
+    results,
+    finishedAt: (/* @__PURE__ */ new Date()).toISOString()
+  });
+}
+async function runSiteInit(ctx, cfg, before) {
+  const url = normalizeUrl(ctx.flags.get("url") ?? cfg.siteUrl);
+  const theme = themeState(before.theme);
+  const force = ctx.flags.get("activate-theme") === "true";
+  const sampleFlag = ctx.flags.get("sample-data");
+  const wantsSample = ctx.flags.get("no-sample-data") !== "true" && sampleFlag !== "false";
+  if (!force && (theme === "custom" || theme === "unknown")) {
+    return {
+      ran: false,
+      url,
+      skipped: theme,
+      note: (theme === "custom" ? `This site runs its own theme (${before.theme}); GeneratePress was NOT activated \u2014 that would replace the customer's design. Add --activate-theme only if the customer asks for it.` : "Could not read the active theme, so nothing was switched. Re-run once the site is publicly reachable, or add --activate-theme to force it.") + (wantsSample ? " Demo content was NOT imported either \u2014 the whole setup step was skipped." : "")
+    };
+  }
+  const base = normalizeUrl(cfg.siteUrl);
+  const auth = `Basic ${Buffer.from(`${cfg.username}:${cfg.appPassword}`).toString("base64")}`;
+  const res = await nodeNetwork.request({
+    method: "POST",
+    url: `${base}/wp-json/puffergo/v1/setup`,
+    headers: { Authorization: auth, "Content-Type": "application/json" },
+    body: { url, import_sample_data: wantsSample }
+  });
+  if (res.status === 404)
+    return {
+      ran: false,
+      url,
+      error: "endpoint_missing",
+      note: "This PufferGo version has no /setup endpoint \u2014 update the PufferGo plugin in wp-admin, then run `puffergo site setup install` again."
+    };
+  if (res.status === 401 || res.status === 403)
+    return {
+      ran: false,
+      url,
+      error: "needs_admin",
+      note: "Only an administrator (manage_options) may run the setup step. Use an admin account's Application Password, or in wp-admin: Appearance \u2192 Themes \u2192 Activate GeneratePress, and Settings \u2192 General \u2192 set both WordPress Address and Site Address."
+    };
+  if (res.status < 200 || res.status >= 300)
+    return { ran: false, url, error: `http_${res.status}`, note: "The setup step failed; nothing else was changed." };
+  const data = res.json;
+  const themeResult = data?.theme;
+  const sample = data?.sample_data;
+  return {
+    ran: true,
+    url,
+    theme: {
+      state: themeResult?.activated ? "active" : "failed",
+      wasPresent: !!themeResult?.was_present,
+      activeBefore: before.theme,
+      ...themeResult?.error ? { error: themeResult.error } : {}
+    },
+    urls: {
+      updated: !!data?.urls?.updated,
+      siteurl: data?.urls?.siteurl ?? "",
+      home: data?.urls?.home ?? ""
+    },
+    ...sample ? {
+      sampleData: {
+        imported: !!sample.imported,
+        // 没 counts = 站上早就导过，这次只补了首页/菜单/菜单项。
+        reused: !!sample.imported && !sample.counts,
+        ...sample.counts ? { counts: sample.counts } : {}
+      }
+    } : {}
+  };
+}
+var SAMPLE_LABELS = {
+  puffergo_product: "products",
+  puffergo_solution: "solutions",
+  puffergo_case: "case studies",
+  puffergo_testimonial: "testimonials",
+  post: "blog posts"
+};
+function sampleDataNote(sample) {
+  if (!sample?.imported) return "";
+  if (sample.reused)
+    return " Demo content was already on this site \u2014 this run only added the missing homepage / menu pieces. It is placeholder content: swap it out as the customer's own copy lands.";
+  const counts = Object.entries(sample.counts ?? {}).filter(([, n]) => n > 0).map(([cpt, n]) => `${n} ${SAMPLE_LABELS[cpt] ?? cpt}`).join(", ");
+  return ` Demo content imported${counts ? ` (${counts})` : ""}; the front page is now the demo homepage and the menus are the demo structure. That is placeholder content, not the customer's \u2014 say so in one line so they are not surprised, then swap it out as their real copy lands. Delete all of it any time in wp-admin \u2192 PufferGo \u2192 Dashboard \u2192 "Sample Data & Showroom" \u2192 "Delete Sample Data" (the front page reverts with it).`;
+}
+function sampleSkippedNote() {
+  return " Sample content was skipped on purpose (--no-sample-data): the site has no demo pages, no demo homepage and no menus yet \u2014 the front page is still the bare WordPress blog. That is expected, not a failed import.";
 }
 async function install(ctx, cfg) {
   const said = (ctx.flags.get("customer-said") ?? "").trim();
+  const sampleDisabled = ctx.flags.get("no-sample-data") === "true" || ctx.flags.get("sample-data") === "false";
   if (!said)
     return {
       ok: false,
@@ -14445,7 +14893,6 @@ async function install(ctx, cfg) {
   const actions = {};
   try {
     actions.puffergo = before.puffergo === "active" ? "already_active" : (await client2.ensurePluginActive(PUFFERGO_SLUG)).action;
-    actions.rankMath = before.seo ? `skipped_${before.seo}_active` : (await client2.ensurePluginActive(RANKMATH_SLUG)).action;
   } catch (e) {
     if (e instanceof WpHttpError && (e.status === 401 || e.status === 403))
       return {
@@ -14453,19 +14900,59 @@ async function install(ctx, cfg) {
         code: "needs_manual_install",
         fix: "user",
         actions,
-        message: 'This account cannot install or activate plugins (WordPress needs an admin for that). In wp-admin: Plugins \u2192 Add New \u2192 search "PufferGo" \u2192 Install Now \u2192 Activate' + (before.seo ? "" : '; then the same for "Rank Math SEO"') + ". Afterwards run `puffergo site setup` again to verify."
+        message: 'This account cannot install or activate plugins (WordPress needs an admin for that). In wp-admin: Plugins \u2192 Add New \u2192 search "PufferGo" \u2192 Install Now \u2192 Activate. Afterwards run `puffergo site setup` again to verify.'
       };
     throw e;
   }
-  const after = await probe(cfg);
-  const r = report(after);
+  const siteInit = await runSiteInit(ctx, cfg, before);
+  const bgSlugs = backgroundSlugs(ctx);
+  const syncSlugs = BACKGROUND_SLUGS.filter((s) => !bgSlugs.includes(s));
+  for (const slug of syncSlugs) {
+    if (slug === RANKMATH_SLUG && before.seo) {
+      actions.rankMath = `skipped_${before.seo}_active`;
+      continue;
+    }
+    try {
+      actions[slug] = (await client2.ensurePluginActive(slug)).action;
+    } catch (e) {
+      if (e instanceof WpHttpError && (e.status === 401 || e.status === 403))
+        return {
+          ok: false,
+          code: "needs_manual_install",
+          fix: "user",
+          actions,
+          message: `This account cannot install or activate plugins (WordPress needs an admin for that). In wp-admin: Plugins \u2192 Add New \u2192 search for it manually, then run \`puffergo site setup\` again.`
+        };
+      throw e;
+    }
+  }
+  const background = bgSlugs.length ? await startBackground(ctx, cfg, bgSlugs) : null;
+  const oldUrl = normalizeUrl(cfg.siteUrl);
+  const movedTo = siteInit.ran && siteInit.url !== oldUrl ? siteInit.url : null;
+  let after = await probe(movedTo ? { ...cfg, siteUrl: movedTo } : cfg);
+  let reachableAtNewUrl = true;
+  if (movedTo && !after.connected) {
+    after = await probe(cfg);
+    reachableAtNewUrl = false;
+  }
+  const r = withBackground(report(after), background ?? await latestJob(cfg.siteUrl));
+  const coreReady = r.coreReady === true;
+  const sampleNote = sampleDataNote(siteInit.sampleData) || (sampleDisabled ? sampleSkippedNote() : "");
   return {
-    ok: r.ready,
+    ok: coreReady,
     ...r,
     actions,
-    ...after.abilitiesApi ? {} : {
-      message: "Plugins are in place, but this WordPress still has no Abilities API \u2014 update WordPress to 6.9+ in wp-admin (Dashboard \u2192 Updates); PufferGo cannot work on an older core."
-    }
+    siteInit,
+    ...movedTo ? {
+      account: {
+        ...r.account && typeof r.account === "object" ? r.account : {},
+        note: reachableAtNewUrl ? `The site's own address is now ${movedTo}. Point this folder at it before building pages: \`puffergo login ${movedTo}\` (or \`--site\`).` : `WordPress now says its address is ${movedTo}, but that address does not answer yet (DNS/SSL still propagating). Keep using ${oldUrl} for now; once it answers, run \`puffergo login ${movedTo}\`.`
+      }
+    } : {},
+    ...coreReady ? {} : {
+      message: "The site is NOT ready to build on yet \u2014 see problems. WordPress core and plugin UPDATES cannot be installed from here; guide the customer through wp-admin for those."
+    },
+    next: coreReady ? background ? `Core is ready (plugin + theme + site address${siteInit.ran ? "" : ", theme untouched"}). ${background.plugins.join(" / ")} are installing in the background \u2014 do NOT wait and do NOT ask the customer anything about plugins. The next step is the SITE PROFILE: run \`puffergo profile ask\`, ask every group it returns in ONE message, save with \`puffergo profile set\`. The profile is what every page, product and post is written from, and it is the source AI answer engines quote \u2014 say that before you ask. Run \`puffergo site setup\` later to confirm the background plugins landed before writing SEO fields.${sampleNote}` : `Core is ready. The next step is the SITE PROFILE \u2014 run \`puffergo profile ask\`, ask every group it returns in ONE message, save with \`puffergo profile set\`. Nothing else (products, pages, design) gets discussed before that.${sampleNote}` : "Fix what problems lists, then run `puffergo site setup` again."
   };
 }
 async function cmdSiteSetup(ctx) {
@@ -14475,11 +14962,15 @@ async function cmdSiteSetup(ctx) {
     if (sub === "install") return await install(ctx, config);
     if (sub !== void 0) return { ok: false, code: "usage", message: SITE_SETUP_USAGE };
     const p = await probe(config);
-    const r = report(p);
+    const r = withBackground(report(p), await latestJob(config.siteUrl));
+    const coreReady = r.coreReady === true;
+    const job = r.background;
     return {
       ok: true,
       ...r,
-      ...r.ready ? { next: "The site is ready for PufferGo." } : {
+      ...r.ready === true ? { next: "The site is ready for PufferGo." } : coreReady ? {
+        next: job?.state === "running" ? `Core is ready (plugin + theme + site address). ${(job.plugins ?? []).join(" / ")} are still installing in the background \u2014 do NOT wait and do NOT tell the customer to install anything. The next step is the SITE PROFILE: run \`puffergo profile ask\`, ask all of it in ONE message, save with \`puffergo profile set\`. Run \`puffergo site setup\` once before writing page SEO fields.` : 'Core is ready. The next step is the SITE PROFILE (`puffergo profile ask` \u2192 one message \u2192 `profile set`). The SEO plugin is still missing; install it later with `puffergo site setup install --customer-said "<their exact words>"`.'
+      } : {
         next: 'Show the customer what is missing (problems/needsInstall) and ask to install. If they agree, run `puffergo site setup install --customer-said "<their exact words>"`. WordPress core and plugin UPDATES cannot be installed from here \u2014 guide the customer through wp-admin for those.'
       }
     };
@@ -14490,39 +14981,347 @@ async function cmdSiteSetup(ctx) {
   }
 }
 
+// src/lib/sitePasswordCmd.ts
+import { randomInt } from "node:crypto";
+import { chmod as chmod2, mkdir as mkdir10, stat as stat3, writeFile as writeFile12 } from "node:fs/promises";
+import { homedir as homedir2 } from "node:os";
+import { join as join12 } from "node:path";
+var LOWER = "abcdefghijkmnopqrstuvwxyz";
+var UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+var DIGIT = "23456789";
+var SYMBOL = "@#%*-_=+";
+var ALL = LOWER + UPPER + DIGIT + SYMBOL;
+var LENGTH = 20;
+var SITE_PASSWORD_USAGE = `puffergo site password --domain <domain> [--email <address>] [--user <name>] [--out <dir>]
+
+Mints the WordPress admin password and writes a login card to this computer, so the customer has the
+credentials in hand before the site exists. Prints JSON; pass \`credentials\` straight to the hosting
+create call (wordpress.admin.user / .password / .email).
+
+  --domain   site address; protocol optional (used for the login URL and the file name)
+  --email    admin email \u2014 also recorded on the card, so "forgot password" lands somewhere real
+  --user     admin username (default: derived from the domain, letters/digits/underscore only)
+  --out      where to write the card (default: ~/Desktop, falling back to the home directory)
+`;
+function pick(set) {
+  return set[randomInt(set.length)];
+}
+function generatePassword(length = LENGTH) {
+  const chars = [pick(LOWER), pick(UPPER), pick(DIGIT), pick(SYMBOL)];
+  while (chars.length < length) chars.push(pick(ALL));
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1);
+    const a = chars[i];
+    chars[i] = chars[j];
+    chars[j] = a;
+  }
+  return chars.join("");
+}
+function bareHost(input) {
+  return input.trim().replace(/^[a-z]+:\/\//i, "").replace(/^www\./i, "").replace(/[/?#].*$/, "").toLowerCase();
+}
+function deriveUser(host) {
+  const base = host.replace(/[^a-z0-9]/gi, "_").replace(/^_+|_+$/g, "") || "site_owner";
+  return base.slice(0, 20).replace(/^([0-9])/, "u$1");
+}
+function stamp(d) {
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function card(opts) {
+  const { host, url, user, email, password, now } = opts;
+  return [
+    `${host} \u7684\u7F51\u7AD9\u540E\u53F0\u767B\u5F55\u4FE1\u606F`,
+    `\u751F\u6210\u65F6\u95F4\uFF1A${stamp(now)}`,
+    "",
+    `\u7F51\u7AD9\u5730\u5740\uFF1A${url}`,
+    `\u540E\u53F0\u5730\u5740\uFF1A${url}/wp-admin`,
+    `\u7528\u6237\u540D\uFF1A${user}`,
+    `\u5BC6\u7801\uFF1A${password}`,
+    "",
+    "\u600E\u4E48\u7528\uFF1A",
+    `1. \u6D4F\u89C8\u5668\u6253\u5F00\u4E0A\u9762\u7684\u300C\u540E\u53F0\u5730\u5740\u300D\uFF0C\u8F93\u5165\u7528\u6237\u540D\u548C\u5BC6\u7801\u767B\u5F55\u3002`,
+    "   \u767B\u5F55\u65F6**\u52FE\u4E0A Remember Me\uFF08\u8BB0\u4F4F\u6211\uFF09**\uFF0C\u4EE5\u540E\u6253\u5F00\u6388\u6743\u9875\u5C31\u4E0D\u7528\u518D\u767B\u5F55\u4E86\u3002",
+    "2. \u5982\u679C AI \u53D1\u6765\u7684\u6388\u6743\u94FE\u63A5\u6253\u5F00\u540E\u662F WordPress \u767B\u5F55\u9875\u2014\u2014**\u8FD9\u662F\u6B63\u5E38\u6D41\u7A0B\uFF0C\u4E0D\u662F\u51FA\u9519**\u3002\u7528\u8FD9\u91CC\u7684\u8D26\u53F7\u5BC6\u7801\u767B\u5F55\uFF0C\u767B\u5F55\u540E\u70B9 Approve / \u6279\u51C6\u5373\u53EF\u3002",
+    "3. \u7B2C\u4E00\u6B21\u767B\u5F55\u540E\uFF0C\u5EFA\u8BAE\u6539\u6210\u4F60\u81EA\u5DF1\u597D\u8BB0\u7684\u5BC6\u7801\uFF1B\u6539\u5B8C\u628A\u8FD9\u91CC\u4E5F\u66F4\u65B0\u4E00\u4E0B\u3002",
+    `4. \u5FD8\u4E86\u5BC6\u7801\u5C31\u70B9\u767B\u5F55\u9875\u7684\u300C\u5FD8\u8BB0\u5BC6\u7801\u300D\uFF0C\u91CD\u7F6E\u90AE\u4EF6\u4F1A\u53D1\u5230 ${email}\u3002`,
+    "",
+    "\u91CD\u8981\uFF1A",
+    "- \u8FD9\u4E2A\u6587\u4EF6\u5728\u4F60\u81EA\u5DF1\u7535\u8111\u4E0A\uFF0C\u4E0D\u8981\u53D1\u7ED9\u522B\u4EBA\uFF0C\u4E5F\u4E0D\u8981\u53D1\u56DE\u7ED9 AI\u3002",
+    "- \u60F3\u6536\u56DE AI \u7684\u6539\u52A8\u6743\u9650\uFF0C\u5728\u540E\u53F0\u300C\u7528\u6237 \u2192 \u4E2A\u4EBA\u8D44\u6599 \u2192 \u5E94\u7528\u7A0B\u5E8F\u5BC6\u7801\u300D\u91CC\u5220\u6389\u90A3\u4E00\u6761\u3002",
+    ""
+  ].join("\n");
+}
+async function isDir(p) {
+  try {
+    return (await stat3(p)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+async function resolveOutDir(flag) {
+  if (flag) {
+    await mkdir10(flag, { recursive: true });
+    return { dir: flag };
+  }
+  const desktop = join12(homedir2(), "Desktop");
+  if (await isDir(desktop)) return { dir: desktop };
+  return { dir: homedir2(), note: "no Desktop here, wrote it to the home directory instead" };
+}
+async function cmdSitePassword(ctx) {
+  const domainFlag = ctx.flags.get("domain") ?? ctx.positional[0];
+  if (!domainFlag) {
+    return { ok: false, code: "missing_domain", message: SITE_PASSWORD_USAGE };
+  }
+  const host = bareHost(domainFlag);
+  if (!host) {
+    return { ok: false, code: "missing_domain", message: SITE_PASSWORD_USAGE };
+  }
+  const url = `https://${host}`;
+  const user = ctx.flags.get("user")?.trim() || deriveUser(host);
+  const email = ctx.flags.get("email")?.trim() || "";
+  const password = generatePassword();
+  const now = /* @__PURE__ */ new Date();
+  const credentials = { site: url, adminUrl: `${url}/wp-admin`, user, email, password };
+  let file = null;
+  let warning;
+  try {
+    const { dir: dir2, note } = await resolveOutDir(ctx.flags.get("out"));
+    const base = `${host}-\u767B\u5F55\u4FE1\u606F`;
+    let target = join12(dir2, `${base}.txt`);
+    if (await stat3(target).then(
+      () => true,
+      () => false
+    )) {
+      target = join12(dir2, `${base}-${stamp(now).replace(/[^0-9]/g, "")}.txt`);
+    }
+    await writeFile12(target, card({ host, url, user, email, password, now }), { encoding: "utf8", mode: 384 });
+    await chmod2(target, 384);
+    file = target;
+    if (note) warning = note;
+  } catch (e) {
+    warning = `could not write the login card (${e.message}); tell the customer the password in chat`;
+  }
+  return {
+    ok: true,
+    credentials,
+    file,
+    ...warning ? { warning } : {},
+    next: "Submit credentials.user / .password / .email to the hosting create call as-is. The card is already on the customer's computer \u2014 tell them the file name and where it is; never paste this JSON into chat."
+  };
+}
+
+// src/lib/pluginsCmd.ts
+var PLUGINS_USAGE = 'puffergo plugins <list|install <slug\u2026> --customer-said "<customer words>"> [--dir <workdir>] [--site <url>]';
+var STATE_ZH = {
+  activated: "\u5DF2\u88C5\u5E76\u542F\u7528",
+  installed: "\u5DF2\u88C5\u672A\u542F\u7528",
+  not_installed: "\u6CA1\u88C5"
+};
+async function call(cfg, method, path, body) {
+  const base = cfg.siteUrl.replace(/\/+$/, "");
+  const auth = `Basic ${Buffer.from(`${cfg.username}:${cfg.appPassword}`).toString("base64")}`;
+  return nodeNetwork.request({
+    method,
+    url: `${base}/wp-json/puffergo/v1/plugin-setup/${path}`,
+    headers: { Authorization: auth, "Content-Type": "application/json" },
+    ...body === void 0 ? {} : { body }
+  });
+}
+async function readCatalog(cfg) {
+  const res = await call(cfg, "GET", "config");
+  if (res.status === 404)
+    return {
+      ok: false,
+      out: {
+        ok: false,
+        code: "puffergo_plugin_missing",
+        fix: "run_site_setup",
+        message: '\u8FD9\u4E2A\u7AD9\u4E0A\u6CA1\u6709 PufferGo \u63D2\u4EF6\uFF08\u6216\u7248\u672C\u592A\u65E7\uFF09\uFF0C\u88C5\u5176\u4ED6\u63D2\u4EF6\u7684\u80FD\u529B\u662F\u63D2\u4EF6\u63D0\u4F9B\u7684\u3002\u5148\u8DD1 `puffergo site setup install --customer-said "<\u5BA2\u6237\u539F\u8BDD>"` \u628A\u63D2\u4EF6\u88C5\u4E0A\uFF0C\u518D\u56DE\u6765\u3002'
+      }
+    };
+  if (res.status < 200 || res.status >= 300)
+    return {
+      ok: false,
+      out: {
+        ok: false,
+        code: `http_${res.status}`,
+        message: res.status === 401 || res.status === 403 ? "\u8FD9\u4E2A\u8D26\u53F7\u6CA1\u6709\u88C5\u63D2\u4EF6\u7684\u6743\u9650\uFF08install_plugins\uFF09\u3002\u8BA9\u7AD9\u70B9\u7BA1\u7406\u5458\u5728 wp-admin \u2192 \u63D2\u4EF6 \u2192 \u5B89\u88C5\u63D2\u4EF6 \u91CC\u88C5\uFF0C\u6216\u6362\u4E00\u4E2A\u7BA1\u7406\u5458\u8D26\u53F7\u7684\u5E94\u7528\u5BC6\u7801\u3002" : `\u63D2\u4EF6\u76EE\u5F55\u8BFB\u53D6\u5931\u8D25\uFF08HTTP ${res.status}\uFF09\u3002`
+      }
+    };
+  const data = res.json?.data;
+  if (!data || !Array.isArray(data.plugins))
+    return { ok: false, out: { ok: false, code: "bad_payload", message: "\u63D2\u4EF6\u76EE\u5F55\u8FD4\u56DE\u7684\u5185\u5BB9\u770B\u4E0D\u61C2\uFF0C\u5148\u8DF3\u8FC7\u3002" } };
+  return { ok: true, catalog: data };
+}
+function describe(catalog) {
+  const bySlug = new Map(catalog.plugins.map((p) => [p.slug, p]));
+  return {
+    version: catalog.version,
+    plugins: catalog.plugins.map((p) => ({
+      slug: p.slug,
+      name: p.name,
+      state: p.install_status ?? "unknown",
+      stateZh: STATE_ZH[p.install_status ?? ""] ?? "\u672A\u77E5",
+      ...p.description ? { description: p.description } : {},
+      ...p.notes ? { notes: p.notes } : {}
+    })),
+    ...catalog.rules ? {
+      groups: Object.fromEntries(
+        Object.entries(catalog.rules).map(([key, slugs]) => [
+          key,
+          slugs.map((s) => bySlug.get(s)?.name ?? s)
+        ])
+      )
+    } : {}
+  };
+}
+async function listPlugins(ctx) {
+  const cfg = (await resolveSite2(ctx.dir, ctx.flags.get("site"))).config;
+  const res = await readCatalog(cfg);
+  if (!res.ok) return res.out;
+  const described = describe(res.catalog);
+  const missing = described.plugins.length ? "" : "\uFF08\u76EE\u5F55\u662F\u7A7A\u7684\uFF0C\u670D\u52A1\u7AEF\u7684\u63D2\u4EF6\u8868\u53EF\u80FD\u6CA1\u914D\uFF09";
+  return {
+    ok: true,
+    site: cfg.siteUrl,
+    ...described,
+    ...missing ? { note: missing } : {},
+    next: "\u8981\u88C5\u5C31\u628A\u5BA2\u6237\u540C\u610F\u7684\u90A3\u51E0\u4E2A slug \u4F20\u7ED9 `puffergo plugins install`\uFF1B\u6CA1\u540C\u610F\u4E4B\u524D\u53EA\u8BF4\u73B0\u72B6\uFF0C\u522B\u81EA\u5DF1\u88C5\u3002"
+  };
+}
+async function installPlugins(ctx) {
+  const said = (ctx.flags.get("customer-said") ?? "").trim();
+  if (!said)
+    return {
+      ok: false,
+      code: "needs_customer_request",
+      fix: "user",
+      message: '\u88C5\u63D2\u4EF6\u4F1A\u6539\u5BA2\u6237\u7684\u7AD9\u3002\u5148\u628A `puffergo plugins list` \u7684\u7ED3\u679C\u8BB2\u7ED9\u5BA2\u6237\uFF08\u54EA\u51E0\u4E2A\u6CA1\u88C5\u3001\u5404\u81EA\u5E72\u561B\uFF09\uFF0C\u7B49\u4ED6\u8BF4\u884C\uFF0C\u518D\u5E26 --customer-said "<\u4ED6\u7684\u539F\u8BDD>" \u8DD1\u8FD9\u6761\u3002'
+    };
+  const wanted = ctx.positional.map((s) => s.trim().toLowerCase()).filter(Boolean);
+  if (!wanted.length)
+    return { ok: false, code: "usage", fix: "ai", message: PLUGINS_USAGE };
+  const cfg = (await resolveSite2(ctx.dir, ctx.flags.get("site"))).config;
+  const res = await readCatalog(cfg);
+  if (!res.ok) return res.out;
+  const allowed = new Map(res.catalog.plugins.map((p) => [p.slug.toLowerCase(), p]));
+  const unknown = wanted.filter((s) => !allowed.has(s));
+  if (unknown.length)
+    return {
+      ok: false,
+      code: "unknown_plugin",
+      fix: "ai",
+      message: `\u8FD9\u4E9B\u4E0D\u5728\u53EF\u88C5\u6E05\u5355\u91CC\uFF1A${unknown.join("\u3001")}\u3002\u80FD\u88C5\u7684\u662F\uFF1A${[...allowed.keys()].join("\u3001")}\u3002`
+    };
+  const already = wanted.filter((s) => allowed.get(s)?.install_status === "activated");
+  const toInstall = wanted.filter((s) => !already.includes(s));
+  const actions = already.map((slug) => ({
+    slug,
+    name: allowed.get(slug)?.name,
+    result: "already_activated",
+    message: "\u672C\u6765\u5C31\u5DF2\u7ECF\u88C5\u597D\u5E76\u542F\u7528\u4E86\u3002"
+  }));
+  if (toInstall.length) {
+    const post = await call(cfg, "POST", "install", { selected: toInstall });
+    if (post.status === 401 || post.status === 403)
+      return {
+        ok: false,
+        code: "needs_manual_install",
+        fix: "user",
+        actions,
+        message: "\u8FD9\u4E2A\u8D26\u53F7\u6CA1\u6709\u88C5\u63D2\u4EF6\u7684\u6743\u9650\uFF08\u9700\u8981 install_plugins\uFF09\u3002\u8BA9\u7BA1\u7406\u5458\u5728 wp-admin \u2192 \u63D2\u4EF6 \u2192 \u5B89\u88C5\u63D2\u4EF6 \u91CC\u641C\u63D2\u4EF6\u540D\u88C5\u4E0A\u5E76\u542F\u7528\uFF0C\u88C5\u5B8C\u518D\u8DD1 `puffergo plugins list` \u786E\u8BA4\u3002"
+      };
+    if (post.status < 200 || post.status >= 300)
+      return {
+        ok: false,
+        code: `http_${post.status}`,
+        actions,
+        message: `\u5B89\u88C5\u8BF7\u6C42\u5931\u8D25\uFF08HTTP ${post.status}\uFF09\uFF0C\u7AD9\u4E0A\u4EC0\u4E48\u90FD\u6CA1\u53D8\u3002`
+      };
+    const results = post.json?.results ?? [];
+    actions.push(...results);
+  }
+  const after = await readCatalog(cfg);
+  const stateOf = (slug) => after.ok ? after.catalog.plugins.find((p) => p.slug.toLowerCase() === slug)?.install_status ?? "unknown" : "unknown";
+  const failed = wanted.filter((s) => stateOf(s) !== "activated");
+  const described = after.ok ? describe(after.catalog).plugins : [];
+  return {
+    ok: failed.length === 0,
+    site: cfg.siteUrl,
+    actions,
+    ...after.ok ? { plugins: described } : {},
+    ...failed.length ? {
+      failed: failed.map((s) => ({ slug: s, name: allowed.get(s)?.name, state: stateOf(s) })),
+      message: `\u8FD9\u51E0\u4E2A\u6CA1\u88C5\u4E0A\uFF1A${failed.map((s) => allowed.get(s)?.name ?? s).join("\u3001")}\u3002\u591A\u6570\u662F\u4E3B\u673A\u7684\u6587\u4EF6\u6743\u9650\u6216 wordpress.org \u8FDE\u4E0D\u4E0A\uFF0C\u8BA9\u5BA2\u6237\u5728 wp-admin \u2192 \u63D2\u4EF6 \u2192 \u5B89\u88C5\u63D2\u4EF6 \u91CC\u624B\u52A8\u88C5\u4E00\u6B21\u6700\u5FEB\u3002`
+    } : { next: "\u628A\u8FD9\u4E9B\u5982\u5B9E\u544A\u8BC9\u5BA2\u6237\uFF08\u88C5\u4E86\u51E0\u4E2A\u3001\u5404\u81EA\u5E72\u561B\uFF09\uFF0C\u518D\u5F80\u4E0B\u8D70\u3002" }
+  };
+}
+async function cmdPlugins(sub, ctx) {
+  try {
+    switch (sub) {
+      case "list":
+        return await listPlugins(ctx);
+      case "install":
+        return await installPlugins(ctx);
+      default:
+        return { ok: false, code: "usage", message: PLUGINS_USAGE };
+    }
+  } catch (e) {
+    const siteErr = siteErrorOutput(e);
+    if (siteErr) return siteErr;
+    return { ok: false, code: "error", message: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 // src/lib/loginCmd.ts
-import { spawn as spawn2 } from "node:child_process";
+import { spawn as spawn3 } from "node:child_process";
 import * as net from "node:net";
 import { existsSync as existsSync13 } from "node:fs";
-import { readFile as readFile16, rm as rm3, writeFile as writeFile11, rename as rename2, mkdir as mkdir9, mkdtemp } from "node:fs/promises";
-import { tmpdir as tmpdir2 } from "node:os";
-import { dirname as dirname10, join as join11 } from "node:path";
+import { readdir as readdir6, readFile as readFile17, rm as rm4, writeFile as writeFile13, rename as rename2, mkdir as mkdir11, mkdtemp } from "node:fs/promises";
+import { homedir as homedir3, tmpdir as tmpdir2 } from "node:os";
+import { dirname as dirname11, join as join13 } from "node:path";
 var WAIT_MS = 10 * 60 * 1e3;
-var STATUS_WAIT_MS = 100 * 1e3;
+var STATUS_WAIT_MS = 60 * 1e3;
 var WINDOW_GRACE_MS = 30 * 1e3;
 var CALLBACK_PORTS = [49512, 49513, 49514, 49515, 49516, 49517];
-var LOGIN_STATE = join11(PUFFERGO_DIR, "login-state.json");
+var LOGIN_STATE = join13(PUFFERGO_DIR, "login-state.json");
 var loginStatePath = () => process.env.PUFFERGO_LOGIN_STATE || LOGIN_STATE;
 async function writeLoginState(state, path = loginStatePath()) {
-  await mkdir9(dirname10(path), { recursive: true });
-  await writeFile11(path, JSON.stringify(state, null, 2), "utf8");
+  await mkdir11(dirname11(path), { recursive: true });
+  await writeFile13(path, JSON.stringify(state, null, 2), "utf8");
 }
 async function readLoginState(path = loginStatePath()) {
   try {
-    const s = JSON.parse(await readFile16(path, "utf8"));
+    const s = JSON.parse(await readFile17(path, "utf8"));
     return s && typeof s.siteUrl === "string" && typeof s.status === "string" ? s : null;
   } catch {
     return null;
   }
 }
-var RESULT_PAGE = (ok) => `<!doctype html><html><head><meta charset="utf-8"><title>PufferGo</title>
+var RESULT_PAGE = (ok, problem) => `<!doctype html><html><head><meta charset="utf-8"><title>PufferGo</title>
 <style>html{font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#1f2430;
 display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f6f7fb}
-div{text-align:center}</style></head><body><div>${ok ? "\u2705 \u5DF2\u6388\u6743\uFF0C\u53EF\u4EE5\u56DE\u5230 AI \u5DE5\u5177\u7EE7\u7EED\u4E86\u3002" : "\u274C \u6CA1\u6709\u62FF\u5230\u6388\u6743\u3002\u53EF\u4EE5\u56DE\u5230 AI \u5DE5\u5177\u91CD\u65B0\u8FD0\u884C\u767B\u5F55\u3002"}<br><small style="color:#888">\u8FD9\u4E2A\u9875\u9762\u53EF\u4EE5\u5173\u95ED\u4E86\u3002</small></div></body></html>`;
+div{text-align:center;max-width:32em;padding:0 1.5em}</style></head><body><div>${ok ? "\u2705 \u5DF2\u6388\u6743\uFF0C\u53EF\u4EE5\u56DE\u5230 AI \u5DE5\u5177\u7EE7\u7EED\u4E86\u3002" : "\u274C \u6CA1\u6709\u62FF\u5230\u6388\u6743\u3002\u53EF\u4EE5\u56DE\u5230 AI \u5DE5\u5177\u91CD\u65B0\u8FD0\u884C\u767B\u5F55\u3002"}${problem ? `<br><small style="color:#c0392b">\u4FDD\u5B58\u51ED\u636E\u5931\u8D25\uFF1A${problem}</small>` : ""}<br><small style="color:#888">\u8FD9\u4E2A\u9875\u9762\u53EF\u4EE5\u5173\u95ED\u4E86\u3002</small></div></body></html>`;
+var LOGIN_USAGE = [
+  "puffergo login <siteUrl>                                    \u6388\u6743\u4E00\u4E2A\u7AD9\u70B9\uFF08\u6D4F\u89C8\u5668\u56DE\u4F20\uFF0C\u63A8\u8350\uFF09",
+  "puffergo login status [--wait <seconds>]                    \u67E5\u770B/\u7EE7\u7EED\u7B49\u5F85\u6388\u6743\u7ED3\u679C",
+  "puffergo login from-url --site <url> --file <path> [--user <u>]   \u5BA2\u6237\u628A\u5730\u5740\u680F\u90A3\u6761\u56DE\u8C03 URL \u7C98\u8FDB\u6587\u4EF6\uFF0C\u4ECE\u91CC\u9762\u53D6\u56DE\u5BC6\u7801\uFF08\u56DE\u4F20\u4E22\u4E86\u5C31\u7528\u8FD9\u6761\uFF09",
+  "puffergo login app-password --site <url> --file <path> [--user <u>]   \u5BA2\u6237\u5728\u540E\u53F0\u751F\u6210\u5E94\u7528\u5BC6\u7801\u5199\u8FDB\u6587\u4EF6\uFF08\u6700\u7A33\u7684\u515C\u5E95\uFF09",
+  "puffergo login doctor                                       \u81EA\u68C0\uFF1A\u7AEF\u53E3\u6709\u6CA1\u6709\u4EBA\u5728\u542C\u3001\u72B6\u6001\u5C5E\u4E8E\u54EA\u4E2A\u7AD9"
+].join("\n");
 function normalizeSiteUrl(input) {
-  let s = input.trim();
+  const raw = input.trim();
+  if (!raw) throw new Error("empty site URL");
+  if (raw.startsWith("-")) throw new Error(`"${raw}" is a flag, not a site URL`);
+  let s = raw;
   if (!/^https?:\/\//i.test(s)) s = `https://${s}`;
   const u = new URL(s);
+  const host = u.hostname.toLowerCase();
+  const singleLabel = host === "localhost" || host.endsWith(".local") || /^\d{1,3}(\.\d{1,3}){3}$/.test(host);
+  if (!singleLabel && !host.includes(".")) throw new Error(`"${host}" is not a domain (no dot)`);
+  if (host.split(".").some((label) => !label || /^-|-$/.test(label)))
+    throw new Error(`"${host}" is not a valid domain`);
   const path = u.pathname.replace(/\/(wp-admin|wp-login\.php).*$/, "").replace(/\/+$/, "");
   return `${u.protocol}//${u.host}${path}`;
 }
@@ -14530,8 +15329,66 @@ function openBrowser(url) {
   if (process.env.PUFFERGO_NO_BROWSER) return;
   const [cmd2, args] = process.platform === "darwin" ? ["open", [url]] : process.platform === "win32" ? ["rundll32", ["url.dll,FileProtocolHandler", url]] : ["xdg-open", [url]];
   try {
-    spawn2(cmd2, args, { detached: true, stdio: "ignore", windowsHide: true }).unref();
+    spawn3(cmd2, args, { detached: true, stdio: "ignore", windowsHide: true }).unref();
   } catch {
+  }
+}
+var shQuote = (s) => `'${s.replace(/'/g, `'\\''`)}'`;
+function spawnWaiter(siteUrl, handshake, dir2, port) {
+  const tag2 = `${process.pid}-${port || "auto"}`;
+  const pidFile = join13(tmpdir2(), `puffergo-login-${tag2}.pid`);
+  const logFile = join13(tmpdir2(), `puffergo-login-${tag2}.log`);
+  const args = [
+    ...process.execArgv,
+    process.argv[1],
+    "__login-wait",
+    siteUrl,
+    handshake,
+    dir2,
+    String(port),
+    pidFile
+  ];
+  if (process.platform === "win32") {
+    const child = spawn3(process.execPath, args, {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+      env: sandboxFreeEnv()
+    });
+    child.unref();
+    let error2 = "";
+    child.on("error", (e) => {
+      error2 = e.message;
+    });
+    return { pidFile, logFile, error: error2 };
+  }
+  const line = [process.execPath, ...args].map(shQuote).join(" ");
+  const script = `( nohup ${line} >${shQuote(logFile)} 2>&1 & echo $! > ${shQuote(pidFile)} )`;
+  const shell = spawn3("/bin/sh", ["-c", script], { detached: true, stdio: "ignore", env: sandboxFreeEnv() });
+  shell.unref();
+  let error = "";
+  shell.on("error", (e) => {
+    error = e.message;
+  });
+  return { pidFile, logFile, error };
+}
+async function readPid(path, attempts = 20) {
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const n = Number((await readFile17(path, "utf8")).trim());
+      if (Number.isFinite(n) && n > 0) return n;
+    } catch {
+    }
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  return null;
+}
+function processAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
   }
 }
 function portIsHeld(port, timeoutMs = 500) {
@@ -14560,12 +15417,20 @@ function portIsUsable(port) {
 }
 async function finishLogin(siteUrl, dir2, creds, port) {
   const startedAt = (await readLoginState())?.startedAt ?? Date.now();
-  if (creds) {
+  if (!creds) {
+    await writeLoginState({ siteUrl, status: "failed", startedAt, port });
+    return null;
+  }
+  try {
     await upsertCredential({ siteUrl, username: creds.username, appPassword: creds.appPassword });
     await writeActiveDomain(dir2, siteUrl);
     await writeLoginState({ siteUrl, status: "approved", startedAt, username: creds.username, port });
-  } else {
-    await writeLoginState({ siteUrl, status: "failed", startedAt, port });
+    return null;
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    await writeLoginState({ siteUrl, status: "failed", startedAt, port }).catch(() => {
+    });
+    return message;
   }
 }
 var NO_LOGIN = {
@@ -14585,64 +15450,104 @@ var failedOutput = (state) => ({
   code: "denied",
   status: "failed",
   siteUrl: state.siteUrl,
-  message: "WordPress came back without granting access (the approval was declined, or the 10-minute window ran out). Run `puffergo login <siteUrl>` again."
+  message: "WordPress came back without granting access (the approval was declined, or the 10-minute window ran out). Run `puffergo login <siteUrl>` again. If the callback is blocked by a WAF or a local proxy, use the fallback: have the customer generate an Application Password in wp-admin, write it to a file, then run `puffergo login app-password --site <url> --file <path> --user <username>` \u2014 the AI passes only the path, never the password."
 });
+async function findLoginCard(siteUrl) {
+  try {
+    const host = new URL(siteUrl).hostname.replace(/^www\./i, "");
+    const desktop = join13(homedir3(), "Desktop");
+    const names = await readdir6(desktop);
+    const cards = names.filter((n) => /登录信息.*\.txt$/i.test(n));
+    return cards.find((n) => n.includes(host)) ?? cards.find((n) => host.split(".").some((part) => part.length > 2 && n.includes(part))) ?? null;
+  } catch {
+    return null;
+  }
+}
+function loginScript(authorizeUrl, cardName) {
+  const file = cardName ? `**${cardName}**` : "\u684C\u9762\u4E0A\u90A3\u4E2A\u300C**<\u57DF\u540D>-\u767B\u5F55\u4FE1\u606F.txt**\u300D\u6587\u4EF6";
+  return [
+    "**\u6388\u6743\u9875\u9762\u5DF2\u7ECF\u5728\u4F60\u7684\u6D4F\u89C8\u5668\u91CC\u81EA\u52A8\u6253\u5F00\u4E86**\uFF0C\u8BF7\u5728\u90A3\u4E2A\u7A97\u53E3\u91CC\u64CD\u4F5C\uFF0C\u4E0D\u7528\u56DE\u5230\u8FD9\u91CC\u3002",
+    "",
+    `> **\u2460 \u5982\u679C\u770B\u5230 WordPress \u767B\u5F55\u9875**\uFF08\u6709 Username / Password \u4E24\u4E2A\u8F93\u5165\u6846\uFF09\u2014\u2014**\u8FD9\u662F\u6B63\u5E38\u7684\uFF0C\u4E0D\u662F\u51FA\u9519**\u3002\u8D26\u53F7\u548C\u5BC6\u7801\u5728\u4F60\u7535\u8111\u684C\u9762\u7684 ${file} \u91CC\uFF0C\u6253\u5F00\u5B83\uFF0C\u628A\u91CC\u9762\u7684**\u7528\u6237\u540D**\u548C**\u5BC6\u7801**\u590D\u5236\u8FC7\u6765\u586B\u8FDB\u53BB\u3002**\u8BB0\u5F97\u52FE\u4E0A Remember Me**\uFF0C\u4EE5\u540E\u5C31\u4E0D\u7528\u518D\u767B\u5F55\u4E86\u3002\u65C1\u8FB9\u90A3\u5F20\u793A\u610F\u56FE\u6807\u4E86\u8981\u586B\u7684\u56DB\u4E2A\u4F4D\u7F6E\u3002`,
+    "",
+    "> **\u2461 \u767B\u5F55\u4E4B\u540E\u4F1A\u770B\u5230\u300CPufferGo AI \u60F3\u8981\u8BBF\u95EE\u4F60\u7684\u8D26\u6237\u300D\u8FD9\u7C7B\u63D0\u793A\u2014\u2014\u70B9 Approve / \u6279\u51C6\u3002** \u70B9\u5B8C\u5C31\u5B8C\u6210\u4E86\uFF0C\u53EF\u4EE5\u5173\u6389\u90A3\u4E2A\u9875\u9762\u3002",
+    "",
+    `> **\u2462 \u5982\u679C\u6D4F\u89C8\u5668\u6CA1\u5F39\u51FA\u6765\u3001\u88AB\u4E0D\u5C0F\u5FC3\u5173\u6389\u4E86\uFF0C\u6216\u8005\u4F60\u60F3\u7528\u53E6\u4E00\u4E2A\u6D4F\u89C8\u5668**\uFF1A\u56DE\u5230\u8FD9\u4E2A\u804A\u5929\u7A97\u53E3\uFF0C**\u70B9\u8FD9\u4E2A\u94FE\u63A5** ${authorizeUrl} \u2014\u2014\u4E5F\u53EF\u4EE5**\u590D\u5236\u6574\u4E2A\u94FE\u63A5**\u7C98\u8D34\u5230\u6D4F\u89C8\u5668\u5730\u5740\u680F\u3002\u94FE\u63A5 10 \u5206\u949F\u5185\u6709\u6548\u3002`,
+    "",
+    'Show the login-page illustration from the skill\'s `images/wp-login-annotated.png` next to step \u2460 \u2014 customers recognise the screen far faster than a description, and it makes "you are supposed to see this" unmistakable.',
+    "Never open `authorizeUrl` in your own built-in browser: the callback must land in the customer's browser on this machine.",
+    "Then run `puffergo login status` IMMEDIATELY \u2014 it waits for the click and answers by itself, so do NOT ask the customer to report back. If it returns `waiting`, say you are still waiting and run it again."
+  ].join("\n");
+}
 async function cmdLogin(dir2, siteArg) {
-  if (!siteArg) return { ok: false, code: "error", message: "usage: puffergo login <siteUrl>" };
+  if (!siteArg) return { ok: false, code: "usage", message: LOGIN_USAGE };
   let siteUrl;
   try {
     siteUrl = normalizeSiteUrl(siteArg);
-  } catch {
-    return { ok: false, code: "error", message: `Not a valid site URL: ${siteArg}` };
+  } catch (e) {
+    return {
+      ok: false,
+      code: "bad_url",
+      message: `${e instanceof Error ? e.message : String(e)} \u2014 \`puffergo login\` needs a real site URL, e.g. \`puffergo login https://example.com\`. Nothing was changed.`
+    };
   }
+  const previous = await readLoginState();
+  const replaced = previous && previous.status === "pending" && Date.now() < previous.startedAt + WAIT_MS ? { siteUrl: previous.siteUrl, port: previous.port } : null;
   const port = await pickCallbackPort();
   await writeLoginState({ siteUrl, status: "pending", startedAt: Date.now(), port });
-  const handshakeDir = await mkdtemp(join11(tmpdir2(), "puffergo-login-"));
-  const handshake = join11(handshakeDir, "authorize-url");
-  const child = spawn2(
-    process.execPath,
-    [...process.execArgv, process.argv[1], "__login-wait", siteUrl, handshake, dir2, String(port)],
-    { detached: true, stdio: "ignore", windowsHide: true }
-  );
-  child.unref();
-  let spawnError = "";
-  child.on("error", (e) => {
-    spawnError = e.message;
-  });
+  const handshakeDir = await mkdtemp(join13(tmpdir2(), "puffergo-login-"));
+  const handshake = join13(handshakeDir, "authorize-url");
+  const waiter = spawnWaiter(siteUrl, handshake, dir2, port);
   let authorizeUrl = "";
   for (let i = 0; i < 100 && !authorizeUrl; i++) {
     await new Promise((r) => setTimeout(r, 100));
     authorizeUrl = await readHandshake(handshake);
   }
-  await rm3(handshakeDir, { recursive: true, force: true });
+  await rm4(handshakeDir, { recursive: true, force: true });
   if (!authorizeUrl) {
     await writeLoginState({ siteUrl, status: "failed", startedAt: Date.now(), port });
     return {
       ok: false,
       code: "error",
-      message: `Could not start the local authorization listener.${spawnError ? ` ${spawnError}` : ""}`
+      message: `Could not start the local authorization listener.${waiter.error ? ` ${waiter.error}` : ""} The waiter log is at ${waiter.logFile}. You can still authorize without a listener: have the customer open the authorize page, approve, then copy the address bar (it starts with http://127.0.0.1:) into a text file and run \`puffergo login from-url --site <url> --file <path>\`.`
     };
   }
   await writeActiveDomain(dir2, siteUrl);
   openBrowser(authorizeUrl);
-  process.stderr.write("\u5DF2\u5728\u6D4F\u89C8\u5668\u6253\u5F00 WordPress \u6388\u6743\u9875\uFF1A\u8BF7\u5728\u9875\u9762\u4E0A\u70B9\u300C\u6279\u51C6\u300D\uFF0C\u5B8C\u6210\u540E\u56DE\u5230\u8FD9\u91CC\u3002\n");
+  const cardName = await findLoginCard(siteUrl);
+  process.stderr.write("\u5DF2\u5728\u6D4F\u89C8\u5668\u6253\u5F00 WordPress \u6388\u6743\u9875\uFF1A\u5982\u9700\u767B\u5F55\uFF0C\u8D26\u53F7\u5BC6\u7801\u5728\u684C\u9762\u7684\u767B\u5F55\u4FE1\u606F\u6587\u4EF6\u91CC\u3002\n");
+  const boundPort = Number(new URL(authorizeUrl).port) || port;
+  const pid = await readPid(waiter.pidFile);
+  const waiterAlive = pid ? processAlive(pid) : false;
+  const listening = boundPort > 0 && await portIsHeld(boundPort);
   return {
     ok: true,
     pending: true,
     siteUrl,
     authorizeUrl,
-    next: "Send `authorizeUrl` to the user verbatim too \u2014 the page may not have opened, or opened somewhere they cannot paste into. Never open it in your own built-in browser: the callback comes back to this machine, so it has to be the user's own browser. Tell them the authorization page is open and to click Approve (logging in to WordPress first if asked), then run `puffergo login status` right away \u2014 it waits for the click and answers by itself, so never ask the user to report back. If it returns `waiting`, tell the user you are still waiting and run it again. The link stays valid for 10 minutes."
+    listener: {
+      alive: listening,
+      port: boundPort,
+      pid,
+      pidAlive: waiterAlive,
+      logFile: waiter.logFile,
+      note: listening ? "A process outside this command owns the callback port, so the click will be received even after this command returns." : "Nothing is holding the callback port. Run `puffergo login status` right now \u2014 it takes the port over itself and waits \u2014 and run it again as soon as it returns. Do NOT tell the customer to click before that command is running."
+    },
+    ...replaced ? { replaced } : {},
+    ...cardName ? { loginCard: cardName } : {},
+    script: loginScript(authorizeUrl, cardName),
+    next: listening ? 'Send `script` to the customer as your next message \u2014 it already covers the main route (the browser we just opened) and the fallback (the link in chat). The listener outlives this command, so the customer can click whenever they get there; still run `puffergo login status` to hear about it. Do not shorten the script to "click Approve": the customer may be looking at a LOGIN page, not the approval screen.' : "The listener did not survive. Run `puffergo login status` NOW (it takes the callback port over and waits up to a minute) and re-run it while the customer clicks. If that also reports `tookover`, stop trying \u2014 run `puffergo login doctor` and switch to the no-listener route rather than asking the customer to click again."
   };
 }
 async function writeHandshake(path, value) {
   const tmp = `${path}.tmp`;
-  await writeFile11(tmp, value, "utf8");
+  await writeFile13(tmp, value, "utf8");
   await rename2(tmp, path);
 }
 async function readHandshake(path) {
   if (!existsSync13(path)) return "";
   try {
-    return (await readFile16(path, "utf8")).trim();
+    return (await readFile17(path, "utf8")).trim();
   } catch {
     return "";
   }
@@ -14659,6 +15564,14 @@ async function cmdLoginStatus(dir2, waitSeconds) {
     } else if (outcome === "approved" || outcome === "denied") {
       const after = await readLoginState() ?? state;
       return outcome === "approved" ? approvedOutput(after) : failedOutput(after);
+    } else if (outcome === "grant_failed") {
+      return {
+        ok: false,
+        code: "grant_failed",
+        siteUrl: state.siteUrl,
+        message: `WordPress \u786E\u5B9E\u6279\u51C6\u4E86\uFF0C\u4F46\u672C\u673A\u6CA1\u80FD\u628A\u51ED\u636E\u5199\u5230\u78C1\u76D8\uFF0C\u6240\u4EE5\u8FD9\u6B21\u6388\u6743\u4F5C\u5E9F\u4E86\u3002\u518D\u770B\u4E00\u6B21\u78C1\u76D8\u7A7A\u95F4\u548C ~/.puffergo \u7684\u5199\u6743\u9650\uFF0C\u7136\u540E\u91CD\u65B0\u8FD0\u884C \`puffergo login ${state.siteUrl}\`\u3002\u522B\u518D\u8BA9\u5BA2\u6237\u70B9\u4E00\u6B21\u6279\u51C6\u2014\u2014\u70B9\u4E86\u4E5F\u5B58\u4E0D\u4E0B\u6765\u3002`,
+        next: "Diagnose the write failure (disk space / permissions on ~/.puffergo), then run `puffergo login <siteUrl>` again. Do not ask the customer to approve again until the cause is fixed."
+      };
     } else if (outcome === "expired") {
       await finishLogin(state.siteUrl, dir2, null, state.port);
       return failedOutput(state);
@@ -14672,12 +15585,33 @@ async function cmdLoginStatus(dir2, waitSeconds) {
         next: "Run `puffergo login <siteUrl>` again and send the user the new link."
       };
     } else {
+      const latest = await readLoginState() ?? state;
+      if (latest.status !== "pending") {
+        return latest.status === "approved" ? approvedOutput(latest) : failedOutput(latest);
+      }
+      const takeovers = (latest.takeovers ?? 0) + 1;
+      await writeLoginState({ ...latest, takeovers });
+      if (takeovers >= 2) {
+        return {
+          ok: false,
+          code: "callback_unreliable",
+          status: "waiting",
+          siteUrl: latest.siteUrl,
+          takeovers,
+          message: "\u8FDE\u7EED\u4E24\u6B21\u5360\u4F4F\u56DE\u8C03\u7AEF\u53E3\u90FD\u6CA1\u7B49\u5230\u56DE\u4F20\u2014\u2014\u8FD9\u4E2A\u73AF\u5883\u91CC\u6D4F\u89C8\u5668\u56DE\u4F20\u786E\u5B9E\u6536\u4E0D\u5230\uFF0C\u518D\u8BA9\u5BA2\u6237\u70B9\u7B2C\u4E09\u6B21\u6CA1\u6709\u610F\u4E49\uFF0C\u90A3\u4E0D\u662F\u4ED6\u70B9\u9519\u3002",
+          next: `Stop asking for clicks. Pick a listener-free route:
+  (a) If the customer's browser still has the callback URL in its address bar (it starts with http://127.0.0.1: and contains &password=), have them copy that WHOLE line into a text file on their machine, then run \`puffergo login from-url --site ${latest.siteUrl} --file <path>\`. You pass only the path \u2014 the password never enters your context.
+  (b) Otherwise have them generate an Application Password in wp-admin \u2192 Users \u2192 Profile \u2192 Application Passwords, write it to a file, and run \`puffergo login app-password --site ${latest.siteUrl} --file <path> --user <username>\`.`
+        };
+      }
       return {
         ok: true,
         status: "waiting",
-        siteUrl: state.siteUrl,
+        siteUrl: latest.siteUrl,
         tookOver: true,
-        next: "\u672C\u673A\u63A5\u542C\u7684\u8FDB\u7A0B\u4E4B\u524D\u88AB\u6253\u65AD\u8FC7\uFF0C\u5BA2\u6237\u90A3\u4E00\u6B21\u70B9\u51FB\uFF08\u5982\u679C\u5DF2\u7ECF\u70B9\u4E86\uFF09\u6CA1\u6709\u9001\u5230\u3002\u8BF7\u5BA2\u6237\u56DE\u5230\u8FD8\u5F00\u7740\u7684\u90A3\u4E2A\u6388\u6743\u9875\uFF0C\u518D\u70B9\u4E00\u6B21\u300C\u6279\u51C6\u300D\u2014\u2014\u5C31\u662F\u518D\u70B9\u4E00\u4E0B\uFF0C\u4E0D\u7528\u91CD\u65B0\u767B\u5F55\u3001\u4E0D\u7528\u590D\u5236\u4EFB\u4F55\u4E1C\u897F\uFF1B\u7136\u540E\u9A6C\u4E0A\u518D\u8FD0\u884C `puffergo login status`\u3002"
+        takeovers,
+        listener: { alive: false, note: "The callback port was held by this command and released on return." },
+        next: `\u7A97\u53E3\u4E3B\u5DF2\u7ECF\u5173\u6389\u4E86\uFF0C\u5BA2\u6237\u90A3\u4E00\u77AC\u95F4\u70B9\u7684\u8BDD\u6CA1\u9001\u5230\uFF08\u4E0D\u662F\u4ED6\u70B9\u9519\uFF0C\u4E5F\u4E0D\u662F\u7F51\u7AD9\u7684\u95EE\u9898\uFF09\u3002\u9A6C\u4E0A\u518D\u8FD0\u884C\u4E00\u6B21 \`puffergo login status\` \u2014\u2014 \u5B83\u6BCF\u4E00\u8F6E\u90FD\u4F1A\u91CD\u65B0\u5360\u4F4F\u56DE\u8C03\u7AEF\u53E3\uFF1B\u53EA\u8981\u5B83\u8FD8\u5728\u8DD1\uFF0C\u5BA2\u6237\u70B9\u300C\u6279\u51C6\u300D\u5C31\u4E00\u5B9A\u6536\u5F97\u5230\u3002**\u8FD9\u662F\u6700\u540E\u4E00\u6B21\u5C1D\u8BD5**\uFF1A\u5982\u679C\u8FD9\u6B21\u8FD8\u662F \`tookover\`\uFF0C\u547D\u4EE4\u4F1A\u76F4\u63A5\u544A\u8BC9\u4F60\u6539\u7528\u4E0D\u9700\u8981\u76D1\u542C\u7684\u8DEF\u5B50\uFF0C\u522B\u518D\u8BA9\u5BA2\u6237\u70B9\u3002`
       };
     }
   }
@@ -14694,7 +15628,12 @@ async function cmdLoginStatus(dir2, waitSeconds) {
     ok: true,
     status: "waiting",
     siteUrl: state.siteUrl,
-    next: "The user has not clicked Approve yet. Tell them you are still waiting on that browser page, then run `puffergo login status` again."
+    listener: {
+      alive: state.port ? await portIsHeld(state.port) : false,
+      port: state.port,
+      note: "This command held the port while it ran; it is released now that you have the answer."
+    },
+    next: `Still waiting \u2014 and the port is free again now that this command returned, so a click made in the next few seconds would be lost. Run \`puffergo login status\` again immediately, and keep doing that until it says approved. Each run listens for about a minute. Do NOT ask the customer to report back \u2014 say you are watching the page and keep the loop going.`
   };
 }
 async function holdCallbackPort(state, dir2, waitMs) {
@@ -14705,6 +15644,7 @@ async function holdCallbackPort(state, dir2, waitMs) {
   let timedOut = false;
   let moved = false;
   let bindFailed = false;
+  let grantFailed = "";
   const abort = new AbortController();
   const creds = await runAuthorizeServer2(
     state.siteUrl,
@@ -14722,17 +15662,20 @@ async function holdCallbackPort(state, dir2, waitMs) {
       onTimeout: () => {
         timedOut = true;
       },
-      signal: abort.signal
+      signal: abort.signal,
+      onGrant: async (granted) => {
+        const problem = await finishLogin(state.siteUrl, dir2, granted, port);
+        if (problem) grantFailed = problem;
+        return problem;
+      }
     }
   ).catch(() => {
     bindFailed = true;
     return null;
   });
   if (moved || bindFailed) return "moved";
-  if (creds) {
-    await finishLogin(state.siteUrl, dir2, creds, port);
-    return "approved";
-  }
+  if (creds) return "approved";
+  if (grantFailed) return "grant_failed";
   return timedOut ? "tookover" : "denied";
 }
 async function runAuthorizeServer2(siteUrl, onListening, opts) {
@@ -14740,7 +15683,9 @@ async function runAuthorizeServer2(siteUrl, onListening, opts) {
   const run3 = mod.runAuthorizeServer ?? mod.default.runAuthorizeServer;
   return run3(siteUrl, onListening, opts);
 }
-async function cmdLoginWait(siteUrl, handshake, dir2, portArg) {
+async function cmdLoginWait(siteUrl, handshake, dir2, portArg, pidFile) {
+  if (pidFile) await writeFile13(pidFile, String(process.pid), "utf8").catch(() => {
+  });
   const wanted = Number(portArg) > 0 ? Number(portArg) : void 0;
   let bound = wanted;
   const creds = await runAuthorizeServer2(
@@ -14750,9 +15695,15 @@ async function cmdLoginWait(siteUrl, handshake, dir2, portArg) {
       if (wanted && port !== wanted) void rebindLoginState(siteUrl, port);
       void writeHandshake(handshake, authorizeUrl);
     },
-    { appName: "PufferGo AI", timeoutMs: WAIT_MS, resultPage: RESULT_PAGE, port: wanted }
+    {
+      appName: "PufferGo AI",
+      timeoutMs: WAIT_MS,
+      resultPage: RESULT_PAGE,
+      port: wanted,
+      onGrant: (granted) => finishLogin(siteUrl, dir2, granted, bound)
+    }
   );
-  await finishLogin(siteUrl, dir2, creds, bound);
+  if (!creds) await finishLogin(siteUrl, dir2, null, bound);
 }
 async function rebindLoginState(siteUrl, bound) {
   const current = await readLoginState();
@@ -14764,11 +15715,247 @@ async function rebindLoginState(siteUrl, bound) {
     port: bound
   });
 }
+async function cmdLoginAppPassword(dir2, siteArg, fileArg, userArg) {
+  if (!siteArg || !fileArg) {
+    return {
+      ok: false,
+      code: "usage",
+      message: "usage: puffergo login app-password --site <url> --file <path> [--user <username>]"
+    };
+  }
+  let siteUrl;
+  try {
+    siteUrl = normalizeSiteUrl(siteArg);
+  } catch {
+    return { ok: false, code: "error", message: `Not a valid site URL: ${siteArg}` };
+  }
+  let raw;
+  try {
+    raw = (await readFile17(fileArg, "utf8")).trim();
+  } catch (e) {
+    return {
+      ok: false,
+      code: "file_unreadable",
+      message: `Cannot read the password file (${e.message}). The customer should write it to a plain text file on his own computer and give you the path.`
+    };
+  }
+  if (!raw) {
+    return { ok: false, code: "file_empty", message: "The password file is empty." };
+  }
+  let username = (userArg ?? "").trim();
+  let appPassword = raw;
+  if (raw.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(raw);
+      const u = typeof parsed.username === "string" ? parsed.username.trim() : "";
+      const p = typeof parsed.appPassword === "string" ? parsed.appPassword.trim() : "";
+      if (!p) return { ok: false, code: "file_empty", message: "The JSON file has no appPassword." };
+      username = username || u;
+      appPassword = p;
+    } catch {
+      return { ok: false, code: "bad_file", message: "The file starts with `{` but is not valid JSON." };
+    }
+  }
+  appPassword = appPassword.replace(/\s+/g, "");
+  if (!username) {
+    return {
+      ok: false,
+      code: "missing_user",
+      message: "Add `--user <username>` \u2014 the WordPress login the customer used to generate the Application Password."
+    };
+  }
+  return verifyAndSave(dir2, siteUrl, username, appPassword, "app-password-file");
+}
+async function verifyAndSave(dir2, siteUrl, username, appPassword, route) {
+  const auth = `Basic ${Buffer.from(`${username}:${appPassword}`).toString("base64")}`;
+  let verified = false;
+  let detail = "";
+  try {
+    const res = await nodeNetwork.request({
+      method: "GET",
+      url: `${siteUrl}/wp-json/wp/v2/users/me?context=edit&_fields=id,username,capabilities`,
+      headers: { Authorization: auth }
+    });
+    verified = res.status >= 200 && res.status < 300;
+    detail = verified ? "" : ` WordPress answered ${res.status}.`;
+  } catch (e) {
+    detail = ` ${e.message}`;
+  }
+  if (!verified) {
+    return {
+      ok: false,
+      code: "invalid_app_password",
+      message: `That Application Password did not work.${detail} Ask the customer to re-check the username and generate a new one in wp-admin \u2192 Users \u2192 Profile \u2192 Application Passwords \u2014 never guess or retry with variations.`
+    };
+  }
+  await upsertCredential({ siteUrl, username, appPassword });
+  await writeActiveDomain(dir2, siteUrl);
+  await writeLoginState({ siteUrl, status: "approved", startedAt: Date.now(), username });
+  return {
+    ok: true,
+    status: "approved",
+    siteUrl,
+    username,
+    route,
+    next: `Authorization is done and the credential was verified against ${siteUrl} and saved on this machine. The password was read from the customer's file and never printed. Tell the customer they can delete that file now, then continue with \`puffergo site setup\`.`
+  };
+}
+async function cmdLoginFromUrl(dir2, siteArg, fileArg, userArg) {
+  if (!siteArg || !fileArg) {
+    return {
+      ok: false,
+      code: "usage",
+      message: "usage: puffergo login from-url --site <url> --file <path> [--user <username>]"
+    };
+  }
+  let siteUrl;
+  try {
+    siteUrl = normalizeSiteUrl(siteArg);
+  } catch (e) {
+    return { ok: false, code: "bad_url", message: `${e instanceof Error ? e.message : String(e)}` };
+  }
+  let raw;
+  try {
+    raw = (await readFile17(fileArg, "utf8")).trim();
+  } catch (e) {
+    return {
+      ok: false,
+      code: "file_unreadable",
+      message: `Cannot read the file (${e.message}). The customer should paste the address bar into a plain text file and give you the path.`
+    };
+  }
+  if (!raw) {
+    return { ok: false, code: "file_empty", message: "The file is empty. Paste the whole address-bar line into it." };
+  }
+  let params;
+  try {
+    const asUrl = raw.includes("://") ? raw : `http://127.0.0.1/?${raw.replace(/^\?/, "")}`;
+    params = new URL(asUrl).searchParams;
+  } catch {
+    return {
+      ok: false,
+      code: "bad_file",
+      message: "That does not look like the callback URL. It should start with `http://127.0.0.1:` and contain `site_url=`, `user_login=` and `password=`."
+    };
+  }
+  const appPassword = (params.get("password") ?? "").replace(/\s+/g, "");
+  if (!appPassword) {
+    return {
+      ok: false,
+      code: "no_password",
+      message: "No `password=` in that text. Copy the URL the browser landed on AFTER clicking approve \u2014 the one that starts with `http://127.0.0.1:` and carries site_url / user_login / password."
+    };
+  }
+  const username = (userArg ?? params.get("user_login") ?? "").trim();
+  if (!username) {
+    return {
+      ok: false,
+      code: "missing_user",
+      message: "Add `--user <username>` \u2014 the WordPress login the approval was made with."
+    };
+  }
+  return verifyAndSave(dir2, siteUrl, username, appPassword, "callback-url-file");
+}
 async function forgetLoginState(siteUrl) {
   const state = await readLoginState();
   if (!state || siteKey(state.siteUrl) !== siteKey(siteUrl)) return false;
-  await rm3(loginStatePath(), { force: true });
+  await rm4(loginStatePath(), { force: true });
   return true;
+}
+async function hasStoredCredential(siteUrl) {
+  const path = process.env.PUFFERGO_CONFIG || join13(PUFFERGO_DIR, "credentials.json");
+  if (!existsSync13(path)) return false;
+  try {
+    const raw = JSON.parse(await readFile17(path, "utf8"));
+    const want = siteKey(siteUrl);
+    return Object.keys(raw.sites ?? {}).some((k) => siteKey(k) === want);
+  } catch {
+    return false;
+  }
+}
+async function cmdLoginDoctor() {
+  const state = await readLoginState();
+  const port = state?.port ?? 0;
+  const listening = port > 0 ? await portIsHeld(port) : false;
+  const remainingSec = state ? Math.max(0, Math.round((state.startedAt + WAIT_MS - Date.now()) / 1e3)) : 0;
+  const stored = state ? await hasStoredCredential(state.siteUrl) : false;
+  const base = {
+    ok: true,
+    loginStateFile: loginStatePath(),
+    credentialStore: process.env.PUFFERGO_CONFIG || join13(PUFFERGO_DIR, "credentials.json"),
+    listening: { port, alive: listening }
+  };
+  if (!state) {
+    return {
+      ...base,
+      state: "none",
+      diagnosis: "no-login",
+      message: "\u672C\u673A\u6CA1\u6709\u767B\u5F55\u8BB0\u5F55\uFF1A\u6CA1\u6709\u8FDB\u884C\u4E2D\u7684\u6388\u6743\uFF0C\u4E5F\u6CA1\u6709\u4E0A\u4E00\u6B21\u7684\u5931\u8D25\u8BB0\u5F55\u3002\u8FD0\u884C `puffergo login <\u7AD9\u70B9\u5730\u5740>` \u5F00\u59CB\u4E00\u6B21\u3002"
+    };
+  }
+  const common = {
+    ...base,
+    state: state.status,
+    siteUrl: state.siteUrl,
+    siteKey: siteKey(state.siteUrl),
+    port,
+    startedAgoSec: Math.max(0, Math.round((Date.now() - state.startedAt) / 1e3)),
+    windowRemainingSec: remainingSec,
+    credentialSaved: stored,
+    takeovers: state.takeovers ?? 0
+  };
+  if (state.status === "approved") {
+    return stored ? {
+      ...common,
+      diagnosis: "ready",
+      message: "\u6388\u6743\u662F\u597D\u7684\uFF1A\u72B6\u6001\u5DF2\u6279\u51C6\uFF0C\u51ED\u636E\u4E5F\u5DF2\u7ECF\u5728\u672C\u673A\u5B58\u597D\u4E86\u3002\u53EF\u4EE5\u76F4\u63A5\u7528 `puffergo site setup` \u6216 `pages find` \u9A8C\u8BC1\u8FDE\u901A\u3002"
+    } : {
+      ...common,
+      diagnosis: "state-without-credential",
+      message: "\u72B6\u6001\u6587\u4EF6\u8BF4\u300C\u5DF2\u6279\u51C6\u300D\uFF0C\u4F46\u51ED\u636E\u91CC\u6839\u672C\u6CA1\u6709\u8FD9\u4E2A\u7AD9\u2014\u2014\u8FD9\u5C31\u662F\u6388\u6743\u9875\u663E\u793A \u2705 \u800C\u5B9E\u9645\u6CA1\u5B58\u4E0B\u6765\u7684\u60C5\u51B5\u3002\u91CD\u65B0\u8FD0\u884C `puffergo login <\u7AD9\u70B9\u5730\u5740>`\uFF1B\u5982\u679C\u53CD\u590D\u51FA\u73B0\uFF0C\u68C0\u67E5 ~/.puffergo \u7684\u5199\u6743\u9650\u548C\u78C1\u76D8\u7A7A\u95F4\u3002",
+      next: "Run `puffergo login <siteUrl>` again. If it repeats, check write permission on ~/.puffergo."
+    };
+  }
+  if (state.status === "failed") {
+    return {
+      ...common,
+      diagnosis: "failed",
+      message: "\u4E0A\u4E00\u6B21\u6388\u6743\u5931\u8D25\u6216\u88AB\u62D2\u7EDD\u4E86\uFF08\u4E5F\u53EF\u80FD\u8FC7\u4E86 10 \u5206\u949F\u7A97\u53E3\uFF09\u3002\u91CD\u65B0\u8FD0\u884C `puffergo login <\u7AD9\u70B9\u5730\u5740>`\uFF0C\u628A\u65B0\u94FE\u63A5\u53D1\u7ED9\u5BA2\u6237\u3002",
+      next: "Run `puffergo login <siteUrl>` again."
+    };
+  }
+  if (remainingSec <= 0) {
+    return {
+      ...common,
+      diagnosis: "expired",
+      message: "\u6388\u6743\u7A97\u53E3\u5DF2\u7ECF\u8FC7\u4E86 10 \u5206\u949F\uFF0C\u90A3\u4E2A\u94FE\u63A5\u73B0\u5728\u662F\u5E9F\u7684\u3002\u91CD\u65B0\u8FD0\u884C `puffergo login <\u7AD9\u70B9\u5730\u5740>`\uFF0C\u628A\u65B0\u94FE\u63A5\u53D1\u7ED9\u5BA2\u6237\u3002",
+      next: "Run `puffergo login <siteUrl>` again \u2014 the old link is dead."
+    };
+  }
+  const takeovers = state.takeovers ?? 0;
+  if (takeovers >= 2) {
+    return {
+      ...common,
+      diagnosis: "callback-unreachable",
+      message: `\u5DF2\u7ECF ${takeovers} \u6B21\u5360\u4F4F\u7AEF\u53E3\u90FD\u6CA1\u7B49\u5230\u56DE\u4F20\uFF1A\u8FD9\u4E2A\u73AF\u5883\u7684\u6D4F\u89C8\u5668\u56DE\u4F20\u786E\u5B9E\u6536\u4E0D\u5230\uFF0C\u518D\u70B9\u4E5F\u6CA1\u6709\u610F\u4E49\u3002`,
+      next: `Switch to a listener-free route \u2014 do not ask for another click.
+  (a) If the callback URL is still in the customer's address bar (starts with http://127.0.0.1: and has &password=), have them copy that whole line into a text file and run \`puffergo login from-url --site ${state.siteUrl} --file <path>\`.
+  (b) Otherwise \`puffergo login app-password --site ${state.siteUrl} --file <path> --user <username>\`.`
+    };
+  }
+  if (listening) {
+    return {
+      ...common,
+      diagnosis: "listening",
+      message: `\u6709\u4E00\u4E2A\u8FDB\u7A0B\u6B63\u5728 ${port} \u7AEF\u53E3\u542C\u7740\uFF0C\u5BA2\u6237\u73B0\u5728\u70B9\u300C\u6279\u51C6\u300D\u5C31\u80FD\u6536\u5230\u3002\u4FDD\u6301 \`puffergo login status\` \u5728\u8DD1\u5C31\u884C\uFF0C\u522B\u8BA9\u5BA2\u6237\u53CD\u590D\u70B9\u3002`
+    };
+  }
+  return {
+    ...common,
+    diagnosis: "nobody-listening",
+    message: "\u6CA1\u6709\u4EFB\u4F55\u8FDB\u7A0B\u5728\u542C\u56DE\u8C03\u7AEF\u53E3\u2014\u2014\u5BA2\u6237\u73B0\u5728\u70B9\u300C\u6279\u51C6\u300D\u4F1A\u4E22\u6389\uFF08\u8FD9\u4E0D\u662F\u4ED6\u70B9\u9519\uFF0C\u4E5F\u4E0D\u662F\u7F51\u7AD9\u7684\u95EE\u9898\uFF09\u3002\u7ACB\u523B\u8FD0\u884C `puffergo login status`\uFF08\u5B83\u4F1A\u5360\u7528\u7AEF\u53E3\u5E76\u7B49\u5F85\u7EA6\u4E00\u5206\u949F\uFF09\uFF0C\u5728\u5B83\u8DD1\u8D77\u6765\u4E4B\u540E\u518D\u8BA9\u5BA2\u6237\u70B9\uFF1B\u5B83\u6BCF\u8FD4\u56DE\u4E00\u6B21\u5C31\u518D\u8DD1\u4E00\u6B21\u3002",
+    next: "Run `puffergo login status` now \u2014 it takes the port over. Only ask the customer to click while it is running."
+  };
 }
 
 // src/lib/logoutCmd.ts
@@ -14831,13 +16018,13 @@ async function cmdLogout(dir2, siteArg, configPath2) {
 
 // src/lib/pagesCmd.ts
 import { existsSync as existsSync16 } from "node:fs";
-import { mkdir as mkdir10, readFile as readFile18, writeFile as writeFile12 } from "node:fs/promises";
-import { dirname as dirname12, join as join13, relative as relative3, resolve as resolve11 } from "node:path";
+import { mkdir as mkdir12, readFile as readFile19, writeFile as writeFile14 } from "node:fs/promises";
+import { dirname as dirname13, join as join15, relative as relative3, resolve as resolve11 } from "node:path";
 
 // src/lib/contentBlocks.ts
 import { existsSync as existsSync15 } from "node:fs";
-import { readFile as readFile17, readdir as readdir5, stat as stat3 } from "node:fs/promises";
-import { dirname as dirname11, join as join12, relative as relative2, resolve as resolve10 } from "node:path";
+import { readFile as readFile18, readdir as readdir7, stat as stat4 } from "node:fs/promises";
+import { dirname as dirname12, join as join14, relative as relative2, resolve as resolve10 } from "node:path";
 
 // src/lib/markdownImages.ts
 import { existsSync as existsSync14 } from "node:fs";
@@ -14885,10 +16072,10 @@ async function blockFiles(dir2, args) {
   for (const a of args) {
     const p = resolve10(dir2, a);
     if (!existsSync15(p)) throw new FileError("file_not_found", `Not found: ${a}`);
-    if ((await stat3(p)).isDirectory()) {
-      const names = (await readdir5(p)).filter((n) => suffixOf(n) && !isOriginal(n)).sort();
+    if ((await stat4(p)).isDirectory()) {
+      const names = (await readdir7(p)).filter((n) => suffixOf(n) && !isOriginal(n)).sort();
       if (!names.length) throw new FileError("file_not_found", `No .md, .html or .json block files in ${a}`);
-      out.push(...names.map((n) => join12(p, n)));
+      out.push(...names.map((n) => join14(p, n)));
     } else {
       if (!suffixOf(p))
         throw new FileError(
@@ -14918,14 +16105,14 @@ async function blocksFromFiles(c, ctx, files, componentData) {
         });
         continue;
       }
-      const text = (await readFile17(file, "utf8")).replace(/\n+$/, "");
+      const text = (await readFile18(file, "utf8")).replace(/\n+$/, "");
       try {
         if (suffix === ".md") {
-          const up = await uploadMarkdownImages(c, cache2, text, dirname11(file));
+          const up = await uploadMarkdownImages(c, cache2, text, dirname12(file));
           uploaded.push(...up.uploaded.map((abs) => relative2(ctx.dir, abs)));
           blocks.push({ type: "prose", markdown: up.markdown });
         } else {
-          const up = await uploadHtmlImages(c, cache2, text, dirname11(file));
+          const up = await uploadHtmlImages(c, cache2, text, dirname12(file));
           uploaded.push(...up.uploaded.map((abs) => relative2(ctx.dir, abs)));
           blocks.push({ type: "static", html: up.html });
         }
@@ -14956,7 +16143,7 @@ async function blockWarnings(dir2, files, blocks) {
     if (suffix === ".json") continue;
     const orig = file.replace(new RegExp(`\\${suffix}$`, "i"), `.orig${suffix}`);
     const words = (t) => suffix === ".md" ? t : t.replace(/<[^>]*>/g, " ");
-    const before = existsSync15(orig) ? words(await readFile17(orig, "utf8")) : "";
+    const before = existsSync15(orig) ? words(await readFile18(orig, "utf8")) : "";
     const w = claimWarning(relative2(dir2, file), blockText2(block2), before);
     if (w) out.push(w);
   }
@@ -14980,7 +16167,7 @@ var editable = (b) => b.kind === "prose" || b.kind === "static" || b.kind === "c
 var SUFFIX_OF_KIND = { prose: ".md", static: ".html", config: ".json" };
 async function componentInput(c, ctx, file) {
   const name = relative3(ctx.dir, file);
-  const read = async (f) => existsSync16(f) ? JSON.parse(await readFile18(f, "utf8")) : null;
+  const read = async (f) => existsSync16(f) ? JSON.parse(await readFile19(f, "utf8")) : null;
   let cf;
   try {
     cf = await read(file);
@@ -14997,7 +16184,7 @@ async function componentInput(c, ctx, file) {
   try {
     for (const { value, set } of configImages(cf.data, cf.schema)) {
       if (!isLocalImage(value)) continue;
-      const abs = [resolve11(dirname12(file), value), resolve11(ctx.dir, value)].find((p) => existsSync16(p));
+      const abs = [resolve11(dirname13(file), value), resolve11(ctx.dir, value)].find((p) => existsSync16(p));
       if (!abs)
         throw new FileError(
           "image_not_found",
@@ -15029,7 +16216,7 @@ async function blocksOf(c, ctx, files) {
   const { blocks, uploaded } = await blocksFromFiles(c, ctx, files, async (file) => {
     const { data, uploaded: up, warnings } = await componentInput(c, ctx, file);
     componentWarnings.push(...warnings);
-    const component = JSON.parse(await readFile18(file, "utf8")).component;
+    const component = JSON.parse(await readFile19(file, "utf8")).component;
     return { component, data, uploaded: up };
   });
   return { blocks, uploaded, warnings: [...await blockWarnings(ctx.dir, files, blocks), ...componentWarnings] };
@@ -15120,11 +16307,11 @@ function cmdGet(ctx) {
         };
       }
       const suffix = SUFFIX_OF_KIND[block2.kind];
-      const file = join13("pages", String(id), `block-${path}${suffix}`);
-      await mkdir10(join13(ctx.dir, "pages", String(id)), { recursive: true });
+      const file = join15("pages", String(id), `block-${path}${suffix}`);
+      await mkdir12(join15(ctx.dir, "pages", String(id)), { recursive: true });
       const text = content.endsWith("\n") ? content : content + "\n";
-      await writeFile12(join13(ctx.dir, file), text, "utf8");
-      await writeFile12(join13(ctx.dir, "pages", String(id), `block-${path}.orig${suffix}`), text, "utf8");
+      await writeFile14(join15(ctx.dir, file), text, "utf8");
+      await writeFile14(join15(ctx.dir, "pages", String(id), `block-${path}.orig${suffix}`), text, "utf8");
       saved.push({ path, file, text: block2.text });
     }
     if (!base)
@@ -15879,8 +17066,8 @@ async function checkRegistration(domain2) {
       return { state: "available", kind: "fresh", kindNote: "\u8FD9\u4E2A\u57DF\u540D\u73B0\u5728\u6CA1\u4EBA\u6301\u6709\uFF0C\u53EF\u4EE5\u6CE8\u518C\u3002", ownerNote };
     if (!res.ok) return { state: "unknown", error: `HTTP ${res.status}`, ownerNote };
     const j = await res.json();
-    const pick = (a) => j.events?.find((e) => e.eventAction === a)?.eventDate?.slice(0, 10);
-    const created2 = pick("registration");
+    const pick2 = (a) => j.events?.find((e) => e.eventAction === a)?.eventDate?.slice(0, 10);
+    const created2 = pick2("registration");
     const ageDays = created2 ? Math.floor((Date.now() - new Date(created2).getTime()) / 864e5) : void 0;
     const kind = ageDays === void 0 ? "unknown" : ageDays < 30 ? "fresh" : "existing";
     let kindNote;
@@ -15895,8 +17082,8 @@ async function checkRegistration(domain2) {
     return {
       state: "registered",
       created: created2,
-      expires: pick("expiration"),
-      changed: pick("last changed"),
+      expires: pick2("expiration"),
+      changed: pick2("last changed"),
       registrar: registrarOf({ entities: j.entities }),
       status: j.status,
       ageDays,
@@ -16581,7 +17768,7 @@ function linkCard(title, url, note) {
 }
 function renderDomainCheckHtml(r) {
   const built = new Date(r.checkedAt);
-  const stamp = Number.isNaN(built.getTime()) ? r.checkedAt : new Intl.DateTimeFormat("zh-CN", {
+  const stamp2 = Number.isNaN(built.getTime()) ? r.checkedAt : new Intl.DateTimeFormat("zh-CN", {
     timeZone: "Asia/Shanghai",
     year: "numeric",
     month: "2-digit",
@@ -17049,7 +18236,7 @@ function renderDomainCheckHtml(r) {
         </svg>
         PUFFERGO \xB7 \u57DF\u540D\u4F53\u68C0
       </div>
-      <div class="stamp">${esc2(r.reportId)} \xB7 ${esc2(stamp)}</div>
+      <div class="stamp">${esc2(r.reportId)} \xB7 ${esc2(stamp2)}</div>
     </div>
     <h1>${esc2(r.domain)}</h1>
     <p class="lede">${unregistered ? "\u4E70\u4E4B\u524D\u7684\u4F53\u68C0\uFF1A\u8FD9\u4E2A\u57DF\u540D\u80FD\u4E0D\u80FD\u6CE8\u518C\u3001\u6709\u6CA1\u6709\u88AB\u524D\u4E3B\u4EBA\u7559\u4E0B\u7684\u6C61\u70B9\u3002" : "\u53EA\u67E5\u4E09\u4EF6\u4E8B\uFF1A\u90AE\u4EF6\u80FD\u4E0D\u80FD\u9001\u5230\u3001\u7AD9\u4F1A\u4E0D\u4F1A\u88AB Google \u62E6\u3001\u8FD9\u4E2A\u57DF\u540D\u662F\u4EC0\u4E48\u6765\u8DEF\u3002"}</p>
@@ -17214,7 +18401,98 @@ async function cmdApi(ctx, configPath2) {
   };
 }
 
+// src/lib/buildCmd.ts
+import { readFile as readFile20 } from "node:fs/promises";
+import { resolve as resolve12 } from "node:path";
+var BUILD_USAGE = "puffergo build <fast|plan <file.json>|status <buildId>|retry <buildId>> [--dir <workdir>] [--site <url>] [--wait <seconds>] [--json <file>]";
+var TERMINAL = /* @__PURE__ */ new Set(["READY", "PARTIAL", "FAILED"]);
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+async function waitForBuild(c, buildId, waitSeconds) {
+  const deadline = Date.now() + waitSeconds * 1e3;
+  let last = {};
+  while (true) {
+    last = await c.getBuild(buildId);
+    if (TERMINAL.has(String(last.status))) return last;
+    if (Date.now() >= deadline) return { ...last, timedOut: true };
+    await sleep(5e3);
+  }
+}
+async function cmdBuild(ctx) {
+  const sub = ctx.positional[0] || "";
+  if (!sub || sub === "help" || sub === "--help" || sub === "-h") {
+    return { ok: false, code: "usage", message: BUILD_USAGE };
+  }
+  try {
+    const c = await client(ctx);
+    if (sub === "status") {
+      const id = ctx.positional[1];
+      if (!id) return { ok: false, code: "usage", message: BUILD_USAGE };
+      return { ok: true, ...await c.getBuild(id) };
+    }
+    if (sub === "retry") {
+      const id = ctx.positional[1];
+      if (!id) return { ok: false, code: "usage", message: BUILD_USAGE };
+      const r = await c.retryBuild(id);
+      const wait2 = Number(ctx.flags.get("wait") ?? 0);
+      const snapshot2 = wait2 > 0 ? await waitForBuild(c, id, wait2) : r;
+      return { ok: true, ...snapshot2 };
+    }
+    let mode;
+    let plan;
+    if (sub === "fast") {
+      mode = "fast";
+    } else if (sub === "plan") {
+      const file = ctx.positional[1];
+      if (!file) return { ok: false, code: "usage", message: BUILD_USAGE };
+      const text = await readFile20(resolve12(ctx.dir, file), "utf8");
+      plan = JSON.parse(text);
+      if (!Array.isArray(plan?.pages) || plan.pages.length === 0) {
+        return { ok: false, code: "bad_plan", message: "plan \u6587\u4EF6\u9700\u8981\u975E\u7A7A pages[]" };
+      }
+      mode = "stepwise";
+    } else {
+      return { ok: false, code: "usage", message: BUILD_USAGE };
+    }
+    const body = { mode, context: {} };
+    if (plan) body.plan = plan;
+    const created2 = await c.createBuild(body);
+    if (!created2?.success || !created2.buildId) {
+      return { ok: false, code: "create_failed", message: created2?.message || "build create failed" };
+    }
+    const wait = Number(ctx.flags.get("wait") ?? 0);
+    if (wait <= 0) {
+      return { ok: true, buildId: created2.buildId, totalSections: created2.totalSections, status: "QUEUED" };
+    }
+    const snapshot = await waitForBuild(c, created2.buildId, wait);
+    const failed = Number(snapshot.failedSections ?? 0);
+    return { ...snapshot, ok: failed === 0 && !snapshot.timedOut };
+  } catch (e) {
+    const site2 = siteErrorOutput(e);
+    if (site2) return site2;
+    if (e instanceof AgentHttpError) return { ...abilityError(e), ok: false };
+    return { ok: false, code: "build_error", message: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 // src/index.ts
+var REEXEC_GUARD = "PUFFERGO_SANDBOX_REEXEC";
+function reexecWithoutSandboxShim() {
+  if (process.env[REEXEC_GUARD] === "1" || !runningUnderSandboxShim()) return;
+  const entry = process.argv[1];
+  if (!entry) return;
+  const env = sandboxFreeEnv();
+  env[REEXEC_GUARD] = "1";
+  const child = spawnSync(
+    process.execPath,
+    [...stripSandboxExecArgv(process.execArgv), entry, ...process.argv.slice(2)],
+    { env, stdio: "inherit" }
+  );
+  if (child.error) return;
+  process.exit(child.status ?? 1);
+}
+reexecWithoutSandboxShim();
 var rawArgv = process.argv.slice(2);
 var group = [
   "products",
@@ -17224,11 +18502,14 @@ var group = [
   "login",
   "logout",
   "site",
+  "plugins",
   "domain",
   "api",
-  "__login-wait"
+  "build",
+  "__login-wait",
+  "__bg-install"
 ].includes(rawArgv[0] ?? "") ? rawArgv[0] : "silo";
-var argv = rawArgv[0] === "silo" || group === "products" || group === "pages" || group === "profile" || group === "chrome" || group === "site" || group === "domain" || group === "api" ? rawArgv.slice(1) : rawArgv;
+var argv = rawArgv[0] === "silo" || group === "products" || group === "pages" || group === "profile" || group === "chrome" || group === "site" || group === "plugins" || group === "domain" || group === "api" || group === "build" ? rawArgv.slice(1) : rawArgv;
 var cmd = argv[0];
 var flags = /* @__PURE__ */ new Map();
 var positional = [];
@@ -17299,7 +18580,7 @@ async function cmdPlan() {
   if (!file) die("usage", "\u7528\u6CD5\uFF1Asilo plan <plan.json>");
   let raw;
   try {
-    raw = await readFile19(file, "utf8");
+    raw = await readFile21(file, "utf8");
   } catch {
     die("file_not_found", `\u672A\u627E\u5230 plan \u6587\u4EF6\uFF1A${file}`);
   }
@@ -17357,7 +18638,7 @@ async function cmdPush2() {
       resolvedBody.set(id, file.body);
       continue;
     }
-    const res = await resolveBodyAssets(file.body, wpAssetUploader(client2, [dirname13(file.path), dir]));
+    const res = await resolveBodyAssets(file.body, wpAssetUploader(client2, [dirname14(file.path), dir]));
     resolvedBody.set(id, res.md);
     if (res.uploaded) {
       await updateNoteBody(file.path, res.md);
@@ -17531,9 +18812,11 @@ async function main() {
       log("puffergo silo <init|plan|push|pull|health|status|view> [--dir <vault>] [--config <path>]");
       log("puffergo login <siteUrl>");
       log("puffergo login status [--wait <seconds>]");
+      log("puffergo login app-password --site <url> --file <path> [--user <username>]");
       log(LOGOUT_USAGE);
       log("puffergo version");
       log(SITE_SETUP_USAGE);
+      log(PLUGINS_USAGE);
       log(DOMAIN_USAGE);
       log(API_USAGE);
       log(PROFILE_USAGE);
@@ -17612,6 +18895,8 @@ async function profile() {
   switch (cmd) {
     case "get":
       return emit(await cmdProfileGet(ctx));
+    case "ask":
+      return emit(await cmdProfileAsk(ctx));
     case "check":
       return emit(await cmdProfileCheck(ctx));
     case "set":
@@ -17638,15 +18923,20 @@ async function chrome() {
 async function apiGroup() {
   return emit(await cmdApi({ dir, flags, positional: [cmd, ...positional] }, configPath));
 }
-var SITE_USAGE = SITE_SETUP_USAGE;
+var SITE_USAGE = [SITE_SETUP_USAGE, SITE_PASSWORD_USAGE].join("\n");
 async function site() {
   const ctx = { dir, flags, positional };
   switch (cmd) {
     case "setup":
       return emit(await cmdSiteSetup(ctx));
+    case "password":
+      return emit(await cmdSitePassword(ctx));
     default:
       return emit({ ok: false, code: "usage", message: SITE_USAGE });
   }
+}
+async function plugins() {
+  return emit(await cmdPlugins(cmd, { dir, flags, positional }));
 }
 async function domain() {
   const ctx = { dir, flags, positional };
@@ -17658,8 +18948,8 @@ async function domain() {
       const wantHtml = flags.get("html");
       if (wantHtml !== void 0) {
         const path = wantHtml === "true" ? `${res.domain}-domain-check.html` : wantHtml;
-        await mkdir11(dirname13(path), { recursive: true });
-        await writeFile13(path, renderDomainCheckHtml(res), "utf8");
+        await mkdir13(dirname14(path), { recursive: true });
+        await writeFile15(path, renderDomainCheckHtml(res), "utf8");
         return emit({ ok: true, domain: res.domain, html: path, reportId: res.reportId, checkedAt: res.checkedAt });
       }
       log(renderDomainCheck(res));
@@ -17669,9 +18959,26 @@ async function domain() {
       return emit({ ok: false, code: "usage", message: DOMAIN_USAGE });
   }
 }
-var run2 = group === "products" ? products : group === "pages" ? pages : group === "profile" ? profile : group === "chrome" ? chrome : group === "site" ? site : group === "domain" ? domain : group === "api" ? apiGroup : group === "login" ? async () => emit(
-  positional[0] === "status" ? await cmdLoginStatus(dir, flags.get("wait")) : await cmdLogin(dir, positional[0] ?? argv[1])
-) : group === "logout" ? async () => emit(await cmdLogout(dir, positional[0], configPath)) : group === "__login-wait" ? () => cmdLoginWait(argv[1], argv[2], argv[3], argv[4]) : main;
+var run2 = group === "products" ? products : group === "pages" ? pages : group === "profile" ? profile : group === "chrome" ? chrome : group === "site" ? site : group === "plugins" ? plugins : group === "domain" ? domain : group === "api" ? apiGroup : group === "build" ? async () => (
+  // cmdBuild 把子命令（fast/plan/status/retry）当 positional[0] 读，
+  // 而解析阶段已把子命令吃成 cmd，这里补回去。
+  emit(await cmdBuild({ dir, flags, positional: [cmd, ...positional] }))
+) : group === "login" ? async () => emit(
+  // `--help` / `-h` / a bare `help` must never reach cmdLogin: it would be taken as a
+  // site URL, overwrite the shared login state with `https://--help` and burn the
+  // callback port the real flow is counting on.
+  flags.has("help") || positional[0] === "help" || positional[0] === "--help" || positional[0] === "-h" ? { ok: true, usage: LOGIN_USAGE } : positional[0] === "status" ? await cmdLoginStatus(dir, flags.get("wait")) : positional[0] === "app-password" ? await cmdLoginAppPassword(
+    dir,
+    flags.get("site") ?? positional[1],
+    flags.get("file"),
+    flags.get("user")
+  ) : positional[0] === "from-url" ? await cmdLoginFromUrl(
+    dir,
+    flags.get("site") ?? positional[1],
+    flags.get("file"),
+    flags.get("user")
+  ) : positional[0] === "doctor" ? await cmdLoginDoctor() : await cmdLogin(dir, positional[0])
+) : group === "logout" ? async () => emit(await cmdLogout(dir, positional[0], configPath)) : group === "__login-wait" ? () => cmdLoginWait(argv[1], argv[2], argv[3], argv[4], argv[5]) : group === "__bg-install" ? () => cmdBgInstall(argv[1], argv[2], dir) : main;
 run2().catch((e) => {
   const shared = siteErrorOutput(e);
   emit(shared ?? { ok: false, code: "error", message: e instanceof Error ? e.message : String(e) });

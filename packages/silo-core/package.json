@@ -1,6 +1,6 @@
 {
   "name": "@puffergo/silo-core",
-  "version": "1.8.1",
+  "version": "0.1.0",
   "description": "Framework-agnostic core of the SEO silo planner: data model, WordPress REST client, sync, health check.",
   "type": "module",
   "main": "index.ts",
