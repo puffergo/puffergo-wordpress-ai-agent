@@ -3,6 +3,7 @@
   "private": true,
   "license": "GPL-3.0-or-later",
   "description": "WordPress AI agent skills & CLI for B2B manufacturer sites — bulk product upload, SEO silo planning, Obsidian sync.",
+  "version": "1.9.0",
   "packageManager": "pnpm@9.15.1",
   "engines": {
     "node": ">=18"

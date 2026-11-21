@@ -17,6 +17,7 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { runningUnderSandboxShim, sandboxFreeEnv, stripSandboxExecArgv } from './lib/sandboxEnv';
+import { BUILD } from './buildId';
 import { scriptPath, scriptDir, customerVisibleDir } from './lib/locate';
 import {
   emptyWorkspace,
@@ -484,10 +485,6 @@ async function cmdView(): Promise<void> {
   );
 }
 
-/** Which shipped build this is. The script travels inside the Skill folder, so "I reinstalled it" proves
- *  nothing on its own — this is what a customer's AI quotes back when a fix did or did not arrive. Bump it
- *  whenever the bundle the build script writes into the Skills changes behavior. */
-const BUILD = '2026-10-23.1';
 
 async function main(): Promise<void> {
   switch (cmd) {

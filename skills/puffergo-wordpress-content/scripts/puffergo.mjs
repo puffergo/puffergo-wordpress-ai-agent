@@ -7536,6 +7536,9 @@ function runningUnderSandboxShim(nodeOptions = process.env.NODE_OPTIONS, execArg
   return stripSandboxNodeOptions(nodeOptions ?? "").stripped || stripSandboxPreloads(execArgv).stripped;
 }
 
+// src/buildId.ts
+var BUILD = "1.9.0+g0e252c2";
+
 // src/lib/locate.ts
 import { statSync } from "node:fs";
 import { homedir } from "node:os";
@@ -18870,7 +18873,6 @@ async function cmdView() {
     res.opened ? "\u5DF2\u5728\u4F60\u7684\u9ED8\u8BA4\u6D4F\u89C8\u5668\u91CC\u6253\u5F00\u3002\u5DE6\u4E0A\u89D2\u53EF\u5207\u6362\u300C\u603B\u89C8\u300D\u5173\u7CFB\u56FE\u548C\u300C\u7ED3\u6784\u300D\u6811\uFF1B\u8FD9\u662F\u53EA\u8BFB\u9884\u89C8\uFF0C\u6539\u5185\u5BB9\u548C\u53D1\u5E03\u8FD8\u662F\u56DE\u5230\u547D\u4EE4\u884C\u3002" : "\u8BF7\u624B\u52A8\u6253\u5F00\u4E0A\u9762\u8FD9\u4E2A\u6587\u4EF6\u67E5\u770B\uFF08\u53EA\u8BFB\u9884\u89C8\uFF09\u3002"
   );
 }
-var BUILD = "2026-10-23.1";
 async function main() {
   switch (cmd) {
     case "version":
