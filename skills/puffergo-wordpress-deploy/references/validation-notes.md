@@ -161,7 +161,7 @@ AI 全自动的部分：查域名可用性与价格、注册域名、转入域�
 - 非前台 tab 的 CDP 点击**静默失效**：先 `tab_focus` 置前，再点。
 - Monaco 编辑器里 `dom_cua_type` 会因自动缩进把代码打乱；要贴代码用 API 直接部署，别在 Monaco 里敲。
 - OAuth 同意页常有两步（选 scope → Continue → Authorize），别点一次就以为完了。Cloudflare 那页的 scope 必须手动切到 `Full access`（默认 `Minimal` 没有 `dns.write`），切完再 Continue——这两个动作都是客户的。
-- 授权完别急着写记录：先看 `~/.mcp-auth/mcp-remote-v1/*_tokens.json` 的 `scope` 里有没有 `dns.write`。没有就是没切 Full access，直接让他重授权，比写完吃 403 再排查省一轮。
+- 授权完别急着写记录：先看授权后的凭据作用域里有没有 `dns.write`（宿主的凭据存放位置各家不同，不要写死路径）。没有就是没切 Full access，直接让他重授权，比写完吃 403 再排查省一轮。
 - 超长 `login_challenge` URL 白屏：刷新一次通常就好了。
 
 ## 产品形态结论（为什么做成这样）

@@ -2,7 +2,7 @@
 /**
  * Hostinger MCP 兜底桥接器
  *
- * 用途：当 WorkBuddy 官方 MCP 连接卡片连不上 Hostinger 时，用这个脚本直连。
+ * 用途：当宿主自带的 Hostinger MCP 连接连不上时，用这个脚本直连。
  * 它调用的是 Hostinger 官方 @hostinger/mcp 包（Code Mode: search / execute），
  * 不是自己猜 REST API——官方包更新自动跟随，接口权威、可维护。
  *
@@ -32,7 +32,7 @@ const REGISTRY = 'https://mirrors.cloud.tencent.com/npm';
 const PKG = '@hostinger/mcp';
 const CRED = join( homedir(), '.config', 'hostinger-mcp', 'credentials.json' );
 
-// WorkBuddy 内置 Node；在隔离 shell 里 PATH 没有 nvm，用 process.execPath 启动 npx 对应的 node
+// 用当前进程的 node（宿主的隔离 shell 里 PATH 往往没有 nvm），由它启动 npx
 function npxCmd() {
 	return platform() === 'win32' ? 'npx.cmd' : 'npx';
 }

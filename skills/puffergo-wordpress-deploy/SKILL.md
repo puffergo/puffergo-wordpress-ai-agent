@@ -57,7 +57,7 @@ puffergo site password --domain <域名> --email <管理员邮箱>
 
 ## 命令
 
-`node <本技能目录>/scripts/puffergo.mjs <命令>`，下文简写为 `puffergo`。本技能目录就是这份 SKILL.md 所在目录；不确定时先跑一次 `find ~/.workbuddy -name puffergo.mjs -path "*puffergo-wordpress-deploy*" | head -1` 拿到绝对路径。结果是 stdout 上的 JSON。客户说脚本行为不对时，先跑 `puffergo version`，把 `build` 念给他听——技能是整包下载的，光说「重装过了」说明不了他手上是哪一版。
+`node <本技能目录>/scripts/puffergo.mjs <命令>`，下文简写为 `puffergo`。不确定位置就先跑一次 `node <本技能目录>/scripts/puffergo.mjs whereami`，它返回的 `dir` 就是本技能 `scripts/` 的绝对路径。结果是 stdout 上的 JSON。客户说脚本行为不对时，先跑 `puffergo version`，把 `build` 念给他听——技能是整包下载的，光说「重装过了」说明不了他手上是哪一版。
 
 ## 开工前：把能力备齐
 
@@ -65,8 +65,8 @@ puffergo site password --domain <域名> --email <管理员邮箱>
 
 1. **Cloudflare MCP**（DNS / SSL）：域名 NS 在 Cloudflare 时需要。它是标准 OAuth，能正常弹授权。
 2. **Hostinger MCP**（买主机 / 开站 / 装 WP）：核心链路靠它，和 Cloudflare 一样是 **Code Mode**（`search` 找操作名 → `execute` 传 `operation` + `params`）。有两条通道，**按顺序试**：
-   - **主通道**：WorkBuddy 官方 MCP 连接（`type:http` + `https://mcp.hostinger.com`），走 WorkBuddy 内置 OAuth，凭据落 `~/.mcp-auth/`。首次用到主机时浏览器弹授权，客户点「Allow」。
-   - **兜底通道**：技能自带的 `scripts/hostinger.mjs`。**只有当主通道连不上（卡片显示连接失败 / 工具调用报 unauthorized）才用**，不要一上来就用它。它调的还是 Hostinger 官方包（国内镜像拉取，凭据落 `~/.config/hostinger-mcp/`），客户体验完全一样（也是弹浏览器点 Allow），只是绕开了 WorkBuddy 那个连不上的连接层。详见下方「主机连接兜底」段。
+   - **优先用宿主提供的连接**：宿主里已经连好的 Hostinger MCP（`https://mcp.hostinger.com`，标准 OAuth 2.1）直接用，首次用到主机时浏览器弹授权、客户点「Allow」。判断标准只有一个：工具调得通就用它。
+   - **连不通或没有这个连接时，用技能自带的 `scripts/hostinger.mjs`**：它调的是 Hostinger 官方包（国内镜像拉取，凭据落 `~/.config/hostinger-mcp/`），客户体验完全一样（也是弹浏览器点 Allow），不依赖宿主的连接层。详见下方「主机连接兜底」段。
 3. **puffergo 脚本**：本技能自带的 `scripts/puffergo.mjs`，站点侧全走它。
 
 **Cloudflare MCP 是 Code Mode**：对外只暴露 `search` / `execute` / `docs` / `whoami`，没有「添加 DNS 记录」这种现成工具。正确姿势是先 `search` 找操作名，再 `execute` 传 `operation` + `params` 调。看到工具列表只有三四个不要以为没连上。
@@ -77,7 +77,7 @@ Hostinger 不用事先引导——第一次要用到主机（阶段 1 查套餐 
 
 ### 主机连接兜底（主通道连不上时）
 
-WorkBuddy 的官方 MCP 连接卡片在部分环境会连不上 Hostinger（表现：输入框上方卡片显示「连接失败」，或工具调用报 `unauthorized` / `无可续凭据`，浏览器始终不弹授权页）。这是 WorkBuddy 客户端的问题，不是客户操作错了。**遇到这种情况不要反复让客户点重试、更不要说"连接器不兼容"这类技术词**，直接切兜底通道：
+宿主提供的 Hostinger 连接未必能连上：表现是连接状态显示失败，或工具调用报 `unauthorized` / `无可续凭据`，浏览器始终不弹授权页。这不是客户操作错了，也不是协议不兼容。**遇到这种情况不要反复让客户点重试、更不要说"连接器不兼容"这类技术词**，直接切兜底通道：
 
 1. **先判**：`node <技能目录>/scripts/hostinger.mjs --check` —— 输出 `READY` 说明本机已有凭据，直接用；`NEED_LOGIN` 说明首次，要授权。
 2. **首次授权**：`node <技能目录>/scripts/hostinger.mjs --login` —— 脚本会输出一行 `AUTH_URL ...`，官方包一般会自己把浏览器打开。**不管弹没弹，都把这条链接发给客户当备用**（复制粘贴进地址栏即可），同时发 `images/hostinger-allow-annotated.png`，话术：「浏览器应该已经弹出授权页了，认一眼账号是不是你自己的，然后点 Allow。」客户点完看到「凭据已落盘」就成了。**点 Allow 是客户的动作，不要拿浏览器工具替他点**（后面「授权」段解释了为什么）。
@@ -373,7 +373,7 @@ execute({ operation: "hosting_api_request", params: {
 3. 顺手说一句实话，别让他心里打鼓：「这一页给的是你这个 Cloudflare 账号的完整权限，Cloudflare 只提供这么三档，加解析绕不过去；我只用它加解析记录和设 SSL，你随时能撤」
 4. 页面里那条 `http://127.0.0.1:…/callback` 是**正常的**，那是本机接收授权结果用的，页面上那句 "Local redirect" 的警告不用管
 5. 没弹出或者被关掉，把链接发给他，让他复制进地址栏——**授权页那一页永远由客户点，AI 不代点**
-6. 点完验一眼：`~/.mcp-auth/mcp-remote-v1/*_tokens.json` 的 `scope` 字段里要有 `dns.write`（只读这个字段，别打印 token）。没有就是没切 Full access，让他重授权，**不要先硬试写记录再看 403**
+6. 点完验一眼：重新授权后的凭据里 `scope` 字段要有 `dns.write`。拿不到就看实际效果——试着读一次解析记录，能读就说明权限够了。没切 Full access，让他重授权，**不要先硬试写记录再看 403**
 
 用 Cloudflare MCP（Code Mode：`search` 找 API → `execute` 调）：
 
@@ -619,7 +619,7 @@ puffergo api POST /wp-json/wp/v2/posts --site <站点> --yes true --body '{"titl
 |---|---|---|
 | `insufficient_scope` / `permission denied`（Cloudflare） | **先怀疑连错账号**，其次才是授权范围小 | 先 `whoami` 拿账号邮箱跟客户的目标资产比对；对不上就换账号连接，不要一上来让客户重新授权 |
 | 首次调 Hostinger 工具慢（十几秒） | 官方包首次从国内镜像下载，不是卡死 | 动手前播报「正在准备主机工具，马上就好」；下完这次不再提 |
-| 输入框「主机（Hostinger）」卡片显示连接失败，浏览器不弹授权页 | WorkBuddy 官方 MCP 连接层的问题（不是客户操作错、不是协议不兼容） | **直接切脚本兜底**：按上文「主机连接兜底」用 `scripts/hostinger.mjs --check / --login`。别让客户反复点卡片重试，也别说技术词 |
+| 宿主里的 Hostinger 连接显示失败，浏览器不弹授权页 | 宿主的连接层问题（不是客户操作错、不是协议不兼容） | **直接切脚本兜底**：按上文「主机连接兜底」用 `scripts/hostinger.mjs --check / --login`。别让客户反复点重试，也别说技术词 |
 | Hostinger 授权页点了 Allow 还是连不上 | 授权失败 / 凭据没落盘 | 重试上限 1 次；还不行切脚本兜底（`hostinger.mjs --login`），仍失败才走阶段 2 网页兜底 |
 | Hostinger MCP 接口持续报错、开站装 WP 走不通 | 核心链路确实跑不通 | 先切脚本兜底试；脚本也不行，再按阶段 2「网页兜底」把 hPanel 步骤给客户，说明「我这边自动没成功，你在网页点几下，我带你」 |
 | 客户在 hPanel 兜底装 WordPress 时找不到 `WP Admin` | 装完还没跳转，或站点还在装 | 等一两分钟，刷新 hPanel → Websites → 站点 Dashboard；急着用就直接访问 `域名/wp-admin`，用他自己设的密码登 |

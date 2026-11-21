@@ -58,7 +58,7 @@ description: >-
 
 ## 命令
 
-`node <本技能目录>/scripts/puffergo.mjs <命令>`，下文简写为 `puffergo`。本技能目录就是这份 SKILL.md 所在目录；不确定时先跑一次 `find ~/.workbuddy -name puffergo.mjs -path "*puffergo-wordpress-content*" | head -1` 拿到绝对路径。在客户的工作目录里运行，结果是 stdout 上的 JSON。客户说脚本行为不对时，先跑 `puffergo version`，把 `build` 念给他听——技能是整包下载的，光说「重装过了」说明不了他手上是哪一版。
+`node <本技能目录>/scripts/puffergo.mjs <命令>`，下文简写为 `puffergo`。不确定位置就先跑一次 `node <本技能目录>/scripts/puffergo.mjs whereami`，它返回的 `dir` 就是本技能 `scripts/` 的绝对路径。在客户的工作目录里运行，结果是 stdout 上的 JSON。客户说脚本行为不对时，先跑 `puffergo version`，把 `build` 念给他听——技能是整包下载的，光说「重装过了」说明不了他手上是哪一版。
 
 ## 建站与采购：给链接，不代跑
 
@@ -168,7 +168,7 @@ puffergo profile get    # 他在 Step1 里填/补的画像，接手时直接用
 
 ### 交付方式：跑 `--html`，把文件给他，别贴一屏等宽字
 
-WorkBuddy、豆包、Codex 这类环境都能渲染网页文件，所以**不必先试探、也不必问客户要哪种格式**。路径不写就落到当前目录 `<域名>-domain-check.html`，写一个更好的位置（客户的工作目录）就行。
+这些 AI 工具都能渲染网页文件，所以**不必先试探、也不必问客户要哪种格式**。路径不写就落到当前目录 `<域名>-domain-check.html`，写一个更好的位置（客户的工作目录）就行。
 
 网页报告是单文件、零外链、离线可开，手机上也排得开，他能直接转发给合伙人。文字版留着你自己读——**要贴进聊天时原样贴，别改写成表格或加小标题**，那段等宽排版就是为聊天窗口调的。
 

@@ -22,6 +22,7 @@
 import { randomInt } from 'node:crypto';
 import { chmod, mkdir, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
+import { customerVisibleDir } from './locate';
 import { join } from 'node:path';
 import type { CmdCtx, Out } from './siteCmd';
 
@@ -118,15 +119,13 @@ async function isDir(p: string): Promise<boolean> {
   }
 }
 
-/** Desktop first (that is where the customer will actually look), home directory as the fallback. */
+/** Somewhere the customer will actually look (see locate.ts), home directory as the last resort. */
 async function resolveOutDir(flag: string | undefined): Promise<{ dir: string; note?: string }> {
   if (flag) {
     await mkdir(flag, { recursive: true });
     return { dir: flag };
   }
-  const desktop = join(homedir(), 'Desktop');
-  if (await isDir(desktop)) return { dir: desktop };
-  return { dir: homedir(), note: 'no Desktop here, wrote it to the home directory instead' };
+  return customerVisibleDir();
 }
 
 export async function cmdSitePassword(ctx: CmdCtx): Promise<Out> {

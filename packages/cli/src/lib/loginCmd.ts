@@ -25,7 +25,8 @@ import * as net from 'node:net';
 import { existsSync } from 'node:fs';
 import { readdir, readFile, rm, writeFile, rename, mkdir, mkdtemp } from 'node:fs/promises';
 import { nodeNetwork } from '../adapters/nodeNetwork';
-import { homedir, tmpdir } from 'node:os';
+import { tmpdir } from 'node:os';
+import { customerVisibleDirs } from './locate';
 import { dirname, join } from 'node:path';
 import { upsertCredential, PUFFERGO_DIR } from '../adapters/credentials';
 import { writeActiveDomain } from '../adapters/fileStore';
@@ -328,14 +329,17 @@ const failedOutput = (state: LoginState): unknown => ({
 async function findLoginCard(siteUrl: string): Promise<string | null> {
   try {
     const host = new URL(siteUrl).hostname.replace(/^www\./i, '');
-    const desktop = join(homedir(), 'Desktop');
-    const names = await readdir(desktop);
-    const cards = names.filter(n => /登录信息.*\.txt$/i.test(n));
-    return (
-      cards.find(n => n.includes(host)) ??
-      cards.find(n => host.split('.').some(part => part.length > 2 && n.includes(part))) ??
-      null
+    const found = await Promise.all(
+      customerVisibleDirs().map(async dir => {
+        try {
+          return (await readdir(dir)).filter(n => /登录信息.*\.txt$/i.test(n));
+        } catch {
+          return [];
+        }
+      }),
     );
+    const cards = found.flat();
+    return cards.find(n => host.split('.').some(part => part.length > 2 && n.includes(part))) ?? null;
   } catch {
     return null;
   }

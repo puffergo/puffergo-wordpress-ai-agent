@@ -11,7 +11,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SKILL_NAME_PLACEHOLDER = '__PUFFERGO_SKILL_NAME__';
-const SKILLS = ['puffergo-wordpress-products', 'puffergo-wordpress-content'];
+import { hostNeutralViolations, describeViolations, skillMarkdownFiles } from '../src/lib/hostNeutral.ts';
+const SKILLS = ['puffergo-wordpress-products', 'puffergo-wordpress-content', 'puffergo-wordpress-deploy'];
 /** Skills whose `silo view` needs the preview page bundle next to puffergo.mjs. */
 const PREVIEW_SKILLS = ['puffergo-wordpress-content'];
 
@@ -59,6 +60,16 @@ for (const skill of SKILLS) {
   const dest = join(pkg, '..', '..', 'skills', skill, 'references', 'blocks');
   rmSync(dest, { recursive: true, force: true });
   cpSync(join(pkg, 'skill-refs', 'blocks'), dest, { recursive: true });
+}
+
+// Skills ship to customers and must stay host-neutral: the kernel asks the script where it lives
+// (`puffergo whereami`) instead of naming one AI host's folder. A per-host shell may name its host; the
+// shared kernel may not. This runs last, so a violating build never reaches a Skill folder or the public repo.
+const neutralViolations = hostNeutralViolations(skillMarkdownFiles(join(pkg, '..', '..', 'skills')));
+if (neutralViolations.length) {
+  console.error(`\n✖ ${neutralViolations.length} host-specific reference(s) in the shared kernel:\n${describeViolations(neutralViolations)}`);
+  console.error('  Move it into a per-host shell, or rephrase it against `puffergo whereami`.');
+  process.exit(1);
 }
 console.log(
   `bundled → ${out} (+ copied into skills/*/scripts with the skill name baked in, block references into skills/*/references/blocks, preview bundle into ${PREVIEW_SKILLS.join(', ')})`,

@@ -17,6 +17,7 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { runningUnderSandboxShim, sandboxFreeEnv, stripSandboxExecArgv } from './lib/sandboxEnv';
+import { scriptPath, scriptDir, customerVisibleDir } from './lib/locate';
 import {
   emptyWorkspace,
   healthCheck,
@@ -33,7 +34,7 @@ import {
   type SiloWorkspace,
   type HealthIssue,
 } from '@puffergo/silo-core';
-import { dirname } from 'node:path';
+import { basename, dirname } from 'node:path';
 import { readWorkspace, writeWorkspace, listSites, resolveSite } from './adapters/fileStore';
 import { wpAssetUploader } from './adapters/assetUploader';
 import { connect } from './lib/wp';
@@ -493,6 +494,17 @@ async function main(): Promise<void> {
     case 'version':
     case '--version':
       return emit({ ok: true, build: BUILD, node: process.version });
+    case 'whereami':
+      // Skills cannot know which directory their host keeps them in; ask the script instead of searching
+      // for a specific host's folder. Also reports where `site password` will leave the login card.
+      return emit({
+        ok: true,
+        script: scriptPath(),
+        dir: scriptDir(),
+        skill: basename(dirname(scriptDir())),
+        customerDir: customerVisibleDir(),
+        node: process.version,
+      });
     case 'init':
       return cmdInit();
     case 'plan':
@@ -514,6 +526,7 @@ async function main(): Promise<void> {
       log('puffergo login app-password --site <url> --file <path> [--user <username>]');
       log(LOGOUT_USAGE);
       log('puffergo version');
+      log('puffergo whereami');
       log(SITE_SETUP_USAGE);
       log(PLUGINS_USAGE);
       log(DOMAIN_USAGE);

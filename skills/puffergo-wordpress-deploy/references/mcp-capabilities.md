@@ -7,14 +7,14 @@
 | 能力 | 标识 | 端点 / 位置 | 授权方式 | 客户做什么 |
 |---|---|---|---|---|
 | Cloudflare（DNS / SSL） | `cloudflare` | `https://mcp.cloudflare.com/mcp` | OAuth，首次开浏览器，模板选 full-access | 浏览器里点「允许」一次 |
-| Hostinger MCP（买主机 / 开站 / 装 WP） | `hostinger` | 主通道：官方 HTTP MCP `https://mcp.hostinger.com`；兜底：技能脚本 `scripts/hostinger.mjs`（调官方包，国内镜像） | 主通道走 WorkBuddy 内置 OAuth（凭据 `~/.mcp-auth/`）；兜底走包自己的 OAuth（凭据 `~/.config/hostinger-mcp/`）。两条都是浏览器点一次「Allow」 | 首次点一次「Allow」+ 结账页扫码付款 |
+| Hostinger MCP（买主机 / 开站 / 装 WP） | `hostinger` | 主：宿主已连好的官方 HTTP MCP `https://mcp.hostinger.com`；兜底：技能脚本 `scripts/hostinger.mjs`（调官方包，国内镜像） | 主通道走宿主自己的 OAuth；兜底走包自己的 OAuth（凭据 `~/.config/hostinger-mcp/`）。两条都是浏览器点一次「Allow」 | 首次点一次「Allow」+ 结账页扫码付款 |
 | puffergo 脚本（站点侧全部操作） | CLI | 本技能 `scripts/puffergo.mjs` | 应用密码（客户后台点「批准」生成） | 后台点一次「批准」 |
 
 **Hostinger MCP 是核心链路，能连通就用它买主机、开站、装 WordPress。** 关键事实（实测 2026-11-17/18）：
 
 - **两条通道，按顺序试**：
-  1. **主通道**：WorkBuddy 官方 MCP（`type:http` + `https://mcp.hostinger.com`），走 WorkBuddy 内置标准 OAuth 2.1（DCR + PKCE），凭据 `~/.mcp-auth/`。这是标准对接，跟 Cloudflare 同类。
-  2. **兜底通道**：技能自带 `scripts/hostinger.mjs`。WorkBuddy 的官方连接卡片在部分环境会静默失败（`MCP-ManagerAuth failed error=空`、浏览器不弹授权页）——这是 WorkBuddy 客户端 bug，已反馈。**遇到就切兜底，不要让客户反复点重试**。脚本调的还是 Hostinger 官方包（stdio，`npx` 从腾讯云镜像拉，凭据 `~/.config/hostinger-mcp/`），客户体验一样（也是弹浏览器点 Allow）。
+  1. **宿主已连好的 Hostinger MCP**（`https://mcp.hostinger.com`，标准 OAuth 2.1：DCR + PKCE）：`type:http` + URL 就能接，跟 Cloudflare 同类。判断标准是工具调得通。
+  2. **兜底：技能自带 `scripts/hostinger.mjs`**。宿主的连接层未必都可靠——某些宿主在部分环境会静默失败（授权阶段报错、浏览器不弹授权页，错误信息为空）。**遇到就切兜底，不要让客户反复点重试**。脚本调的还是 Hostinger 官方包（stdio，`npx` 从腾讯云镜像拉，凭据 `~/.config/hostinger-mcp/`），客户体验一样（也是弹浏览器点 Allow）。
 - 它和 Cloudflare 一样是 **Code Mode**：`search` 传 `{query, limit?}` 找操作名，`execute` 传 `{operation, params}` 调。参数名传错报 `Invalid input: expected string, received undefined`。
 - **兜底脚本用法**：`node scripts/hostinger.mjs --check`（只读查凭据 READY/NEED_LOGIN）→ 首次 `--login`（输出 `AUTH_URL`，AI 用浏览器工具打开让客户点 Allow）→ `--search "xxx"` 找操作 → `hostinger.mjs <operation> '<params-json>'` 调用。详见 SKILL.md「主机连接兜底」。
 - **只有两条通道都跑不通**（授权重试无效、接口持续报错、域名归属超范围）才降级到 hPanel 网页，让客户手动开站装 WP（SKILL 阶段 2 网页兜底）。别一上来就把成本转嫁给客户。
@@ -62,9 +62,9 @@ AI 做：查域名现状、查主机套餐、报价、开站装 WP、配 DNS/SSL
 
 | 凭据 | 位置 | 谁用 |
 |---|---|---|
-| Cloudflare OAuth token | `~/.mcp-auth/mcp-remote-v1/*_tokens.json` | Cloudflare MCP 自己持有 |
+| Cloudflare OAuth token | 由宿主自己保管（可能在系统钥匙串或宿主私有的凭据目录里） | MCP 客户端持有，CLI 不读、也不要去找 |
 | Hostinger OAuth token（兜底通道） | `~/.config/hostinger-mcp/credentials.json` | 官方包（stdio）自己持有，过期自动刷新 |
-| Hostinger OAuth token（主通道） | `~/.mcp-auth/mcp-remote-v1/*_tokens.json` | WorkBuddy 内置 OAuth，与 Cloudflare 同一套 |
+| Hostinger OAuth token（主通道） | 由宿主自己保管 | 宿主与 Cloudflare 同一套机制 |
 | WordPress 应用密码 | `~/.puffergo/credentials.json`（权限 600） | `puffergo` 脚本在进程内注入 Basic 头 |
 
 三处凭据都让 AI 不碰明文——工具/脚本自己在进程内注入。客户的 Hostinger 账号密码、WordPress 后台登录密码 AI 一概不知道也不需要。

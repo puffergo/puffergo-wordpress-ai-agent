@@ -8,7 +8,7 @@
 
 | 服务 | 凭据文件 | 内容 |
 |---|---|---|
-| Cloudflare | `~/.mcp-auth/mcp-remote-v1/<hash>_tokens.json` | `access_token` / `refresh_token` / `scope` / `issuer` |
+| Cloudflare | 由宿主保管（不同宿主位置不同，可能在钥匙串里） | CLI 不读，也不要求 AI 去找 |
 | Hostinger | `~/.config/hostinger-mcp/credentials.json` | `client_id` / `access_token` / `refresh_token` / `expires_at` |
 
 两个 MCP 的 token 都**自动续期**，过期不用重新授权，也别去读明文。`expires_at` 只是参考，判断连没连上永远看「工具能不能调通」。
@@ -50,7 +50,7 @@ MCP 是 stdio 协议，**用 `printf ... | mcp进程` 一次性喂入会因为 s
 
 官方 MCP 是本地 stdio 包（`npx -y @hostinger/mcp`），已配国内镜像（腾讯云），首次调用自动从镜像下载（十几秒）+ 开浏览器走 OAuth 2.1 PKCE，客户点 Allow 即可，凭据落 `~/.config/hostinger-mcp/credentials.json`，过期自动刷新。之后走本机缓存、不再联网。支持直接用 `HOSTINGER_API_TOKEN` 环境变量跳过 OAuth。
 
-**这个包自己处理授权**（动态注册 + PKCE），不经过 WorkBuddy 的连接卡片。所以输入框上方那个「主机（Hostinger）」卡片在 `auth.type: none` 时点了没反应是正常的——不是连不上，AI 调工具时包会自己弹浏览器。首次下载前播报一句「正在准备主机工具，马上就好」。
+**这个包自己处理授权**（动态注册 + PKCE），不经过宿主的连接层。所以宿主里那个「主机（Hostinger）」连接按钮点了没反应是正常的——不是连不上，AI 调工具时包会自己弹浏览器。首次下载前播报一句「正在准备主机工具，马上就好」。
 
 **授权页（Consent）本身不点。** 这些页面的按钮是客户在授权他自己的账号，AI 点了就是自己给自己发钥匙。技术上点得动（`tab_focus` + `dom_cua_click` 能点 DOM），但整个「客户随时可撤销」的设计依赖那一下是真人点的。AI 只负责把页面送到他眼前 + 说清点哪个 + 等他点完。
 
@@ -63,7 +63,7 @@ MCP 是 stdio 协议，**用 `printf ... | mcp进程` 一次性喂入会因为 s
 
 Cloudflare 那一页三个容易误判的地方：① `Redirect URI` 显示 `http://127.0.0.1:…/callback` 和那句 "Local redirect … Only continue if you trust the application" 是**正常的**（本机接收授权结果）；② `Continue` 这个按钮的 `name="decision" value="approve"`——**它就是"同意"**，不用再找第二个 Authorize 按钮；③ **scopes 必须切 `Full access`，不能保持默认 `Minimal`**——`Minimal` 没有 `dns.write`，写解析一步就 403。页面上那句 "You can narrow scopes further, later in the authorization flow" 是**往下减**的意思（还能再收窄），**不会**事后自动追加更高权限；MCP 客户端也不做 step-up，所以"到时候它会再要一次"这种想法不要有。
 
-**授权完可以直接验一眼**：`~/.mcp-auth/mcp-remote-v1/*_tokens.json` 里的 `scope` 字段应该包含 `dns.write` 和 `zone-settings.write`（只读这个字段，别把 `access_token` 打出来）。缺了就是客户点了 `Continue` 但没切 Full access——让他重新授权一次，别硬试写记录。
+**授权完可以直接验一眼**：授权后的凭据作用域里应该包含 `dns.write` 和 `zone-settings.write`（只读这个字段，别把 `access_token` 打出来）。缺了就是客户点了 `Continue` 但没切 Full access——让他重新授权一次，别硬试写记录。
 
 Hostinger 侧还有一类环境问题：客户本机开着 Clash Verge / 代理时可能触发风控或超长 challenge 导致白屏，先刷新，再考虑让他临时关代理。这类问题要在**客户点之前**就提醒，别等他点完了才排查。
 
@@ -137,7 +137,7 @@ Hostinger 侧还有一类环境问题：客户本机开着 Clash Verge / 代理�
 保存凭据失败：Broker request outcome unknown: execution attempt 不存在或已关闭
 ```
 
-这不是权限问题、不是磁盘问题，也不该让客户再点。CLI 现在**启动时就把这种 preload 从 `NODE_OPTIONS` 里剥掉并自我重启一次**，它派生的每一个子进程（登录监听、后台安装）都继承干净环境。识别只针对 shim 形状的 preload（`language-shim` / `codebuddy` / `workbuddy` / `broker` 之类），客户自己设的 `NODE_OPTIONS` 原样保留。**如果还看到上面这条报错，说明用的是旧版 CLI：`puffergo login` 重跑一次即可，别再让客户点第三次。**
+这不是权限问题、不是磁盘问题，也不该让客户再点。CLI 现在**启动时就把这种 preload 从 `NODE_OPTIONS` 里剥掉并自我重启一次**，它派生的每一个子进程（登录监听、后台安装）都继承干净环境。识别只针对沙箱注入的那类文件代理 preload（`*-language-shim.cjs`、`broker` 之类），客户自己设的 `NODE_OPTIONS` 原样保留。**如果还看到上面这条报错，说明用的是旧版 CLI：`puffergo login` 重跑一次即可，别再让客户点第三次。**
 
 **回传地址里带着明文应用密码**（`http://127.0.0.1:…/?site_url=…&password=…`），它会留在客户浏览器的历史记录里。这个 URL 是插件那侧 `authorize-application.php` 生成的，CLI 改不了。客户如果介意，授权完让他把这一条历史记录清掉即可——这也是为什么 `from-url` / `app-password` 两条文件路线都只让 AI 传路径、不碰内容。
 
